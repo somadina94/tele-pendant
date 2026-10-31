@@ -1,0 +1,289 @@
+:root {
+  color-scheme: dark;
+  --bg: #0f1419;
+  --fg: #e8eef4;
+  --muted: #8b9aab;
+  --accent: #3d9cfd;
+  --danger: #ff5c5c;
+  --ok: #3dd68c;
+  --panel: #161d27;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at top, #1a2838 0%, transparent 55%), var(--bg);
+  color: var(--fg);
+}
+
+a {
+  color: var(--accent);
+}
+
+.shell {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem;
+}
+
+.shell.admin {
+  max-width: 56rem;
+}
+
+h1 {
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  letter-spacing: -0.03em;
+  margin: 0 0 0.35rem;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.lede {
+  color: var(--muted);
+  margin: 0 0 1.25rem;
+}
+
+.login-form {
+  display: grid;
+  gap: 0.85rem;
+  max-width: 22rem;
+}
+
+.login-form label,
+.pin {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+input {
+  background: var(--panel);
+  border: 1px solid #2a3a4d;
+  border-radius: 0.45rem;
+  color: var(--fg);
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+}
+
+button {
+  background: var(--accent);
+  color: #041018;
+  border: 0;
+  border-radius: 0.45rem;
+  padding: 0.7rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid #2a3a4d;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  color: var(--danger);
+  white-space: pre-wrap;
+  font-size: 0.85rem;
+}
+
+.operator {
+  padding: 1rem 1.25rem 2rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.op-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.op-nav {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.banner {
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.45rem;
+  background: #1b2430;
+  border: 1px solid #2a3a4d;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.mode-normal {
+  border-color: #24553a;
+}
+.mode-e_stop,
+.mode-comms_lost,
+.mode-safe_state {
+  border-color: var(--danger);
+  color: #ffc9c9;
+}
+
+.op-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1.2fr 1fr;
+}
+
+@media (max-width: 860px) {
+  .op-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.graphic {
+  position: relative;
+  min-height: 320px;
+  border-radius: 0.75rem;
+  border: 1px solid #2a3a4d;
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.overlay {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: rgba(8, 12, 18, 0.72);
+  border: 1px solid #3a4d63;
+  border-radius: 0.4rem;
+  padding: 0.35rem 0.55rem;
+  min-width: 5.5rem;
+}
+
+.overlay-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.tag-strip {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.matrix-panel {
+  background: var(--panel);
+  border: 1px solid #2a3a4d;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.matrix {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.cell {
+  min-height: 4.2rem;
+  border-radius: 0.55rem;
+  border: 1px solid #334556;
+  background: #212b38;
+  color: var(--fg);
+  font-weight: 600;
+  touch-action: none;
+  user-select: none;
+}
+
+.cell.style-motion {
+  background: #1c3a5c;
+  border-color: #2f6aa8;
+}
+
+.cell.style-estop {
+  background: #5a1d1d;
+  border-color: #c44;
+  color: #ffe0e0;
+}
+
+.cell.holding {
+  outline: 2px solid var(--ok);
+}
+
+.cell.empty {
+  visibility: hidden;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.85rem;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem;
+}
+
+.list li {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid #243041;
+  font-size: 0.92rem;
+}
+
+.pin {
+  margin-bottom: 0.25rem;
+}
+
+.media-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: 1.1fr 1fr;
+}
+
+@media (max-width: 860px) {
+  .media-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cam-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.cam {
+  width: 100%;
+  max-height: 360px;
+  background: #000;
+  border-radius: 0.55rem;
+  border: 1px solid #2a3a4d;
+  object-fit: cover;
+}
+
+.status-line {
+  margin-top: 0.75rem;
+  color: var(--accent);
+  font-size: 0.9rem;
+}

@@ -1,0 +1,23 @@
+# Local development Modbus TCP simulator
+FROM node:22-bookworm-slim
+
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+WORKDIR /app
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
+COPY packages/modbus-core/package.json ./packages/modbus-core/
+COPY apps/modbus-sim/package.json ./apps/modbus-sim/
+
+RUN pnpm install
+
+COPY packages/modbus-core ./packages/modbus-core
+COPY apps/modbus-sim ./apps/modbus-sim
+
+RUN pnpm --filter @tele-pendant/modbus-core build
+
+ENV MODBUS_SIM_HOST=0.0.0.0
+ENV MODBUS_SIM_PORT=1502
+EXPOSE 1502
+
+CMD ["pnpm", "--filter", "@tele-pendant/modbus-sim", "dev"]

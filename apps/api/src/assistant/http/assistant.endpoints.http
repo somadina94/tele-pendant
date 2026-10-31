@@ -1,0 +1,12 @@
+@baseUrl = http://localhost:3010
+@apiVersion = v1
+@accessToken =
+
+### Ask assistant
+POST {{baseUrl}}/api/{{apiVersion}}/assistant/ask
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "question": "What happens on lost Modbus communications?"
+}

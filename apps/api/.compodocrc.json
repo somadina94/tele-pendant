@@ -1,0 +1,13 @@
+{
+  "name": "Tele-Pendant API",
+  "tsconfig": "./tsconfig.doc.json",
+  "output": "./documentation",
+  "theme": "material",
+  "hideGenerator": true,
+  "disableCoverage": false,
+  "disablePrivate": true,
+  "disableProtected": false,
+  "disableInternal": true,
+  "includes": "./docs",
+  "includesName": "Guides"
+}

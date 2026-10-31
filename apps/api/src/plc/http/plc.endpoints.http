@@ -1,0 +1,29 @@
+@baseUrl = http://localhost:3010
+@apiVersion = v1
+@accessToken =
+
+### PLC health
+# @name plcHealth
+GET {{baseUrl}}/api/{{apiVersion}}/plc/health
+Authorization: Bearer {{accessToken}}
+
+### List connections
+# @name plcConnections
+GET {{baseUrl}}/api/{{apiVersion}}/plc/connections
+Authorization: Bearer {{accessToken}}
+
+### Read hoist height (holding 0)
+# @name readHeight
+GET {{baseUrl}}/api/{{apiVersion}}/plc/holding/0
+Authorization: Bearer {{accessToken}}
+
+### Write deadman coil ON
+# @name deadmanOn
+POST {{baseUrl}}/api/{{apiVersion}}/plc/coil
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "address": 10,
+  "value": true
+}

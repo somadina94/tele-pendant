@@ -1,0 +1,7 @@
+@baseUrl = http://localhost:3010
+@apiVersion = v1
+@accessToken =
+
+### List alarms
+GET {{baseUrl}}/api/{{apiVersion}}/alarms
+Authorization: Bearer {{accessToken}}

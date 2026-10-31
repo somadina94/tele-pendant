@@ -1,0 +1,6 @@
+@baseUrl = http://localhost:3010
+@apiVersion = v1
+
+### Health check
+# @name health
+GET {{baseUrl}}/api/{{apiVersion}}/health

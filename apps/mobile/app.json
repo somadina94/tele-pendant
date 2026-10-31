@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Tele-Pendant",
+    "slug": "tele-pendant",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "scheme": "telependant",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.telependant.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0F1419"
+      },
+      "package": "com.telependant.app"
+    },
+    "plugins": ["react-native-reanimated"],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://YOUR_VPS_HOST/ota/manifest",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "extra": {
+      "otaNote": "Point updates.url at a self-hosted Expo Updates / custom OTA endpoint on your VPS. No paid Expo subscription required if you host manifests yourself."
+    }
+  }
+}

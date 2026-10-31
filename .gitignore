@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+documentation
+.turbo
+.env
+.env.*
+!.env.example
+!.env.test
+*.db
+*.db-journal
+.DS_Store
+apps/mobile/.expo
+apps/web/dist
+*.log

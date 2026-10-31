@@ -1,0 +1,8 @@
+@baseUrl = http://localhost:3010
+@apiVersion = v1
+@accessToken =
+
+### List audit logs (Bearer)
+# @name auditList
+GET {{baseUrl}}/api/{{apiVersion}}/audit?limit=20
+Authorization: Bearer {{accessToken}}

@@ -1,0 +1,15 @@
+@baseUrl = http://localhost:3010
+@apiVersion = v1
+@accessToken =
+
+### Safety snapshot
+GET {{baseUrl}}/api/{{apiVersion}}/safety
+Authorization: Bearer {{accessToken}}
+
+### Pulse deadman
+POST {{baseUrl}}/api/{{apiVersion}}/safety/deadman/pulse
+Authorization: Bearer {{accessToken}}
+
+### Release deadman
+POST {{baseUrl}}/api/{{apiVersion}}/safety/deadman/release
+Authorization: Bearer {{accessToken}}

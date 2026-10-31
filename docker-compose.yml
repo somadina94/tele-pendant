@@ -1,0 +1,67 @@
+name: tele-pendant
+
+services:
+  modbus-sim:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: modbus-sim
+    container_name: tele-pendant-modbus-sim
+    ports:
+      - "${MODBUS_SIM_PORT:-1502}:1502"
+    environment:
+      MODBUS_SIM_HOST: 0.0.0.0
+      MODBUS_SIM_PORT: 1502
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: tele-pendant-api
+    ports:
+      - "${PORT:-3010}:${PORT:-3010}"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-3010}
+      SQLITE_DIR: /app/data
+      DATABASE_PATH: /app/data/tele-pendant.sqlite
+      MODBUS_HOST: modbus-sim
+      MODBUS_PORT: 1502
+      APP_URL: ${APP_URL:-http://localhost:3010}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+    volumes:
+      - tele-pendant-data:/app/data
+    depends_on:
+      - modbus-sim
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:'+(process.env.PORT||3010)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    container_name: tele-pendant-web
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  tele-pendant-data:

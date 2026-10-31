@@ -1,0 +1,25 @@
+{
+  "name": "tele-pendant",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "format": "turbo run format",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:cov": "turbo run test:cov",
+    "verify": "pnpm run format && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run test:cov",
+    "docker:dev": "docker compose -f docker-compose.dev.yml up --build",
+    "docker:dev:watch": "docker compose -f docker-compose.dev.yml up --build --watch",
+    "docker:up": "docker compose up --build -d",
+    "docker:prod": "docker compose -f docker-compose.prod.yml up -d --build",
+    "docker:down": "docker compose -f docker-compose.dev.yml down && docker compose down"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "turbo": "^2.5.4",
+    "typescript": "^5.7.3"
+  }
+}

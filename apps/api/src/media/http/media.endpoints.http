@@ -1,0 +1,25 @@
+@baseUrl = http://localhost:3010
+@apiVersion = v1
+@accessToken =
+
+### Camera config
+GET {{baseUrl}}/api/{{apiVersion}}/media/camera
+Authorization: Bearer {{accessToken}}
+
+### Resolve QR
+POST {{baseUrl}}/api/{{apiVersion}}/media/codes/resolve
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "code": "TP-CRANE-DEMO-01"
+}
+
+### Voice command
+POST {{baseUrl}}/api/{{apiVersion}}/media/voice
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "transcript": "hoist up"
+}

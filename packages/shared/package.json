@@ -1,0 +1,18 @@
+{
+  "name": "@tele-pendant/shared",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "lint": "echo \"lint shared skipped\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo \"no tests yet\"",
+    "test:cov": "echo \"no coverage yet\""
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

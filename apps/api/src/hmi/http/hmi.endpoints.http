@@ -1,0 +1,36 @@
+@baseUrl = http://localhost:3010
+@apiVersion = v1
+@adminEmail = admin@example.com
+@adminPassword = change-me-admin-password
+
+### Login (for Bearer token)
+# @name login
+POST {{baseUrl}}/api/{{apiVersion}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### HMI layout
+# @name layout
+# @ref login
+GET {{baseUrl}}/api/{{apiVersion}}/hmi/layout
+Authorization: Bearer {{login.data.accessToken}}
+
+### List register maps
+# @ref login
+GET {{baseUrl}}/api/{{apiVersion}}/hmi/registers
+Authorization: Bearer {{login.data.accessToken}}
+
+### Activate first matrix cell (motion cells need deadman pulse first)
+# @ref login
+# @ref layout
+POST {{baseUrl}}/api/{{apiVersion}}/hmi/cells/{{layout.data.cells[0].id}}/activate
+Authorization: Bearer {{login.data.accessToken}}
+Content-Type: application/json
+
+{
+  "value": true
+}

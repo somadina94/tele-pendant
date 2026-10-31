@@ -1,0 +1,27 @@
+@baseUrl = http://localhost:3010
+@apiVersion = v1
+@adminEmail = admin@example.com
+@adminPassword = change-me-admin-password
+
+### Login
+# @name login
+POST {{baseUrl}}/api/{{apiVersion}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### Me (cookie jar after login)
+# @name me
+GET {{baseUrl}}/api/{{apiVersion}}/auth/me
+
+### Me (Bearer)
+# @name meBearer
+GET {{baseUrl}}/api/{{apiVersion}}/auth/me
+Authorization: Bearer {{login.accessToken}}
+
+### Logout
+# @name logout
+POST {{baseUrl}}/api/{{apiVersion}}/auth/logout

@@ -1,0 +1,179 @@
+# =============================================================================
+# CI/CD — build Tele-Pendant images on GitHub, deploy to VPS/EC2
+# =============================================================================
+#
+# Triggers:
+#   - pull_request → verify only
+#   - push to main/master → verify → push-image → deploy
+#
+# Deploy model:
+#   Build runs on GitHub runners. Host: git pull + ./deploy.sh (docker pull + up).
+#
+# Required GitHub secrets:
+#   SERVER_HOST, SERVER_USERNAME, SERVER_PORT
+#   Auth (either or both): SERVER_PASSWORD, SERVER_SSH_KEY
+#   SERVER_DEPLOY_PATH (optional, default ~/tele-pendant)
+# =============================================================================
+
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: |
+          pnpm --filter @tele-pendant/shared build
+          pnpm --filter @tele-pendant/modbus-core build
+          pnpm --filter @tele-pendant/api build
+          pnpm --filter @tele-pendant/web build
+
+      - name: Test API
+        run: pnpm --filter @tele-pendant/api test
+
+      - name: Prepare compose env
+        run: cp .env.example .env
+
+      - name: Validate Docker Compose
+        run: |
+          docker compose -f docker-compose.dev.yml config
+          docker compose -f docker-compose.prod.yml config
+          docker compose config
+
+      - name: Build production images
+        run: |
+          docker build --target api -t tele-pendant-api:test .
+          docker build --target modbus-sim -t tele-pendant-sim:test .
+          docker build --target web -t tele-pendant-web:test .
+
+      - name: Ensure deploy scripts are executable
+        run: chmod +x deploy.sh docker-entrypoint.sh && test -x deploy.sh
+
+  push-image:
+    needs: verify
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set lowercase image owner
+        run: echo "IMAGE_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: api
+          push: true
+          tags: |
+            ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-api:latest
+            ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-api:${{ github.sha }}
+
+      - name: Build and push sim image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: modbus-sim
+          push: true
+          tags: |
+            ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-sim:latest
+            ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-sim:${{ github.sha }}
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: web
+          push: true
+          tags: |
+            ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-web:latest
+            ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-web:${{ github.sha }}
+
+  deploy:
+    needs: push-image
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: tele-pendant-prod-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: Set lowercase image owner
+        run: echo "IMAGE_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          command_timeout: 30m
+          script: |
+            set -e
+            DEPLOY_PATH="${{ secrets.SERVER_DEPLOY_PATH }}"
+            if [ -z "$DEPLOY_PATH" ]; then DEPLOY_PATH="$HOME/tele-pendant"; fi
+            if [ ! -d "$DEPLOY_PATH" ]; then
+              echo "Deploy directory not found: $DEPLOY_PATH"
+              exit 1
+            fi
+            cd "$DEPLOY_PATH"
+            git fetch origin
+            git checkout "${{ github.ref_name }}"
+            git pull origin "${{ github.ref_name }}"
+            chmod +x ./deploy.sh ./docker-entrypoint.sh
+            echo "Logging in to ghcr.io for image pull..."
+            echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            export DEPLOY_BUILD_LOCAL=0
+            export TELE_PENDANT_API_IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-api:latest"
+            export TELE_PENDANT_SIM_IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-sim:latest"
+            export TELE_PENDANT_WEB_IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-web:latest"
+            export PORT=3010
+            export WEB_PORT=8080
+            ./deploy.sh

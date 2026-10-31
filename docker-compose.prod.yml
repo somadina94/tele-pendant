@@ -1,0 +1,71 @@
+# Production stack — used by ./deploy.sh (project: tele-pendant-prod)
+#
+# Normal deploy: images from GHCR (built in GitHub Actions). Host only pulls.
+# The `build:` blocks are for DEPLOY_BUILD_LOCAL=1 fallback only.
+# Secrets stay in host .env (never baked into the image).
+
+name: tele-pendant-prod
+
+services:
+  modbus-sim:
+    image: ${TELE_PENDANT_SIM_IMAGE:-ghcr.io/OWNER/tele-pendant-sim:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: modbus-sim
+    container_name: tele-pendant-modbus-sim
+    ports:
+      - "${MODBUS_SIM_PORT:-1502}:1502"
+    environment:
+      MODBUS_SIM_HOST: 0.0.0.0
+      MODBUS_SIM_PORT: 1502
+    restart: unless-stopped
+
+  api:
+    image: ${TELE_PENDANT_API_IMAGE:-ghcr.io/OWNER/tele-pendant-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: tele-pendant-api
+    ports:
+      - "${PORT:-3010}:${PORT:-3010}"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-3010}
+      SQLITE_DIR: /app/data
+      DATABASE_PATH: /app/data/tele-pendant.sqlite
+      MODBUS_HOST: modbus-sim
+      MODBUS_PORT: 1502
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - modbus-sim
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:'+(process.env.PORT||3010)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+
+  web:
+    image: ${TELE_PENDANT_WEB_IMAGE:-ghcr.io/OWNER/tele-pendant-web:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    container_name: tele-pendant-web
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
