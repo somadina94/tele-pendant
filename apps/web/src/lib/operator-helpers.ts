@@ -12,6 +12,13 @@ export function tagValueForRegister(
   registerName?: string | null,
 ): string | number | boolean {
   if (!tags || !registerName) return '—';
+  const live = tags.values?.[registerName];
+  if (live !== undefined) {
+    if (typeof live === 'boolean' && registerName.includes('motorRunning')) {
+      return live ? 'RUN' : 'IDLE';
+    }
+    return live;
+  }
   if (registerName.includes('hoistHeight')) return tags.hoistHeightMm;
   if (registerName.includes('loadKg')) return tags.loadKg;
   if (registerName.includes('motorRunning'))

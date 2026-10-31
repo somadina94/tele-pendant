@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +14,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/providers/jwt-auth.guard';
 import { RolesGuard } from '../auth/providers/roles.guard';
 import { UserRole } from '../users/enums/user-role.enum';
+import { SavePlcConnectionDto } from './dtos/save-plc-connection.dto';
 import { WriteCoilDto } from './dtos/write-coil.dto';
 import { WriteHoldingDto } from './dtos/write-holding.dto';
 import { PlcService } from './providers/plc.service';
@@ -36,6 +38,22 @@ export class PlcController {
   @ApiOperation({ summary: 'List configured PLC connections' })
   list() {
     return this.plcService.list();
+  }
+
+  @Post('connections')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: 'Add a PLC connection' })
+  create(@Body() dto: SavePlcConnectionDto) {
+    return this.plcService.saveConnection(dto);
+  }
+
+  @Patch('connections/:id')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({
+    summary: 'Update a PLC connection and connect when it is the one in use',
+  })
+  update(@Param('id') id: string, @Body() dto: SavePlcConnectionDto) {
+    return this.plcService.saveConnection({ ...dto, id });
   }
 
   @Post('connections/:id/connect')

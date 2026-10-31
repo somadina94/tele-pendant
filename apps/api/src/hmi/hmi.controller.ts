@@ -2,8 +2,10 @@ import {
   Inject,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -17,6 +19,10 @@ import { JwtAuthGuard } from '../auth/providers/jwt-auth.guard';
 import { RolesGuard } from '../auth/providers/roles.guard';
 import { UserRole } from '../users/enums/user-role.enum';
 import { ActivateCellDto } from './dtos/activate-cell.dto';
+import { SaveBackgroundDto } from './dtos/save-background.dto';
+import { SaveCellDto } from './dtos/save-cell.dto';
+import { SaveOverlayDto } from './dtos/save-overlay.dto';
+import { UpdateRegisterDto } from './dtos/update-register.dto';
 import { HmiService } from './providers/hmi.service';
 
 @ApiTags('cells')
@@ -38,6 +44,62 @@ export class HmiController {
   @ApiOperation({ summary: 'List Modbus register maps' })
   registers() {
     return this.hmiService.listRegisters();
+  }
+
+  @Patch('registers/:id')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: 'Set the Modbus address for a named register' })
+  updateRegister(@Param('id') id: string, @Body() dto: UpdateRegisterDto) {
+    return this.hmiService.updateRegister(id, dto.address);
+  }
+
+  @Post('cells')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: 'Add a matrix cell' })
+  createCell(@Body() dto: SaveCellDto) {
+    return this.hmiService.createCell(dto);
+  }
+
+  @Patch('cells/:id')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: 'Update a matrix cell and its three addresses' })
+  updateCell(@Param('id') id: string, @Body() dto: SaveCellDto) {
+    return this.hmiService.updateCell(id, dto);
+  }
+
+  @Delete('cells/:id')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: 'Remove a matrix cell' })
+  deleteCell(@Param('id') id: string) {
+    return this.hmiService.deleteCell(id);
+  }
+
+  @Post('overlays')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: 'Add a live label on the background' })
+  createOverlay(@Body() dto: SaveOverlayDto) {
+    return this.hmiService.createOverlay(dto);
+  }
+
+  @Patch('overlays/:id')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: 'Move or rebind a live label' })
+  updateOverlay(@Param('id') id: string, @Body() dto: SaveOverlayDto) {
+    return this.hmiService.updateOverlay(id, dto);
+  }
+
+  @Delete('overlays/:id')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: 'Remove a live label' })
+  deleteOverlay(@Param('id') id: string) {
+    return this.hmiService.deleteOverlay(id);
+  }
+
+  @Patch('background')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({ summary: 'Update the active plant graphic' })
+  updateBackground(@Body() dto: SaveBackgroundDto) {
+    return this.hmiService.updateBackground(dto);
   }
 
   @Post('cells/:id/activate')

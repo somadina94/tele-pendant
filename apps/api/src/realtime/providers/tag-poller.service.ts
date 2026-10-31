@@ -40,6 +40,7 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
 
   private async poll(): Promise<void> {
     try {
+      await this.plcService.reconnectIfNeeded();
       const safety = await this.safetyState.tick();
       this.gateway.broadcast(WS_EVENTS.SAFETY_STATE, safety);
       this.gateway.broadcast(
@@ -50,30 +51,46 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
       const driver = this.plcService.getDriver();
       if (!driver.isConnected()) return;
 
-      const [height] = await driver.readHoldingRegisters(
+      const heightAddr = await this.plcService.addressFor(
+        'holding.hoistHeightMm',
         DEMO_CRANE_MAP.holdings.hoistHeightMm,
-        1,
       );
-      const [loadKg] = await driver.readHoldingRegisters(
+      const loadAddr = await this.plcService.addressFor(
+        'holding.loadKg',
         DEMO_CRANE_MAP.holdings.loadKg,
-        1,
       );
-      const [speed] = await driver.readHoldingRegisters(
+      const speedAddr = await this.plcService.addressFor(
+        'holding.speedPct',
         DEMO_CRANE_MAP.holdings.speedPct,
-        1,
       );
-      const discretes = await driver.readDiscreteInputs(
+      const motorAddr = await this.plcService.addressFor(
+        'discrete.motorRunning',
         DEMO_CRANE_MAP.discretes.motorRunning,
-        3,
       );
+      const faultAddr = await this.plcService.addressFor(
+        'discrete.fault',
+        DEMO_CRANE_MAP.discretes.fault,
+      );
+      const commsAddr = await this.plcService.addressFor(
+        'discrete.commsOk',
+        DEMO_CRANE_MAP.discretes.commsOk,
+      );
+      const [height] = await driver.readHoldingRegisters(heightAddr, 1);
+      const [loadKg] = await driver.readHoldingRegisters(loadAddr, 1);
+      const [speed] = await driver.readHoldingRegisters(speedAddr, 1);
+      const [motorRunning] = await driver.readDiscreteInputs(motorAddr, 1);
+      const [fault] = await driver.readDiscreteInputs(faultAddr, 1);
+      const [commsOk] = await driver.readDiscreteInputs(commsAddr, 1);
+      const values = await this.plcService.readNamedValues();
 
       this.gateway.broadcast(WS_EVENTS.TAGS_UPDATE, {
         hoistHeightMm: height ?? 0,
         loadKg: loadKg ?? 0,
         speedPct: speed ?? 0,
-        motorRunning: Boolean(discretes[0]),
-        fault: Boolean(discretes[1]),
-        commsOk: Boolean(discretes[2]),
+        motorRunning: Boolean(motorRunning),
+        fault: Boolean(fault),
+        commsOk: Boolean(commsOk),
+        values,
         at: new Date().toISOString(),
       });
 

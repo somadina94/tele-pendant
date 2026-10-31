@@ -28,5 +28,26 @@ describe('operator helpers', () => {
     ).toBe('IDLE');
     expect(tagValueForRegister(tags, 'holding.speedPct')).toBe(55);
     expect(tagValueForRegister(tags, 'unknown')).toBe('—');
+    expect(
+      tagValueForRegister(
+        { ...tags, values: { 'coil.eStop': true } },
+        'coil.eStop',
+      ),
+    ).toBe(true);
+    expect(
+      tagValueForRegister(
+        { ...tags, values: { 'discrete.motorRunning': true } },
+        'discrete.motorRunning',
+      ),
+    ).toBe('RUN');
+    expect(
+      tagValueForRegister(
+        { ...tags, values: { 'discrete.motorRunning': false } },
+        'discrete.motorRunning',
+      ),
+    ).toBe('IDLE');
+    expect(
+      tagValueForRegister({ ...tags, values: {} }, 'holding.hoistHeightMm'),
+    ).toBe(1200);
   });
 });

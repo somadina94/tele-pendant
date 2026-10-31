@@ -128,6 +128,7 @@ export function OperatorPage() {
           <Link to="/face">Face</Link>
           <Link to="/ops">Ops</Link>
           <Link to="/admin">Config</Link>
+          <Link to="/audit">Audit</Link>
           <button
             type="button"
             className="ghost"
@@ -152,11 +153,19 @@ export function OperatorPage() {
       <div className="op-grid">
         <section
           className="graphic"
-          style={{
-            background:
-              layout?.background?.cssBackground ??
-              'linear-gradient(160deg, #1a2332, #0f1419)',
-          }}
+          style={
+            layout?.background?.imageUrl
+              ? {
+                  backgroundImage: `url(${layout.background.imageUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }
+              : {
+                  background:
+                    layout?.background?.cssBackground ??
+                    'linear-gradient(160deg, #1a2332, #0f1419)',
+                }
+          }
         >
           <h2>{layout?.background?.name ?? 'Plant graphic'}</h2>
           {(layout?.overlays ?? []).map((o) => (
@@ -186,14 +195,19 @@ export function OperatorPage() {
         <section className="matrix-panel">
           <h2>Control matrix</h2>
           <label className="pin">
-            Safe-action PIN (e-stop / dangerous)
+            SAFE_ACTION_PIN
             <input
               value={safePin}
               onChange={(e) => setSafePin(e.target.value)}
               type="password"
-              placeholder="supervisor PIN"
+              placeholder="SAFE_ACTION_PIN"
+              autoComplete="off"
             />
           </label>
+          <p className="hint">
+            Type the value from .env. This demo uses the admin password:
+            change-me-admin-password
+          </p>
           {grid && (
             <div
               className="matrix"
@@ -221,8 +235,23 @@ export function OperatorPage() {
                     onPointerCancel={() => {
                       if (holdingCellId === cell.id) void releaseCell(cell);
                     }}
+                    aria-label={cell.label}
                   >
-                    {cell.label}
+                    <span>{cell.label}</span>
+                    {cell.feedbackRegister ? (
+                      <small className="cell-live">
+                        {String(
+                          tagValueForRegister(tags, cell.feedbackRegister.name),
+                        )}
+                      </small>
+                    ) : null}
+                    {cell.statusRegister ? (
+                      <small className="cell-live">
+                        {String(
+                          tagValueForRegister(tags, cell.statusRegister.name),
+                        )}
+                      </small>
+                    ) : null}
                   </motion.button>
                 ) : (
                   <div key={`empty-${idx}`} className="cell empty" />

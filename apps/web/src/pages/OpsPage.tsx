@@ -89,6 +89,17 @@ export function OpsPage() {
                     }
                   >
                     Ack
+                  </button>{' '}
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() =>
+                      void apiPost(`/alarms/${a.id}/shelve`).then(() =>
+                        alarms.refetch(),
+                      )
+                    }
+                  >
+                    Shelve
                   </button>
                 </>
               )}

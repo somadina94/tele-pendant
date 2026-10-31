@@ -16,18 +16,18 @@
       },
       "package": "com.telependant.app"
     },
-    "plugins": ["react-native-reanimated"],
+    "plugins": ["react-native-reanimated", "expo-camera"],
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://YOUR_VPS_HOST/ota/manifest",
+      "url": "http://localhost:3010/ota/manifest",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
     "extra": {
-      "otaNote": "Point updates.url at a self-hosted Expo Updates / custom OTA endpoint on your VPS. No paid Expo subscription required if you host manifests yourself."
+      "otaNote": "Point updates.url at http://<api-host>:3010/ota/manifest. The API serves apps/api/ota with no login. Native modules (camera) still need a binary rebuild; JS-only changes are what that folder ships."
     }
   }
 }

@@ -1,0 +1,16 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "runtimeVersion": "0.0.1",
+  "launchAsset": {
+    "hash": "placeholder",
+    "key": "bundle.js",
+    "contentType": "application/javascript",
+    "url": "http://localhost:3010/ota/assets/bundle.js"
+  },
+  "assets": [],
+  "metadata": {},
+  "extra": {
+    "note": "Replace manifest.json and assets/bundle.js in this folder to publish a JS update. Native modules such as the camera still need a binary rebuild."
+  }
+}

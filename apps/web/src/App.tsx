@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AdminPage } from './pages/AdminPage';
+import { AuditPage } from './pages/AuditPage';
 import { AssistantPage } from './pages/AssistantPage';
 import { FacePage } from './pages/FacePage';
 import { LoginPage } from './pages/LoginPage';
@@ -48,6 +49,14 @@ export function App() {
         element={
           <RequireAuth>
             <MediaPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/audit"
+        element={
+          <RequireAuth>
+            <AuditPage />
           </RequireAuth>
         }
       />

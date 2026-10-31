@@ -33,6 +33,7 @@ vi.mock('./lib/api', async () => {
       }
       if (path === '/plc/connections') return [];
       if (path === '/alarms') return [];
+      if (path === '/audit') return [];
       if (path.startsWith('/trends/')) return [];
       if (path === '/diagnostics') {
         return {
@@ -80,7 +81,14 @@ describe('App', () => {
 
   it('renders other protected pages', async () => {
     localStorage.setItem('accessToken', 'tok');
-    for (const route of ['/admin', '/ops', '/media', '/assistant', '/face']) {
+    for (const route of [
+      '/admin',
+      '/ops',
+      '/media',
+      '/assistant',
+      '/face',
+      '/audit',
+    ]) {
       const { unmount } = renderWithProviders(<App />, { route });
       expect(document.body).toBeTruthy();
       unmount();

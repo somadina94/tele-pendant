@@ -4,12 +4,12 @@ Use this while the Docker dev stack is running. Every feature below is a click o
 
 ## What is already running
 
-| Check | Where | Success |
-| --- | --- | --- |
-| API | http://localhost:3010/api/v1/health | JSON `status` is `ok` |
-| Swagger | http://localhost:3010/api | Swagger UI loads |
-| Web | http://localhost:8080 | Tele-Pendant page (port comes from `WEB_PORT` in `.env`; this stack uses **8080**) |
-| Simulator | host port **1502** | Container `tele-pendant-modbus-sim-dev` is up |
+| Check     | Where                               | Success                                                                            |
+| --------- | ----------------------------------- | ---------------------------------------------------------------------------------- |
+| API       | http://localhost:3010/api/v1/health | JSON `status` is `ok`                                                              |
+| Swagger   | http://localhost:3010/api           | Swagger UI loads                                                                   |
+| Web       | http://localhost:8080               | Tele-Pendant page (port comes from `WEB_PORT` in `.env`; this stack uses **8080**) |
+| Simulator | host port **1502**                  | Container `tele-pendant-modbus-sim-dev` is up                                      |
 
 You are already signed in. The operator screen is http://localhost:8080/operator.
 
@@ -24,7 +24,7 @@ Sign-in values if you get logged out (from `.env`):
 1. Open http://localhost:8080.
 2. **Success:** heading **Tele-Pendant**, text **Sign in to operate the demo crane**, fields **Email** and **Password** already filled, button **Sign in**, link **Face login (basic)**.
 3. Click **Sign in**.
-4. **Success:** the address becomes `/operator`. You see **Demo crane operator HMI** and the top links **Media**, **Assistant**, **Face**, **Ops**, **Config**, **Logout**.
+4. **Success:** the address becomes `/operator`. You see **Demo crane operator HMI** and the top links **Media**, **Assistant**, **Face**, **Ops**, **Config**, **Audit**, **Logout**.
 
 Wrong password shows a red error and you stay on the login page.
 
@@ -39,16 +39,17 @@ Stay on http://localhost:8080/operator.
 - Three overlays on the graphic: **Height** (about `1250 mm` at a fresh simulator), **Load** (`0 kg`), **Motor** (`IDLE`).
 - Strip under the graphic: `H … mm`, `Load … kg`, and `IDLE`.
 - Right panel title **Control matrix**.
-- Password field labeled **Safe-action PIN (e-stop / dangerous)**, placeholder **supervisor PIN**.
+- Field labeled **SAFE_ACTION_PIN**. The hint under it shows the demo value `change-me-admin-password` (same as the admin password). Type that value, not the words SAFE_ACTION_PIN.
 - Five buttons in a 3×3 grid (corners are empty):
 
-  |  | left | center | right |
-  | --- | --- | --- | --- |
-  | top | empty | **Hoist Up** | empty |
-  | middle | **Trolley L** | **STOP** | **Trolley R** |
-  | bottom | empty | **Hoist Down** | empty |
+  |        | left          | center         | right         |
+  | ------ | ------------- | -------------- | ------------- |
+  | top    | empty         | **Hoist Up**   | empty         |
+  | middle | **Trolley L** | **STOP**       | **Trolley R** |
+  | bottom | empty         | **Hoist Down** | empty         |
 
 - Hint under the grid: **Hold motion buttons: deadman pulses while pressed. Release to stop.**
+- **Hoist Up** and **Hoist Down** show the latest feedback and status under the label (motor **RUN** or **IDLE**, and the height number) when those addresses are set.
 
 Numbers on Height and the `H` strip should match and tick together (live tags over the socket).
 
@@ -78,7 +79,7 @@ Numbers on Height and the `H` strip should match and tick together (live tags ov
 
 1. Leave **Safe-action PIN** empty.
 2. Click **STOP**.
-3. **Success:** a red error that includes **Safe-action authorization required (supervisor PIN)**. Banner stays **Safety: normal**. No **E-STOP** on the banner.
+3. **Success:** a red error that includes **SAFE_ACTION_PIN does not match**. Banner stays **Safety: normal**. No **E-STOP** on the banner.
 
 ## 6. Media — camera, codes, voice
 
@@ -95,8 +96,8 @@ Click **Media** in the top nav (or open http://localhost:8080/media).
 - Two code buttons:
   - **TP-CRANE-DEMO-01** — Demo crane bay A
   - **TP-OPS** — Ops dashboard
-- Section **Voice commands**. Hint: **Allowlisted: hoist up/down, trolley left/right, stop**.
-- Button **Listen (5s)**.
+- Section **Voice commands**. Hint: **Say UP or DOWN**. Trolley is left or right. Or say stop.
+- Button **Listen (8s)**.
 
 ### 6a. Resolve the crane code
 
@@ -127,14 +128,16 @@ Put `TP-CRANE-DEMO-01` back in the field if you want.
 
 ### 6e. Voice
 
-The page listens for up to 5 seconds, then posts the transcript. Motion phrases pulse deadman on the server, so you do not hold a matrix button.
+Hoist commands are the **UP** and **DOWN** buttons under Voice commands. Each runs the hoist for about 2 seconds. Saying those words does the same thing. The status line keeps what was heard.
 
-1. Click **Listen (5s)**. Button label becomes **Listening…**.
-2. Say **hoist up**.
-3. **Success:** status line **Heard: hoist up**, then **Executed: Hoist Up**. On **Operator**, height is higher than before.
-4. Repeat and say **nonsense phrase**.
-5. **Success:** **Not executed: command_not_allowlisted**.
-6. **stop** is allowlisted, but this page does not send the supervisor PIN, so **stop** must not show **Executed**. You may only see **Heard: stop**. Use the operator **STOP** button in step 10 for the real e-stop test.
+1. Click **UP**.
+2. **Success:** **Heard: up. Executed: Hoist Up**. On **Operator**, height climbs for about 2 seconds, then stops.
+3. Click **DOWN**.
+4. **Success:** **Heard: down. Executed: Hoist Down**, and height falls for about 2 seconds.
+5. Optional: click **Listen (8s)** and say **up** or **down**. **Success** is the same status line as the buttons.
+6. Repeat and say a nonsense phrase.
+7. **Success:** **Heard: … Not executed: command_not_allowlisted**.
+8. **stop** is allowlisted, but this page does not send the supervisor PIN, so **stop** must not show **Executed**. Use the operator **STOP** button in step 11 for the real e-stop test.
 
 If the browser has no speech API, **success** is the line **SpeechRecognition not supported in this browser**.
 
@@ -150,37 +153,64 @@ Open http://localhost:8080/ops (or, from Media, click the **TP-OPS** code).
   - **Safety mode: normal**
   - **Watchdog OK: true**
   - **Uptime:** a number of seconds, increasing
-- **Alarms:** **No active alarms** (until you press STOP in step 10).
+- **Alarms:** **No active alarms** (until you press STOP in step 11).
 - **Trend: hoist height (recent):** time-stamped lines ending in **mm**. After steps 2–3 and voice hoist, the mm values are not stuck only at the original 1250 if you held hoist long enough to move it. A line **No samples yet** means the poller has not written a sample yet — wait a few seconds and the list should fill.
 
-There is an **Ack** button only after an alarm is **active**. There is no Shelve button on this screen.
+When an alarm is **active**, **Ack** and **Shelve** sit on that row. **Ack** changes the state to **acked**. **Shelve** changes the state to **shelved**. Use one or the other on a given alarm. Step 11 clicks **Ack**. A later step clicks **Shelve** on a fresh STOP.
 
-## 8. Config (read-only)
+## 8. Config
 
-From Operator, click **Config** (http://localhost:8080/admin).
+From Operator, click **Config** (http://localhost:8080/admin). Sign in as the admin user. An operator account can open the page, and **Save** returns an authorization error.
 
 **Success:**
 
 - Heading **HMI config**, link **Operator**.
-- Text: **DB-backed layout (SQLite). Edit maps in later admin CRUD; seed ships demo crane.**
-- **PLC connections:** **demo-simulator — modbus-sim:1502 (simulator) · active**
-- **Register maps** includes at least:
-  - `coil.hoistUp · coil@0`
-  - `coil.hoistDown · coil@1`
-  - `coil.trolleyLeft · coil@2`
-  - `coil.trolleyRight · coil@3`
-  - `coil.eStop · coil@11`
-  - `holding.hoistHeightMm · holding@0`
-  - `holding.loadKg · holding@1`
-  - `discrete.motorRunning · discrete@0`
+- Text says the fields are saved in SQLite and that **Use this PLC** plus **Save** connects.
+- **PLC connections** shows the **demo-simulator** row: host `modbus-sim`, port `1502`, marked **(simulator)**, **Use this PLC** checked.
+- **Register maps** includes at least these names, with the address field showing the demo number:
+  - `coil.hoistUp` · coil · address `0`
+  - `coil.hoistDown` · coil · address `1`
+  - `coil.trolleyLeft` · coil · address `2`
+  - `coil.trolleyRight` · coil · address `3`
+  - `coil.eStop` · coil · address `11`
+  - `holding.hoistHeightMm` · holding · address `0`
+  - `holding.loadKg` · holding · address `1`
+  - `discrete.motorRunning` · discrete · address `0`
+  - Also `coil.deadman`, `holding.heartbeat`, and `holding.safeState` (used by the safety checks).
+- Each register row has an **Address** field and a **Save** button. **Save** stores that Modbus number. Buttons and safety checks use the saved number.
+- **Add a PLC** is an empty form (port `502`, unit id `1`, **Use this PLC** checked). Fill **Label** and **Host**, then **Add PLC**. **Success:** **Saved and connecting.** Ops then shows that label when the socket opens. If the host is unreachable, the red text includes **the PLC did not connect**. The row is still saved.
+- To go back to the fake crane, check **Use this PLC** on **demo-simulator** and click **Save**. **Success:** **Saved and connecting.**
 - **Cells (3 PLC addresses each):**
   - `[0,1] Hoist Up` — primary `coil.hoistUp` / feedback `discrete.motorRunning` / status `holding.hoistHeightMm`
   - `[1,0] Trolley L` — primary `coil.trolleyLeft`
   - `[1,1] STOP` — primary `coil.eStop`
   - `[1,2] Trolley R` — primary `coil.trolleyRight`
   - `[2,1] Hoist Down` — primary `coil.hoistDown` / feedback `discrete.motorRunning` / status `holding.hoistHeightMm`
+- **Add a cell** is an empty form. Pick a primary register, fill the label, and click **Add cell**.
+- **Live labels** lists **Height**, **Load**, and **Motor** with **X**, **Y**, **Format**, and a register. **Add a label** posts a new one.
+- **Background** has **Name**, a CSS background, and an image URL. If the image URL is filled, Operator uses that picture. If it is empty, Operator uses the CSS background.
 
-Nothing on this page is editable. That is expected.
+### Edit a cell, a label, and the background, then put them back
+
+1. On **Hoist Up**, change **Cell label** to `Lift`. The button stays **Save Hoist Up** (it uses the saved name). Click it.
+2. **Success:** **Saved Lift.** Open **Operator**. The button now says **Lift**.
+3. Back on Config, set that label to `Hoist Up` and click **Save Lift**. **Success:** Operator shows **Hoist Up** again.
+4. On the **Height** label, set **X** to `40` and **Y** to `50`. Click **Save Height**.
+5. **Success:** **Saved Height.** On Operator the **Height** label has moved. Set **X** back to `18` and **Y** back to `22`, click **Save Height**, and it sits where it started.
+6. On **Background**, replace the CSS with `red`. Leave the image URL empty. Click **Save background**.
+7. **Success:** **Saved background.** Operator’s graphic is red. Put this CSS back and save again:
+
+```
+linear-gradient(160deg, #1a2332 0%, #0f1419 45%, #1e2a1e 100%)
+```
+
+**Success:** the graphic is the dark demo gradient again.
+
+## 8a. Audit
+
+From Operator, click **Audit** (http://localhost:8080/audit).
+
+**Success:** heading **Audit**, link **Operator**, and a list of rows. Each row shows email, action, resource, result, and time. After the Config saves above, you see a `register.update` or `cell.update` row. An operator account can open the page and sees the authorization error from the API.
 
 ## 9. Local assistant
 
@@ -224,8 +254,8 @@ Click **Enroll** while logged out. **Success:** **Sign in with password first, t
 
 ## 11. STOP with PIN (do this last)
 
-1. On http://localhost:8080/operator, click the **Safe-action PIN** field.
-2. Type the `SAFE_ACTION_PIN` from `.env` (seed value `change-me-admin-password`).
+1. On http://localhost:8080/operator, click the **SAFE_ACTION_PIN** field.
+2. Type `change-me-admin-password`. That is the value of `SAFE_ACTION_PIN` in `.env`, and it is the same as the admin password. Do not type the name `SAFE_ACTION_PIN`.
 3. Click **STOP**.
 4. **Success:**
    - Banner becomes **Safety: e_stop** and includes **E-STOP**.
@@ -234,9 +264,9 @@ Click **Enroll** while logged out. **Success:** **Sign in with password first, t
 6. **Success:**
    - **Safety mode: e_stop**
    - **Alarms** shows **[critical] E-Stop asserted — active**
-   - An **Ack** button sits on that row
-7. Click **Ack**.
-8. **Success:** that row’s state changes from **active** to **acked**. The **Ack** button disappears. The banner on Operator stays **e_stop** (ack does not clear the coil).
+   - **Ack** and **Shelve** sit on that row
+7. Click **Ack** (leave **Shelve** for the later fresh STOP).
+8. **Success:** that row’s state changes from **active** to **acked**. **Ack** and **Shelve** disappear. The banner on Operator stays **e_stop** (ack does not clear the coil).
 9. Back on Operator, hold **Hoist Up**.
 10. **Success:** motion is rejected. Red text includes **Motion blocked: hold deadman and ensure normal safety mode**. Height does not climb.
 
@@ -248,7 +278,18 @@ There is no reset button on the HMI. The simulator latches the e-stop coil.
 docker restart tele-pendant-modbus-sim-dev
 ```
 
-Wait a few seconds. **Success:** Operator banner returns to **Safety: normal**, Ops **PLC connected: true**, and holding **Hoist Up** moves height again. You may see **comms_lost** for a moment while the simulator restarts.
+Wait a few seconds. The API opens a new Modbus connection on its own. **Success:** Operator banner returns to **Safety: normal**, Ops **PLC connected: true**, and holding **Hoist Up** moves height again. You may see **comms_lost** for a moment while the simulator restarts. **E-STOP** on that same banner means the API still has the old socket; refresh the operator page after the banner changes.
+
+### Shelve a fresh STOP
+
+Do this only after the banner is **normal** again. One alarm cannot be both acked and shelved.
+
+1. Type `change-me-admin-password` in **SAFE_ACTION_PIN** and click **STOP**.
+2. Open **Ops** while the alarm is still **active**. **Shelve** is beside **Ack**.
+3. Click **Shelve**. Do not click **Ack**.
+4. **Success:** the state text is **shelved**.
+
+Clear the coil again with `docker restart tele-pendant-modbus-sim-dev` if you still need hoist motion.
 
 ## 12. Logout
 
@@ -256,16 +297,29 @@ Wait a few seconds. **Success:** Operator banner returns to **Safety: normal**, 
 2. **Success:** you are on `/` (the sign-in form). Opening http://localhost:8080/operator sends you back to sign-in.
 3. Sign in again with **Sign in** if you want to keep testing.
 
-## 13. Expo handheld (separate from the browser)
+## 13. OTA folder
 
-The phone app is sign-in plus the same matrix. It does not include Media, Assistant, Face, Ops, or Config.
+The API serves `apps/api/ota` with no login.
 
-1. On the phone, set **API base** to your computer’s LAN URL, for example `http://192.168.x.x:3010` (not `localhost`).
+1. Open http://localhost:3010/ota/manifest.
+2. **Success:** JSON with `runtimeVersion` `0.0.1`, and the header `expo-protocol-version: 1`.
+3. Point the phone `updates.url` at `http://<api-host>:3010/ota/manifest`. Replacing `manifest.json` and `assets/bundle.js` in that folder is the JavaScript update. The camera is a native module, so it still needs a binary rebuild.
+
+## 14. Expo handheld
+
+Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit**.
+
+1. On the phone, set **API base** to your computer’s LAN URL ending in `/api/v1`, for example `http://192.168.x.x:3010/api/v1` (not `localhost`).
 2. Email and password are the same as step 0.
 3. Tap **Sign in**.
-4. **Success:** title **Tele-Pendant**, a **Logout** link, banner `Safety: normal · H … mm`, and the same five cells: **Hoist Up**, **Trolley L**, **STOP**, **Trolley R**, **Hoist Down**.
+4. **Success:** title **Tele-Pendant**, **Logout**, and the six header buttons. Operator shows banner `Safety: normal · H … mm`, a **SAFE_ACTION_PIN** field, and the same five cells.
 5. Press and hold **Hoist Up**. **Success:** banner includes **DEADMAN** and the held cell gets a green border. Height in the banner increases. Release: **DEADMAN** clears.
-6. **STOP** on the phone uses the same PIN rules as the web app. The phone screen has no PIN field, so **STOP** from the phone is expected to fail until a PIN is supplied by the API. Use the web Operator screen for the PIN test in step 11.
+6. Open **Media**. Tap **UP**, then **DOWN**. **Success:** **Heard: up. Executed: Hoist Up**, then the same line for **down** / **Hoist Down**. Type a known code or scan a QR with the camera and tap **Resolve**. **Success:** the code’s label. The listen sentence says device listen stays on the web.
+7. Open **Face**. **Success:** the sentence **Convenience match only — not certified biometrics. Fail closed to password.**
+8. Open **Ops**. **Success:** diagnostics, alarms (**Ack** and **Shelve** when one is active), and the height trend.
+9. Open **Config**. Change a register address or a cell label and save, then set it back. **Success:** a saved line.
+10. Open **Audit**. **Success:** the same list as the web (email, action, resource, result, time).
+11. Last, type `change-me-admin-password` in **SAFE_ACTION_PIN** and press **STOP**. **Success:** the banner shows **e_stop**. This latches the simulator the same way as the web STOP.
 
 ## What this software does not do
 

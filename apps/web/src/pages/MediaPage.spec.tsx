@@ -135,10 +135,12 @@ describe('MediaPage', () => {
       continuous: boolean;
       interimResults: boolean;
       lang: string;
+      maxAlternatives: number;
       start: () => void;
       stop: () => void;
       onresult: ((e: unknown) => void) | null;
       onerror: ((e: unknown) => void) | null;
+      onend: (() => void) | null;
     };
     const instances: Rec[] = [];
     window.SpeechRecognition = vi.fn(() => {
@@ -146,28 +148,78 @@ describe('MediaPage', () => {
         continuous: false,
         interimResults: false,
         lang: 'en-US',
+        maxAlternatives: 1,
         start: vi.fn(),
         stop: vi.fn(),
         onresult: null,
         onerror: null,
+        onend: null,
       };
       instances.push(rec);
       return rec;
     }) as unknown as typeof window.SpeechRecognition;
     const instance = () => instances[instances.length - 1]!;
 
-    vi.spyOn(api, 'apiPost')
+    const post = vi
+      .spyOn(api, 'apiPost')
       .mockResolvedValueOnce({ ok: true, label: 'Hoist Up' })
       .mockResolvedValueOnce({ ok: false, reason: 'command_not_allowlisted' })
+      .mockResolvedValueOnce({ ok: false })
+      .mockRejectedValueOnce(new Error('voice failed'))
+      .mockResolvedValueOnce({ ok: true, label: 'Trolley L' })
+      .mockRejectedValueOnce(new Error('trolley failed'))
       .mockResolvedValueOnce({ ok: false });
 
     renderWithProviders(<MediaPage />);
     await screen.findByText(/Device camera notes/);
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
     instance()!.onresult?.({
-      results: [[{ transcript: 'hoist up' }]],
+      results: [{ isFinal: false, length: 0 }],
     });
-    expect(await screen.findByText(/Executed: Hoist Up/)).toBeInTheDocument();
+    expect(await screen.findByText('Heard nothing')).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+    instance()!.onresult?.({
+      results: [
+        {
+          isFinal: false,
+          length: 1,
+          0: { transcript: 'hoist' },
+        },
+      ],
+    });
+    expect(await screen.findByText('Heard: hoist')).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+
+    instance()!.onresult?.({
+      results: {
+        length: 2,
+        0: undefined,
+        1: {
+          isFinal: false,
+          length: 3,
+          0: { transcript: '   ' },
+          1: { transcript: 'hello' },
+          2: { transcript: 'up' },
+        },
+      },
+    });
+    expect(
+      await screen.findByText('Heard: up. Executed: Hoist Up'),
+    ).toBeInTheDocument();
+    instance()!.onresult?.({
+      results: [[{ transcript: 'again' }]],
+    });
+    expect(
+      screen.getByText('Heard: up. Executed: Hoist Up'),
+    ).toBeInTheDocument();
+    instance()!.onerror?.({ error: 'aborted' });
+    instance()!.onerror?.({ error: 'network' });
+    expect(
+      screen.getByText('Heard: up. Executed: Hoist Up'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Heard: again')).not.toBeInTheDocument();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith('/media/voice', { transcript: 'up' });
 
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
     instance()!.onresult?.({ results: [[{ transcript: 'dance' }]] });
@@ -175,7 +227,42 @@ describe('MediaPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
     instance()!.onresult?.({ results: [[]] });
-    await waitFor(() => expect(api.apiPost).toHaveBeenCalled());
+    expect(await screen.findByText('Heard nothing')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    instance()!.onresult?.({
+      results: [[{ transcript: 'hoist up', isFinal: true }]],
+    });
+    expect(
+      await screen.findByText(/Not executed: unknown/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    instance()!.onresult?.({
+      results: [[{ transcript: 'hoist down' }]],
+    });
+    expect(
+      await screen.findByText(/Not executed: voice failed/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    instance()!.onresult?.({
+      results: [[{ transcript: 'trolley left' }]],
+    });
+    expect(await screen.findByText(/Executed: Trolley L/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    instance()!.onresult?.({
+      results: [[{ transcript: 'trolley right' }]],
+    });
+    expect(
+      await screen.findByText(/Not executed: trolley failed/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    instance()!.onresult?.({
+      results: [[{ transcript: 'left' }]],
+    });
     expect(
       await screen.findByText(/Not executed: unknown/),
     ).toBeInTheDocument();
@@ -185,11 +272,35 @@ describe('MediaPage', () => {
     expect(
       await screen.findByText(/Voice error: no-speech/),
     ).toBeInTheDocument();
+    instance()!.onend?.();
 
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(8000);
     expect(instance()!.stop).toHaveBeenCalled();
     vi.useRealTimers();
+  });
+
+  it('runs hoist from the UP and DOWN buttons', async () => {
+    vi.spyOn(api, 'apiPost')
+      .mockResolvedValueOnce({ ok: true, label: 'Hoist Up' })
+      .mockResolvedValueOnce({ ok: false, reason: 'command_not_allowlisted' })
+      .mockRejectedValueOnce('nope');
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    fireEvent.click(screen.getByRole('button', { name: 'UP' }));
+    expect(
+      await screen.findByText('Heard: up. Executed: Hoist Up'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'DOWN' }));
+    expect(
+      await screen.findByText(
+        'Heard: down. Not executed: command_not_allowlisted',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'UP' }));
+    expect(
+      await screen.findByText('Heard: up. Not executed: failed'),
+    ).toBeInTheDocument();
   });
 
   it('reports empty barcode frame', async () => {

@@ -9,6 +9,7 @@ describe('SafetyStateService', () => {
   };
   const plcService = {
     getDriver: () => driver,
+    addressFor: jest.fn(async (_name: string, fallback: number) => fallback),
   };
   const auditService = {
     write: jest.fn().mockResolvedValue({}),

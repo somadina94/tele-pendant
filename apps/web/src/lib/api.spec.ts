@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiGet, apiPost } from './api';
+import { apiDelete, apiGet, apiPatch, apiPost } from './api';
 
 describe('api helpers', () => {
   afterEach(() => {
@@ -66,5 +66,56 @@ describe('api helpers', () => {
 
     await expect(apiGet('/fail')).rejects.toThrow('boom');
     await expect(apiPost('/fail', {})).rejects.toThrow('nope');
+  });
+
+  it('patches payload or omits body and surfaces errors', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ apiVersion: 'v1', data: { id: 'c1' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ apiVersion: 'v1', data: { ok: true } }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        text: async () => 'denied',
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      apiPatch('/plc/connections/1', { host: '10.0.0.1' }),
+    ).resolves.toEqual({
+      id: 'c1',
+    });
+    expect(fetchMock.mock.calls[0][1].method).toBe('PATCH');
+    expect(fetchMock.mock.calls[0][1].body).toBe(
+      JSON.stringify({ host: '10.0.0.1' }),
+    );
+
+    await expect(apiPatch('/hmi/registers/r1')).resolves.toEqual({ ok: true });
+    expect(fetchMock.mock.calls[1][1].body).toBeUndefined();
+
+    await expect(apiPatch('/fail', {})).rejects.toThrow('denied');
+  });
+
+  it('deletes and surfaces errors', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ apiVersion: 'v1', data: { ok: true } }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        text: async () => 'gone',
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(apiDelete('/hmi/cells/1')).resolves.toEqual({ ok: true });
+    expect(fetchMock.mock.calls[0][1].method).toBe('DELETE');
+    expect(fetchMock.mock.calls[0][1].body).toBeUndefined();
+    await expect(apiDelete('/fail')).rejects.toThrow('gone');
   });
 });

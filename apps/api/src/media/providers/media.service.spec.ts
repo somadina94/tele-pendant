@@ -29,7 +29,10 @@ describe('MediaService', () => {
     }),
     activateCell: jest.fn().mockResolvedValue({ ok: true }),
   };
-  const safetyState = { pulseDeadman: jest.fn() };
+  const safetyState = {
+    pulseDeadman: jest.fn(),
+    releaseDeadman: jest.fn(),
+  };
   const auditService = { write: jest.fn().mockResolvedValue({}) };
 
   let service: MediaService;
@@ -61,6 +64,13 @@ describe('MediaService', () => {
       safetyState as never,
       auditService as never,
     );
+  });
+
+  afterEach(() => {
+    const timer = (service as unknown as { motionJog: NodeJS.Timeout | null })
+      .motionJog;
+    if (timer) clearInterval(timer);
+    jest.useRealTimers();
   });
 
   afterAll(() => {
@@ -116,6 +126,106 @@ describe('MediaService', () => {
     });
     expect(stop.ok).toBe(true);
     expect(safetyState.pulseDeadman).not.toHaveBeenCalled();
+  });
+
+  it('uses a later alternative when the top transcript misses', async () => {
+    const result = await service.voiceCommand('banana', {
+      role: UserRole.OPERATOR,
+      alternatives: ['completely wrong', 'hoist up'],
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        label: 'Hoist Up',
+        transcript: 'hoist up',
+      }),
+    );
+  });
+
+  it('rejects a blank transcript', async () => {
+    const result = await service.voiceCommand('   ', {
+      role: UserRole.OPERATOR,
+    });
+    expect(result).toEqual(
+      expect.objectContaining({ ok: false, reason: 'command_not_allowlisted' }),
+    );
+  });
+
+  it('jogs hoist up then clears the coil', async () => {
+    jest.useFakeTimers();
+    const result = await service.voiceCommand('hoist down', {
+      role: UserRole.OPERATOR,
+    });
+    expect(result.ok).toBe(false);
+
+    hmiService.getLayout.mockResolvedValueOnce({
+      cells: [
+        {
+          id: 'down',
+          label: 'Hoist Down',
+          isMotion: true,
+          requiresSafeAction: false,
+        },
+      ],
+    });
+    const down = await service.voiceCommand('down', {
+      role: UserRole.OPERATOR,
+    });
+    expect(down).toEqual(
+      expect.objectContaining({ ok: true, label: 'Hoist Down' }),
+    );
+    await jest.advanceTimersByTimeAsync(2800);
+    expect(hmiService.activateCell).toHaveBeenCalledWith('down', false, {});
+    expect(safetyState.releaseDeadman).toHaveBeenCalled();
+  });
+
+  it('still releases deadman if clearing the coil fails', async () => {
+    jest.useFakeTimers();
+    hmiService.activateCell.mockImplementation(
+      (_id: string, value: boolean) => {
+        if (!value) return Promise.reject(new Error('clear failed'));
+        return Promise.resolve({ ok: true });
+      },
+    );
+    await service.voiceCommand('hoist up', { role: UserRole.OPERATOR });
+    await service.voiceCommand('hoist up', { role: UserRole.OPERATOR });
+    await jest.advanceTimersByTimeAsync(2800);
+    expect(safetyState.releaseDeadman).toHaveBeenCalled();
+  });
+
+  it('clears the opposite hoist coil and ignores a non-hoist motion cell', async () => {
+    hmiService.getLayout.mockResolvedValue({
+      cells: [
+        { id: 'up', label: 'Hoist Up', isMotion: true },
+        { id: 'down', label: 'Hoist Down', isMotion: true },
+        { id: 'left', label: 'Trolley L', isMotion: true },
+      ],
+    });
+    await service.voiceCommand('down', { role: UserRole.OPERATOR });
+    expect(hmiService.activateCell).toHaveBeenCalledWith(
+      'up',
+      false,
+      expect.any(Object),
+    );
+    expect(hmiService.activateCell).toHaveBeenCalledWith(
+      'down',
+      true,
+      expect.any(Object),
+    );
+
+    hmiService.activateCell.mockImplementation(
+      (_id: string, value: boolean) => {
+        if (!value) return Promise.reject(new Error('clear'));
+        return Promise.resolve({ ok: true });
+      },
+    );
+    await service.voiceCommand('up', { role: UserRole.OPERATOR });
+    await service.voiceCommand('trolley left', { role: UserRole.OPERATOR });
+    expect(hmiService.activateCell).toHaveBeenCalledWith(
+      'left',
+      true,
+      expect.any(Object),
+    );
   });
 
   it('returns cell_not_found when label missing from layout', async () => {

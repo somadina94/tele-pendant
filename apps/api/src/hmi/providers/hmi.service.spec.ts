@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { HmiService } from './hmi.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 
@@ -16,19 +20,39 @@ describe('HmiService', () => {
   const cells = {
     find: jest.fn().mockResolvedValue([motionCell]),
     findOne: jest.fn().mockResolvedValue(motionCell),
+    findOneBy: jest.fn(),
+    create: jest.fn((row: Record<string, unknown>) => ({ ...row })),
+    save: jest.fn(async (row: { id?: string }) => ({
+      id: row.id ?? 'new-cell',
+      ...row,
+    })),
+    delete: jest.fn().mockResolvedValue(undefined),
   };
   const registers = {
     find: jest.fn().mockResolvedValue([{ name: 'coil.hoistUp' }]),
+    findOneBy: jest.fn(),
+    save: jest.fn(
+      async (row: { id: string; name: string; address: number }) => row,
+    ),
   };
   const backgrounds = {
     findOne: jest.fn().mockResolvedValue({ id: 'bg1', active: true }),
+    save: jest.fn(async (row: { id: string }) => row),
   };
   const overlays = {
     find: jest.fn().mockResolvedValue([{ id: 'o1', text: 'H' }]),
+    findOneBy: jest.fn(),
+    create: jest.fn((row: Record<string, unknown>) => ({ ...row })),
+    save: jest.fn(async (row: { id?: string }) => ({
+      id: row.id ?? 'new-overlay',
+      ...row,
+    })),
+    delete: jest.fn().mockResolvedValue(undefined),
   };
   const plcService = {
     writeCoil: jest.fn().mockResolvedValue(undefined),
     writeHolding: jest.fn().mockResolvedValue(undefined),
+    forgetAddresses: jest.fn(),
   };
   const safetyState = {
     canIssueMotion: jest.fn().mockReturnValue(false),
@@ -201,5 +225,199 @@ describe('HmiService', () => {
     await expect(
       service.activateCell('c1', true, { role: UserRole.OPERATOR }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('updates a register address and drops the address cache', async () => {
+    registers.findOneBy.mockResolvedValue({
+      id: 'r1',
+      name: 'coil.eStop',
+      address: 11,
+    });
+    const saved = await service.updateRegister('r1', 20);
+    expect(saved.address).toBe(20);
+    expect(plcService.forgetAddresses).toHaveBeenCalled();
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'register.update',
+        details: 'coil.eStop=20',
+      }),
+    );
+  });
+
+  it('rejects a missing register and an address outside 0..65535', async () => {
+    registers.findOneBy.mockResolvedValue(null);
+    await expect(service.updateRegister('missing', 1)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(service.updateRegister('r1', -1)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(service.updateRegister('r1', 65536)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(service.updateRegister('r1', 1.5)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  const cellInput = {
+    row: 1,
+    col: 2,
+    label: ' Spare ',
+    style: ' default ',
+    isMotion: false,
+    requiresSafeAction: false,
+    primaryRegisterId: 'p1',
+    feedbackRegisterId: 'f1',
+    statusRegisterId: 's1',
+  };
+
+  it('creates and updates cells with optional addresses', async () => {
+    registers.findOneBy.mockImplementation(async ({ id }: { id: string }) => ({
+      id,
+      name: id,
+    }));
+    const created = await service.createCell(cellInput);
+    expect(created.label).toBe('Spare');
+    expect(created.id).toBe('new-cell');
+
+    await service.createCell({
+      ...cellInput,
+      feedbackRegisterId: '',
+      statusRegisterId: null,
+    });
+
+    cells.findOneBy.mockResolvedValue({ id: 'c9', label: 'Old' });
+    const updated = await service.updateCell('c9', cellInput);
+    expect(updated.label).toBe('Spare');
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'cell.update' }),
+    );
+  });
+
+  it('rejects a bad cell and a missing cell', async () => {
+    registers.findOneBy.mockResolvedValue(null);
+    await expect(service.createCell(cellInput)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(
+      service.createCell({ ...cellInput, label: '  ', primaryRegisterId: 'p' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createCell({ ...cellInput, row: 1.5, primaryRegisterId: 'p' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createCell({ ...cellInput, col: 33, primaryRegisterId: 'p' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    cells.findOneBy.mockResolvedValue(null);
+    await expect(service.updateCell('missing', cellInput)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(service.deleteCell('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('deletes a cell and writes an overlay on the active background', async () => {
+    cells.findOneBy.mockResolvedValue({ id: 'c9', label: 'Spare' });
+    await expect(service.deleteCell('c9')).resolves.toEqual({ ok: true });
+
+    registers.findOneBy.mockResolvedValue({ id: 'r', name: 'coil.eStop' });
+    const created = await service.createOverlay({
+      label: ' Estop ',
+      xPct: 10,
+      yPct: 20,
+      format: ' {value} ',
+      registerId: 'r',
+    });
+    expect(created.label).toBe('Estop');
+
+    await service.createOverlay({
+      label: 'Plain',
+      xPct: 0,
+      yPct: 100,
+      format: '{value}',
+      registerId: '  ',
+    });
+
+    overlays.findOneBy.mockResolvedValue({ id: 'o9', label: 'Estop' });
+    await service.updateOverlay('o9', {
+      label: 'Estop',
+      xPct: 12,
+      yPct: 8,
+      format: '{value}',
+      registerId: 'r',
+    });
+    await expect(service.deleteOverlay('o9')).resolves.toEqual({ ok: true });
+  });
+
+  it('rejects overlay and background mistakes', async () => {
+    backgrounds.findOne.mockResolvedValue(null);
+    await expect(
+      service.createOverlay({
+        label: 'H',
+        xPct: 1,
+        yPct: 1,
+        format: '{value}',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    backgrounds.findOne.mockResolvedValue({ id: 'bg1', active: true });
+    await expect(
+      service.createOverlay({
+        label: ' ',
+        xPct: 1,
+        yPct: 1,
+        format: '{value}',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createOverlay({
+        label: 'H',
+        xPct: -1,
+        yPct: 1,
+        format: '{value}',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createOverlay({
+        label: 'H',
+        xPct: 1,
+        yPct: 101,
+        format: '{value}',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    overlays.findOneBy.mockResolvedValue(null);
+    await expect(
+      service.updateOverlay('nope', {
+        label: 'H',
+        xPct: 1,
+        yPct: 1,
+        format: '{value}',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.deleteOverlay('nope')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    const saved = await service.updateBackground({
+      name: ' bay ',
+      cssBackground: '  ',
+      imageUrl: '',
+    });
+    expect(saved.name).toBe('bay');
+    expect(saved.cssBackground).toBeNull();
+    expect(saved.imageUrl).toBeNull();
+
+    await service.updateBackground({
+      name: 'bay',
+      cssBackground: 'red',
+      imageUrl: 'https://example.com/bay.png',
+    });
+    await expect(
+      service.updateBackground({ name: '   ' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

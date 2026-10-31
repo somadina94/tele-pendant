@@ -74,12 +74,17 @@ export class SafetyStateService {
   async tick(): Promise<SafetySnapshot> {
     const driver = this.plcService.getDriver();
     if (!driver.isConnected()) {
+      this.eStopActive = false;
       await this.enterMode('comms_lost', 'PLC disconnected');
       return this.snapshot();
     }
 
     try {
-      const coils = await driver.readCoils(DEMO_CRANE_MAP.coils.eStop, 1);
+      const eStopAddress = await this.plcService.addressFor(
+        'coil.eStop',
+        DEMO_CRANE_MAP.coils.eStop,
+      );
+      const coils = await driver.readCoils(eStopAddress, 1);
       this.eStopActive = Boolean(coils[0]);
       if (this.eStopActive) {
         await this.enterMode('e_stop', 'E-stop coil asserted');
@@ -88,7 +93,11 @@ export class SafetyStateService {
 
       // App heartbeat into PLC
       const beat = ((this.lastHeartbeatAt?.getTime() ?? 0) + 1) % 65535;
-      await driver.writeRegister(DEMO_CRANE_MAP.holdings.heartbeat, beat);
+      const heartbeat = await this.plcService.addressFor(
+        'holding.heartbeat',
+        DEMO_CRANE_MAP.holdings.heartbeat,
+      );
+      await driver.writeRegister(heartbeat, beat);
       this.lastHeartbeatAt = new Date();
       this.watchdogOk = true;
 
@@ -98,10 +107,18 @@ export class SafetyStateService {
         Date.now() - this.lastClientPulseAt.getTime() > this.deadmanTimeoutMs
       ) {
         this.deadmanActive = false;
-        await driver.writeCoil(DEMO_CRANE_MAP.coils.deadman, false);
+        const deadman = await this.plcService.addressFor(
+          'coil.deadman',
+          DEMO_CRANE_MAP.coils.deadman,
+        );
+        await driver.writeCoil(deadman, false);
         await this.clearMotionCoils();
       } else if (this.deadmanActive) {
-        await driver.writeCoil(DEMO_CRANE_MAP.coils.deadman, true);
+        const deadman = await this.plcService.addressFor(
+          'coil.deadman',
+          DEMO_CRANE_MAP.coils.deadman,
+        );
+        await driver.writeCoil(deadman, true);
       }
 
       if (this.mode !== 'normal' && !this.eStopActive) {
@@ -119,15 +136,16 @@ export class SafetyStateService {
   private async clearMotionCoils(): Promise<void> {
     const driver = this.plcService.getDriver();
     if (!driver.isConnected()) return;
-    const motion = [
-      DEMO_CRANE_MAP.coils.hoistUp,
-      DEMO_CRANE_MAP.coils.hoistDown,
-      DEMO_CRANE_MAP.coils.trolleyLeft,
-      DEMO_CRANE_MAP.coils.trolleyRight,
-      DEMO_CRANE_MAP.coils.bridgeFwd,
-      DEMO_CRANE_MAP.coils.bridgeRev,
+    const motion: Array<[string, number]> = [
+      ['coil.hoistUp', DEMO_CRANE_MAP.coils.hoistUp],
+      ['coil.hoistDown', DEMO_CRANE_MAP.coils.hoistDown],
+      ['coil.trolleyLeft', DEMO_CRANE_MAP.coils.trolleyLeft],
+      ['coil.trolleyRight', DEMO_CRANE_MAP.coils.trolleyRight],
+      ['coil.bridgeFwd', DEMO_CRANE_MAP.coils.bridgeFwd],
+      ['coil.bridgeRev', DEMO_CRANE_MAP.coils.bridgeRev],
     ];
-    for (const address of motion) {
+    for (const [name, fallback] of motion) {
+      const address = await this.plcService.addressFor(name, fallback);
       await driver.writeCoil(address, false);
     }
   }
@@ -147,8 +165,16 @@ export class SafetyStateService {
         const driver = this.plcService.getDriver();
         if (driver.isConnected()) {
           await this.clearMotionCoils();
-          await driver.writeRegister(DEMO_CRANE_MAP.holdings.safeState, 1);
-          await driver.writeCoil(DEMO_CRANE_MAP.coils.deadman, false);
+          const safeState = await this.plcService.addressFor(
+            'holding.safeState',
+            DEMO_CRANE_MAP.holdings.safeState,
+          );
+          const deadman = await this.plcService.addressFor(
+            'coil.deadman',
+            DEMO_CRANE_MAP.coils.deadman,
+          );
+          await driver.writeRegister(safeState, 1);
+          await driver.writeCoil(deadman, false);
         }
       } catch {
         // best-effort safe-state writes

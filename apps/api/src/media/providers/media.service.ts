@@ -11,15 +11,11 @@ import { HmiService } from '../../hmi/providers/hmi.service';
 import { SafetyStateService } from '../../safety/providers/safety-state.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 import { ScanCode } from '../entities/scan-code.entity';
+import { matchVoiceCommand } from './voice-match';
 
-const VOICE_ALIASES: Record<string, string> = {
-  'hoist up': 'Hoist Up',
-  'hoist down': 'Hoist Down',
-  'trolley left': 'Trolley L',
-  'trolley right': 'Trolley R',
-  stop: 'STOP',
-  'emergency stop': 'STOP',
-};
+/** How long a spoken motion command stays asserted. */
+const VOICE_JOG_MS = 2500;
+const VOICE_JOG_PULSE_MS = 400;
 
 @Injectable()
 export class MediaService implements OnModuleInit {
@@ -27,6 +23,7 @@ export class MediaService implements OnModuleInit {
   private readonly hmiService: HmiService;
   private readonly safetyState: SafetyStateService;
   private readonly auditService: AuditService;
+  private motionJog: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     @InjectRepository(ScanCode)
@@ -83,12 +80,21 @@ export class MediaService implements OnModuleInit {
       role?: UserRole;
       ip?: string;
       safeActionPin?: string;
+      alternatives?: string[];
     },
   ) {
-    const normalized = transcript.trim().toLowerCase();
-    const label =
-      VOICE_ALIASES[normalized] ??
-      Object.entries(VOICE_ALIASES).find(([k]) => normalized.includes(k))?.[1];
+    const phrases = [transcript, ...(opts.alternatives ?? [])]
+      .map((phrase) => phrase.trim())
+      .filter((phrase) => phrase.length > 0);
+    let label: string | null = null;
+    let heard = transcript;
+    for (const phrase of phrases) {
+      const hit = matchVoiceCommand(phrase);
+      if (!hit) continue;
+      label = hit;
+      heard = phrase;
+      break;
+    }
 
     if (!label) {
       return { ok: false, reason: 'command_not_allowlisted', transcript };
@@ -103,7 +109,29 @@ export class MediaService implements OnModuleInit {
     }
 
     if (cell.isMotion) {
-      this.safetyState.pulseDeadman();
+      this.beginMotionJog(cell.id);
+      const otherLabel =
+        label === 'Hoist Up'
+          ? 'Hoist Down'
+          : label === 'Hoist Down'
+            ? 'Hoist Up'
+            : null;
+      const other = otherLabel
+        ? layout.cells.find((item) => item.label === otherLabel)
+        : undefined;
+      if (other) {
+        try {
+          await this.hmiService.activateCell(other.id, false, {
+            userId: opts.userId,
+            userEmail: opts.userEmail,
+            role: opts.role,
+            safeActionPin: opts.safeActionPin,
+            ip: opts.ip,
+          });
+        } catch {
+          // The previous direction coil is cleared on a best-effort basis.
+        }
+      }
     }
 
     await this.hmiService.activateCell(cell.id, true, {
@@ -119,12 +147,45 @@ export class MediaService implements OnModuleInit {
       userEmail: opts.userEmail,
       action: 'voice.command',
       resource: cell.id,
-      details: transcript,
+      details: heard,
       ip: opts.ip,
       result: 'success',
     });
 
-    return { ok: true, cellId: cell.id, label, transcript };
+    return { ok: true, cellId: cell.id, label, transcript: heard };
+  }
+
+  /** Hold deadman for a short jog, then drop the motion coil. */
+  private beginMotionJog(cellId: string): void {
+    this.endMotionJog(null);
+    const started = Date.now();
+    this.safetyState.pulseDeadman();
+    this.motionJog = setInterval(() => {
+      if (Date.now() - started >= VOICE_JOG_MS) {
+        this.endMotionJog(cellId);
+        return;
+      }
+      this.safetyState.pulseDeadman();
+    }, VOICE_JOG_PULSE_MS);
+    this.motionJog.unref();
+  }
+
+  private endMotionJog(cellId: string | null): void {
+    if (this.motionJog) {
+      clearInterval(this.motionJog);
+      this.motionJog = null;
+    }
+    if (!cellId) return;
+    void this.clearMotionCoil(cellId);
+  }
+
+  private async clearMotionCoil(cellId: string): Promise<void> {
+    try {
+      await this.hmiService.activateCell(cellId, false, {});
+    } catch {
+      // Deadman expiry also clears motion coils.
+    }
+    this.safetyState.releaseDeadman();
   }
 
   cameraConfig() {

@@ -61,6 +61,7 @@ export class MediaController {
       userEmail: req.user.email,
       role: req.user.role,
       safeActionPin: dto.safeActionPin,
+      alternatives: dto.alternatives,
       ip: req.ip,
     });
   }

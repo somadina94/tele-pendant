@@ -19,6 +19,7 @@
     "@tanstack/react-query": "^5.66.0",
     "@tele-pendant/shared": "workspace:*",
     "expo": "~52.0.0",
+    "expo-camera": "~16.0.18",
     "expo-status-bar": "~2.0.0",
     "expo-updates": "^58.0.20",
     "react": "18.3.1",

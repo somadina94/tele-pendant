@@ -17,8 +17,24 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function apiPost<T>(path: string, payload?: unknown): Promise<T> {
+  return apiSend<T>('POST', path, payload);
+}
+
+export async function apiPatch<T>(path: string, payload?: unknown): Promise<T> {
+  return apiSend<T>('PATCH', path, payload);
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  return apiSend<T>('DELETE', path);
+}
+
+async function apiSend<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  payload?: unknown,
+): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
+    method,
     headers: authHeaders(),
     body: payload === undefined ? undefined : JSON.stringify(payload),
   });
@@ -90,5 +106,6 @@ export interface LiveTags {
   motorRunning: boolean;
   fault: boolean;
   commsOk: boolean;
+  values?: Record<string, number | boolean>;
   at: string;
 }

@@ -24,9 +24,71 @@ export class HmiSeedService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     const count = await this.cells.count();
-    if (count > 0) return;
-    this.logger.log('Seeding demo crane HMI layout');
-    await this.seed();
+    if (count === 0) {
+      this.logger.log('Seeding demo crane HMI layout');
+      await this.seed();
+    }
+    await this.ensureRuntimeRegisters();
+  }
+
+  /** Rows the safety poller looks up by name. Never overwrites a saved address. */
+  private async ensureRuntimeRegisters(): Promise<void> {
+    const extras: Array<[string, number, RegisterMap['kind'], string, string]> =
+      [
+        ['coil.deadman', DEMO_CRANE_MAP.coils.deadman, 'coil', 'bool', 'rw'],
+        [
+          'coil.bridgeFwd',
+          DEMO_CRANE_MAP.coils.bridgeFwd,
+          'coil',
+          'bool',
+          'rw',
+        ],
+        [
+          'coil.bridgeRev',
+          DEMO_CRANE_MAP.coils.bridgeRev,
+          'coil',
+          'bool',
+          'rw',
+        ],
+        [
+          'holding.heartbeat',
+          DEMO_CRANE_MAP.holdings.heartbeat,
+          'holding',
+          'uint16',
+          'rw',
+        ],
+        [
+          'holding.safeState',
+          DEMO_CRANE_MAP.holdings.safeState,
+          'holding',
+          'uint16',
+          'rw',
+        ],
+        [
+          'holding.speedPct',
+          DEMO_CRANE_MAP.holdings.speedPct,
+          'holding',
+          'uint16',
+          'r',
+        ],
+        [
+          'discrete.fault',
+          DEMO_CRANE_MAP.discretes.fault,
+          'discrete',
+          'bool',
+          'r',
+        ],
+        [
+          'discrete.commsOk',
+          DEMO_CRANE_MAP.discretes.commsOk,
+          'discrete',
+          'bool',
+          'r',
+        ],
+      ];
+    for (const [name, address, kind, dataType, rw] of extras) {
+      await this.upsertRegister(name, address, kind, dataType, rw);
+    }
   }
 
   private async upsertRegister(

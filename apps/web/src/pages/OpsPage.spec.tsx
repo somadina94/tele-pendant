@@ -16,6 +16,13 @@ describe('OpsPage', () => {
             definition: { name: 'E-Stop', severity: 'critical' },
             createdAt: new Date().toISOString(),
           },
+          {
+            id: 'a2',
+            state: 'shelved',
+            value: 1,
+            definition: { name: 'Overload', severity: 'warn' },
+            createdAt: new Date().toISOString(),
+          },
         ];
       }
       if (path.startsWith('/trends/')) {
@@ -32,8 +39,12 @@ describe('OpsPage', () => {
     await waitFor(() => expect(screen.getByText(/E-Stop/)).toBeInTheDocument());
     expect(screen.getByText(/Last error: timeout/)).toBeInTheDocument();
     expect(screen.getByText(/10 mm/)).toBeInTheDocument();
+    expect(screen.getByText(/shelved/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Ack' })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Ack' }));
-    await waitFor(() => expect(post).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Shelve' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/alarms/a1/shelve'));
+    expect(post).toHaveBeenCalledWith('/alarms/a1/ack');
     expect(get).toHaveBeenCalled();
   });
 

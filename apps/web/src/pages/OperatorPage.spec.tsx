@@ -173,7 +173,7 @@ describe('OperatorPage', () => {
         expect.objectContaining({ safeActionPin: undefined }),
       ),
     );
-    fireEvent.change(screen.getByPlaceholderText('supervisor PIN'), {
+    fireEvent.change(screen.getByPlaceholderText('SAFE_ACTION_PIN'), {
       target: { value: '1234' },
     });
     fireEvent.pointerDown(screen.getByRole('button', { name: 'STOP' }));
@@ -186,6 +186,31 @@ describe('OperatorPage', () => {
   });
 
   it('handles activate failure and logout', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      ...layout,
+      background: {
+        ...layout.background,
+        imageUrl: 'https://example.com/bay.png',
+      },
+      cells: [
+        {
+          ...layout.cells[0],
+          feedbackRegister: {
+            id: 'fb',
+            name: 'coil.eStop',
+            address: 11,
+            kind: 'coil',
+          },
+          statusRegister: {
+            id: 'st',
+            name: 'discrete.fault',
+            address: 1,
+            kind: 'discrete',
+          },
+        },
+        layout.cells[1],
+      ],
+    });
     vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
       if (String(path).includes('/hmi/cells/')) {
         throw new Error('blocked');
@@ -194,6 +219,26 @@ describe('OperatorPage', () => {
     });
     renderWithProviders(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    const tagsHandler = socket.on.mock.calls.find(
+      (c) => c[0] === 'tags.update',
+    )?.[1] as (p: unknown) => void;
+    tagsHandler({
+      hoistHeightMm: 100,
+      loadKg: 5,
+      speedPct: 1,
+      motorRunning: false,
+      fault: false,
+      commsOk: true,
+      values: { 'coil.eStop': true, 'discrete.fault': false },
+      at: '',
+    });
+    expect(await screen.findByText('true')).toBeInTheDocument();
+    expect(screen.getByText('false')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Bay' }).parentElement,
+    ).toHaveStyle({
+      backgroundImage: 'url(https://example.com/bay.png)',
+    });
     fireEvent.pointerDown(hoist);
     expect(await screen.findByText('blocked')).toBeInTheDocument();
     await waitFor(() =>

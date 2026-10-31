@@ -13,10 +13,17 @@ Browsers pick up new JS/CSS after hard refresh. Prefer short cache headers on `i
 
 ## Expo (JS/asset updates)
 
-1. Set `expo.updates.url` in `apps/mobile/app.json` to your VPS, e.g. `https://pendant.example.com/ota/manifest`.
-2. Host an [Expo Updates](https://docs.expo.dev/versions/latest/sdk/updates/)-compatible manifest + bundles on that path (nginx + signed update artifacts), or a custom OTA server that speaks the same protocol.
-3. Rebuild the **native** binary whenever you change native modules (camera, reanimated, etc.). JS-only changes can ship via OTA.
-4. `runtimeVersion.policy: appVersion` ties updates to the store/binary version.
+The API serves a small folder with no login:
+
+- `GET http://<api-host>:3010/ota/manifest`
+- `GET http://<api-host>:3010/ota/assets/:file`
+
+Responses include `expo-protocol-version: 1` and runtime version `0.0.1`. On this machine that is `http://localhost:3010/ota/manifest`.
+
+1. Point `expo.updates.url` in `apps/mobile/app.json` at `http://<api-host>:3010/ota/manifest`.
+2. Drop a new `manifest.json` and bundle into `apps/api/ota` (the bundle path is `apps/api/ota/assets/`). That folder is the update.
+3. Rebuild the **native** binary whenever you change native modules (camera, reanimated, etc.). JS-only changes are what this folder ships.
+4. `runtimeVersion.policy: appVersion` ties updates to the store/binary version (`0.0.1`).
 
 ## Checklist
 

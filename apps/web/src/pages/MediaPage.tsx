@@ -3,18 +3,19 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../lib/api';
 
+type SpeechAlt = { transcript: string };
+type SpeechResult = ArrayLike<SpeechAlt> & { isFinal?: boolean };
+
 type SpeechRecognitionLike = {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
+  maxAlternatives: number;
   start: () => void;
   stop: () => void;
-  onresult:
-    | ((event: {
-        results: ArrayLike<ArrayLike<{ transcript: string }>>;
-      }) => void)
-    | null;
+  onresult: ((event: { results: ArrayLike<SpeechResult> }) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
 };
 
 declare global {
@@ -119,6 +120,41 @@ export function MediaPage() {
     await resolveCode(value);
   }
 
+  async function commandDirection(direction: 'up' | 'down', heard = direction) {
+    setVoiceLog(`Heard: ${heard}`);
+    try {
+      const res = await apiPost<{
+        ok: boolean;
+        label?: string;
+        reason?: string;
+      }>('/media/voice', { transcript: direction });
+      setVoiceLog(
+        res.ok
+          ? `Heard: ${heard}. Executed: ${res.label}`
+          : `Heard: ${heard}. Not executed: ${res.reason ?? 'unknown'}`,
+      );
+    } catch (err) {
+      setVoiceLog(
+        `Heard: ${heard}. Not executed: ${
+          err instanceof Error ? err.message : 'failed'
+        }`,
+      );
+    }
+  }
+
+  function directionWord(
+    phrases: string[],
+  ): { word: 'up' | 'down'; phrase: string } | null {
+    let hit: { word: 'up' | 'down'; phrase: string } | null = null;
+    for (const phrase of phrases) {
+      const match = phrase.toLowerCase().match(/\b(up|down)\b/);
+      if (match?.[1] === 'up' || match?.[1] === 'down') {
+        hit = { word: match[1], phrase };
+      }
+    }
+    return hit;
+  }
+
   function startVoice() {
     const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Ctor) {
@@ -126,30 +162,73 @@ export function MediaPage() {
       return;
     }
     const recognition = new Ctor();
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 5;
     recognition.lang = 'en-US';
+    let sent = false;
     recognition.onresult = (event) => {
-      const transcript = event.results[0]?.[0]?.transcript ?? '';
-      setVoiceLog(`Heard: ${transcript}`);
+      const phrases: string[] = [];
+      for (let i = 0; i < event.results.length; i++) {
+        const alts = event.results[i];
+        if (!alts) continue;
+        for (let j = 0; j < alts.length; j++) {
+          const text = alts[j]?.transcript?.trim();
+          if (text) phrases.push(text);
+        }
+      }
+      const heard = phrases[phrases.length - 1] ?? '';
+      const last = event.results[event.results.length - 1];
+      const hit = directionWord(phrases);
+      if (sent) return;
+      if (last?.isFinal === false && !hit) {
+        setVoiceLog(heard ? `Heard: ${heard}` : 'Heard nothing');
+        return;
+      }
+      sent = true;
+      if (hit) {
+        void commandDirection(hit.word, hit.phrase).finally(() => {
+          recognition.stop();
+          setListening(false);
+        });
+        return;
+      }
+      if (!heard) {
+        setVoiceLog('Heard nothing');
+        recognition.stop();
+        setListening(false);
+        return;
+      }
       void apiPost<{ ok: boolean; label?: string; reason?: string }>(
         '/media/voice',
-        { transcript },
-      ).then((res) => {
-        setVoiceLog(
-          res.ok
-            ? `Executed: ${res.label}`
-            : `Not executed: ${res.reason ?? 'unknown'}`,
-        );
-      });
+        { transcript: heard, alternatives: phrases },
+      )
+        .then((res) => {
+          setVoiceLog(
+            res.ok
+              ? `Heard: ${heard}. Executed: ${res.label}`
+              : `Heard: ${heard}. Not executed: ${res.reason ?? 'unknown'}`,
+          );
+        })
+        .catch((err: Error) => {
+          setVoiceLog(`Heard: ${heard}. Not executed: ${err.message}`);
+        })
+        .finally(() => {
+          recognition.stop();
+          setListening(false);
+        });
     };
-    recognition.onerror = (event) => setVoiceLog(`Voice error: ${event.error}`);
+    recognition.onerror = (event) => {
+      if (event.error === 'aborted' || sent) return;
+      setVoiceLog(`Voice error: ${event.error}`);
+    };
+    recognition.onend = () => setListening(false);
     setListening(true);
     recognition.start();
     window.setTimeout(() => {
       recognition.stop();
       setListening(false);
-    }, 5000);
+    }, 8000);
   }
 
   return (
@@ -211,10 +290,19 @@ export function MediaPage() {
 
           <h2>Voice commands</h2>
           <p className="hint">
-            Allowlisted: hoist up/down, trolley left/right, stop
+            Press UP or DOWN. Each runs the hoist for about 2 seconds. You can
+            also say those words, or trolley left, trolley right, or stop.
           </p>
+          <div className="row">
+            <button type="button" onClick={() => void commandDirection('up')}>
+              UP
+            </button>
+            <button type="button" onClick={() => void commandDirection('down')}>
+              DOWN
+            </button>
+          </div>
           <button type="button" onClick={startVoice} disabled={listening}>
-            {listening ? 'Listening…' : 'Listen (5s)'}
+            {listening ? 'Listening…' : 'Listen (8s)'}
           </button>
           {voiceLog && <p className="status-line">{voiceLog}</p>}
         </div>

@@ -107,6 +107,7 @@
       "hmi/providers/hmi.service.ts",
       "alarms/providers/alarm-engine.service.ts",
       "media/providers/media.service.ts",
+      "media/providers/voice-match.ts",
       "auth/providers/face.util.ts",
       "assistant/providers/assistant.service.ts",
       "!**/*.module.ts",
