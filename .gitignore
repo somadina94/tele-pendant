@@ -11,5 +11,9 @@ documentation
 *.db-journal
 .DS_Store
 apps/mobile/.expo
+apps/mobile/android
+apps/mobile/ios
+apps/mobile/dist
 apps/web/dist
+*.apk
 *.log

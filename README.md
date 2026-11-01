@@ -76,6 +76,7 @@ Images pushed on main: `tele-pendant-api`, `tele-pendant-sim`, `tele-pendant-web
 - httpyac: `apps/api/src/**/http/*.endpoints.http`
 - Web: http://localhost:5173 (host) or http://localhost:8080 (Docker `WEB_PORT`) — `/operator`, `/ops`, `/media`, `/admin`, `/assistant`, `/face`
 - Expo: `pnpm --filter @tele-pendant/mobile dev` (set API base to LAN or the live API URL on the phone)
+- Release APK (local, no EAS): `pnpm --filter @tele-pendant/mobile apk:release` → `apps/mobile/dist/tele-pendant-release.apk`
 - Default admin: `admin@example.com` / `change-me-admin-password` (from `.env`)
 - Safe-action PIN (e-stop cell): `SAFE_ACTION_PIN`
 - Seed QR: `TP-CRANE-DEMO-01`

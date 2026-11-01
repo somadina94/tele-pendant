@@ -16,7 +16,10 @@
       },
       "package": "com.telependant.app"
     },
-    "plugins": ["expo-camera", "expo-speech-recognition"],
+    "plugins": [
+      "expo-camera",
+      "expo-speech-recognition"
+    ],
     "runtimeVersion": {
       "policy": "appVersion"
     },

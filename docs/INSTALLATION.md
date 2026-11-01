@@ -63,15 +63,38 @@ cp .env.example .env
 pnpm --filter @tele-pendant/mobile dev
 ```
 
-On a physical phone, set API base to your LAN/VPS URL (not `127.0.0.1`). Configure `expo.updates.url` in `apps/mobile/app.json` for self-hosted OTA.
+On a physical phone, set API base to the live API (`https://api.tele-pendant.jahbyte.com/api/v1`) or your LAN URL (not `127.0.0.1`).
 
-Publish a JS update with no EAS account:
+### Local release APK (no EAS)
+
+Needs JDK 17+, Android SDK, and `ANDROID_HOME`.
 
 ```bash
-pnpm --filter @tele-pendant/mobile ota:export
+# From repo root — writes apps/mobile/dist/tele-pendant-release.apk
+pnpm --filter @tele-pendant/mobile apk:release
+
+# Optional: force a clean native project, or point OTA at another host
+PREBUILD_CLEAN=1 OTA_PUBLIC_URL=https://api.tele-pendant.jahbyte.com \
+  pnpm --filter @tele-pendant/mobile apk:release
+
+adb install -r apps/mobile/dist/tele-pendant-release.apk
 ```
 
-Camera and speech are native. Expo Go cannot load them. Use `npx expo run:android` inside `apps/mobile` for a local debug binary.
+The script runs `expo prebuild` then `./gradlew assembleRelease` for **arm64-v8a** only (set `REACT_NATIVE_ARCHITECTURES` for more ABIs). It temporarily sets `updates.url` to `$OTA_PUBLIC_URL/ota/manifest` (default live API). Signing uses the debug keystore until you add a release keystore.
+
+A full native release needs several GB free. If Gradle fails mid-C++ with a vague ninja error, check `df -h` — a full disk is a common cause.
+
+Debug binary (installs to a device/emulator):
+
+```bash
+pnpm --filter @tele-pendant/mobile exec expo run:android
+```
+
+Publish a JS-only OTA update with no EAS account:
+
+```bash
+OTA_PUBLIC_URL=https://api.tele-pendant.jahbyte.com pnpm --filter @tele-pendant/mobile ota:export
+```
 
 Optional OPC UA simulator (Modbus on port 1502 stays the default):
 

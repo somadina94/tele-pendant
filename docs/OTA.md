@@ -30,7 +30,7 @@ OTA_PUBLIC_URL=https://api.tele-pendant.jahbyte.com pnpm --filter @tele-pendant/
 ```
 
 That runs `expo export` and writes a protocol-1 `manifest.json` plus the bundle into `apps/api/ota`. The API already serves that folder.
-3. Camera and on-device speech are native modules. They are not in Expo Go. A JS update does not add them. Build a local debug binary with `npx expo run:android` inside `apps/mobile`. No cloud speech service.
+3. Camera and on-device speech are native modules. They are not in Expo Go. A JS update does not add them. Build a local release APK with `pnpm --filter @tele-pendant/mobile apk:release` (output `apps/mobile/dist/tele-pendant-release.apk`), or a debug install with `npx expo run:android` inside `apps/mobile`. No cloud speech service.
 4. `runtimeVersion.policy: appVersion` ties updates to the binary version (`0.0.1`).
 
 ## Checklist
