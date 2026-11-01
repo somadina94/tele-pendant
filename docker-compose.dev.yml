@@ -33,10 +33,10 @@ services:
     env_file:
       - .env
     ports:
-      - "${PORT:-3010}:${PORT:-3010}"
+      - "${PORT:-3010}:3010"
     environment:
       NODE_ENV: development
-      PORT: ${PORT:-3010}
+      PORT: 3010
       SQLITE_DIR: /app/data
       DATABASE_PATH: /app/data/tele-pendant.sqlite
       MODBUS_HOST: modbus-sim
