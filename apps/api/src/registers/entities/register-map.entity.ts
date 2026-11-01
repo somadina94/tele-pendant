@@ -31,6 +31,12 @@ export class RegisterMap {
   @Column({ type: 'varchar', default: 'rw' })
   rw!: string;
 
+  @Column({ type: 'boolean', default: false })
+  trended!: boolean;
+
+  @Column({ name: 'node_id', type: 'varchar', nullable: true })
+  nodeId?: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

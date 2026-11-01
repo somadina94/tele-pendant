@@ -1,8 +1,27 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { PNG } from 'pngjs';
 import { AuthService } from './auth.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 import { descriptorFromImageDataUrl, serializeDescriptor } from './face.util';
+
+function faceUrl(mode: 'blob' | 'ring'): string {
+  const png = new PNG({ width: 48, height: 48 });
+  for (let y = 0; y < 48; y++) {
+    for (let x = 0; x < 48; x++) {
+      const skin =
+        mode === 'blob'
+          ? x > 10 && x < 38 && y > 10 && y < 38
+          : x < 8 || y < 8 || x >= 40 || y >= 40;
+      const i = (y * 48 + x) << 2;
+      png.data[i] = skin ? 210 : 20;
+      png.data[i + 1] = skin ? 140 : 20;
+      png.data[i + 2] = skin ? 110 : 20;
+      png.data[i + 3] = 255;
+    }
+  }
+  return `data:image/png;base64,${PNG.sync.write(png).toString('base64')}`;
+}
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn(),
@@ -169,8 +188,7 @@ describe('AuthService', () => {
   });
 
   it('enrolls face template', async () => {
-    const image =
-      'data:image/png;base64,' + Buffer.alloc(256, 80).toString('base64');
+    const image = faceUrl('blob');
     usersRepository.findOneByOrFail.mockResolvedValue({ ...user });
     const result = await service.enrollFace(user.id, image, '127.0.0.1');
     expect(result.ok).toBe(true);
@@ -184,10 +202,8 @@ describe('AuthService', () => {
   });
 
   it('face login picks best match across candidates', async () => {
-    const image =
-      'data:image/png;base64,' + Buffer.alloc(256, 90).toString('base64');
-    const weak =
-      'data:image/png;base64,' + Buffer.alloc(256, 10).toString('base64');
+    const image = faceUrl('blob');
+    const weak = faceUrl('ring');
     const enrolled = {
       ...user,
       faceTemplate: serializeDescriptor(descriptorFromImageDataUrl(image)),
@@ -218,8 +234,7 @@ describe('AuthService', () => {
   });
 
   it('face login fails closed and audits non-Error', async () => {
-    const image =
-      'data:image/png;base64,' + Buffer.alloc(256, 90).toString('base64');
+    const image = faceUrl('blob');
     usersRepository.find.mockResolvedValue([{ ...user, faceTemplate: null }]);
     await expect(
       service.loginWithFace(image, user.email),
@@ -234,6 +249,19 @@ describe('AuthService', () => {
         result: 'failure',
         details: 'face login failed',
       }),
+    );
+  });
+
+  it('pins en or es and rejects anything else', async () => {
+    usersRepository.findOneByOrFail.mockResolvedValue({ ...user, locale: 'en' });
+    const spanish = await service.updateLocale(user.id, 'es-MX');
+    expect(spanish.locale).toBe('es');
+    expect(spanish.localePinned).toBe(true);
+    usersRepository.findOneByOrFail.mockResolvedValue({ ...user, locale: 'es' });
+    const english = await service.updateLocale(user.id, 'EN');
+    expect(english.locale).toBe('en');
+    await expect(service.updateLocale(user.id, 'fr')).rejects.toBeInstanceOf(
+      BadRequestException,
     );
   });
 });

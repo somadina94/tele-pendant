@@ -1,6 +1,8 @@
 import { Pressable, ScrollView, Text } from 'react-native';
+import Svg, { Polyline } from 'react-native-svg';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../api';
+import { useLocale } from '../locale';
 import { styles } from '../ui';
 
 type Alarm = {
@@ -19,15 +21,18 @@ type Diagnostics = {
 };
 
 export function OpsScreen({ token }: { token: string }) {
+  const { t } = useLocale();
   const alarms = useQuery({
     queryKey: ['alarms', token],
     queryFn: () => apiGet<Alarm[]>('/alarms', token),
     refetchInterval: 2000,
   });
-  const trends = useQuery({
-    queryKey: ['trends', token],
-    queryFn: () =>
-      apiGet<TrendPoint[]>('/trends/hoistHeightMm?minutes=30', token),
+  const trendKeys = useQuery({
+    queryKey: ['trend-keys', token],
+    queryFn: async () => {
+      const rows = await apiGet<unknown>('/trends', token);
+      return Array.isArray(rows) ? (rows as string[]) : [];
+    },
     refetchInterval: 3000,
   });
   const diagnostics = useQuery({
@@ -40,7 +45,7 @@ export function OpsScreen({ token }: { token: string }) {
 
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
-      <Text style={styles.section}>Diagnostics</Text>
+      <Text style={styles.section}>{t('diagnostics')}</Text>
       <Text style={styles.hint}>
         PLC connected: {String(plc?.connected ?? '—')} ({plc?.label ?? 'n/a'})
       </Text>
@@ -54,9 +59,9 @@ export function OpsScreen({ token }: { token: string }) {
       {plc?.lastError ? (
         <Text style={styles.error}>Last error: {plc.lastError}</Text>
       ) : null}
-      <Text style={styles.section}>Alarms</Text>
+      <Text style={styles.section}>{t('alarms')}</Text>
       {(alarms.data ?? []).length === 0 ? (
-        <Text style={styles.hint}>No active alarms</Text>
+        <Text style={styles.hint}>{t('noAlarms')}</Text>
       ) : null}
       {(alarms.data ?? []).map((alarm) => (
         <Text key={alarm.id} style={styles.hint}>
@@ -75,7 +80,7 @@ export function OpsScreen({ token }: { token: string }) {
                   ).then(() => alarms.refetch())
                 }
               >
-                Ack
+                {t('ack')}
               </Text>
               {'  '}
               <Text
@@ -88,24 +93,65 @@ export function OpsScreen({ token }: { token: string }) {
                   ).then(() => alarms.refetch())
                 }
               >
-                Shelve
+                {t('shelve')}
               </Text>
             </>
           ) : null}
         </Text>
       ))}
-      <Text style={styles.section}>Trend: hoist height (recent)</Text>
-      {(trends.data ?? []).slice(-12).map((point, index) => (
-        <Text key={`${point.createdAt}-${index}`} style={styles.hint}>
-          {new Date(point.createdAt).toLocaleTimeString()} — {point.value} mm
-        </Text>
-      ))}
-      {(trends.data ?? []).length === 0 ? (
-        <Text style={styles.hint}>No samples yet</Text>
+      <Text style={styles.section}>{t('trends')}</Text>
+      {(trendKeys.data ?? []).length === 0 ? (
+        <Text style={styles.hint}>{t('noSamples')}</Text>
       ) : null}
+      {(trendKeys.data ?? []).map((key) => (
+        <TrendChart key={key} token={token} seriesKey={key} />
+      ))}
       <Pressable style={styles.btn} onPress={() => void alarms.refetch()}>
         <Text style={styles.btnText}>Refresh</Text>
       </Pressable>
     </ScrollView>
+  );
+}
+
+function TrendChart({ token, seriesKey }: { token: string; seriesKey: string }) {
+  const { t } = useLocale();
+  const query = useQuery({
+    queryKey: ['trend', token, seriesKey],
+    queryFn: async () => {
+      const rows = await apiGet<TrendPoint[]>(
+        `/trends/${encodeURIComponent(seriesKey)}?minutes=30`,
+        token,
+      );
+      return Array.isArray(rows) ? rows : [];
+    },
+  });
+  const points = query.data ?? [];
+  if (points.length === 0) {
+    return (
+      <Text style={styles.hint}>
+        {seriesKey}: {t('noSamples')}
+      </Text>
+    );
+  }
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(max - min, 1);
+  const coords = values
+    .map((value, index) => {
+      const x = (index / Math.max(values.length - 1, 1)) * 280;
+      const y = 80 - ((value - min) / span) * 80;
+      return `${x},${y}`;
+    })
+    .join(' ');
+  return (
+    <>
+      <Text style={styles.hint}>
+        {seriesKey}: {values[values.length - 1]}
+      </Text>
+      <Svg width="100%" height={80} viewBox="0 0 280 80">
+        <Polyline points={coords} fill="none" stroke="#7dcea0" strokeWidth={2} />
+      </Svg>
+    </>
   );
 }

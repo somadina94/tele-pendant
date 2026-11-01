@@ -17,6 +17,7 @@ ENV DATABASE_PATH=/app/data/tele-pendant.sqlite
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc turbo.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/modbus-core/package.json ./packages/modbus-core/
+COPY packages/plc-driver/package.json ./packages/plc-driver/
 COPY apps/api/package.json ./apps/api/
 COPY apps/modbus-sim/package.json ./apps/modbus-sim/
 COPY apps/web/package.json ./apps/web/
@@ -28,7 +29,8 @@ COPY apps/api ./apps/api
 COPY apps/modbus-sim ./apps/modbus-sim
 
 RUN pnpm --filter @tele-pendant/shared build \
-  && pnpm --filter @tele-pendant/modbus-core build
+  && pnpm --filter @tele-pendant/modbus-core build \
+  && pnpm --filter @tele-pendant/plc-driver build
 
 RUN mkdir -p /app/data
 

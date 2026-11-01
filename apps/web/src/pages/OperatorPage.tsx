@@ -3,16 +3,19 @@ import { motion } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { apiGet, apiPost, CellDto, HmiLayout, LiveTags } from '../lib/api';
+import { useT } from '../lib/i18n';
 import { formatOverlay, tagValueForRegister } from '../lib/operator-helpers';
 import { getRealtimeSocket } from '../lib/realtime';
 
 export function OperatorPage() {
   const queryClient = useQueryClient();
+  const { t, terror } = useT();
   const [tags, setTags] = useState<LiveTags | null>(null);
   const [safety, setSafety] = useState<HmiLayout['safety'] | null>(null);
   const [holdingCellId, setHoldingCellId] = useState<string | null>(null);
   const [safePin, setSafePin] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [photoOk, setPhotoOk] = useState(true);
 
   const layoutQuery = useQuery({
     queryKey: ['hmi-layout'],
@@ -113,22 +116,27 @@ export function OperatorPage() {
   }
 
   const layout = layoutQuery.data;
+  const imageUrl = layout?.background?.imageUrl ?? '';
   const mode = safety?.mode ?? layout?.safety.mode ?? 'unknown';
+
+  useEffect(() => {
+    setPhotoOk(true);
+  }, [imageUrl]);
 
   return (
     <div className="operator">
       <header className="op-header">
         <div>
           <h1>Tele-Pendant</h1>
-          <p className="lede">Demo crane operator HMI</p>
+          <p className="lede">{t('operatorLede')}</p>
         </div>
         <nav className="op-nav">
-          <Link to="/media">Media</Link>
-          <Link to="/assistant">Assistant</Link>
-          <Link to="/face">Face</Link>
-          <Link to="/ops">Ops</Link>
-          <Link to="/admin">Config</Link>
-          <Link to="/audit">Audit</Link>
+          <Link to="/media">{t('media')}</Link>
+          <Link to="/assistant">{t('assistant')}</Link>
+          <Link to="/face">{t('face')}</Link>
+          <Link to="/ops">{t('ops')}</Link>
+          <Link to="/admin">{t('config')}</Link>
+          <Link to="/audit">{t('audit')}</Link>
           <button
             type="button"
             className="ghost"
@@ -137,37 +145,39 @@ export function OperatorPage() {
               window.location.href = '/';
             }}
           >
-            Logout
+            {t('logout')}
           </button>
         </nav>
       </header>
 
       <div className={`banner mode-${mode}`}>
-        Safety: <strong>{mode}</strong>
-        {safety?.deadmanActive || holdingCellId ? ' · deadman HOLD' : ''}
-        {safety?.eStopActive ? ' · E-STOP' : ''}
+        {t('safety')}: <strong>{mode}</strong>
+        {safety?.deadmanActive || holdingCellId
+          ? ` · ${t('deadmanHold')}`
+          : ''}
+        {safety?.eStopActive ? ` · ${t('estop')}` : ''}
       </div>
 
-      {message && <p className="error">{message}</p>}
+      {message && <p className="error">{terror(message)}</p>}
 
       <div className="op-grid">
         <section
           className="graphic"
-          style={
-            layout?.background?.imageUrl
-              ? {
-                  backgroundImage: `url(${layout.background.imageUrl})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                }
-              : {
-                  background:
-                    layout?.background?.cssBackground ??
-                    'linear-gradient(160deg, #1a2332, #0f1419)',
-                }
-          }
+          style={{
+            background:
+              layout?.background?.cssBackground ??
+              'linear-gradient(160deg, #1a2332, #0f1419)',
+          }}
         >
-          <h2>{layout?.background?.name ?? 'Plant graphic'}</h2>
+          {imageUrl && photoOk ? (
+            <img
+              className="graphic-photo"
+              alt="Plant background"
+              src={imageUrl}
+              onError={() => setPhotoOk(false)}
+            />
+          ) : null}
+          <h2>{layout?.background?.name ?? t('plantGraphic')}</h2>
           {(layout?.overlays ?? []).map((o) => (
             <motion.div
               key={o.id}
@@ -193,9 +203,9 @@ export function OperatorPage() {
         </section>
 
         <section className="matrix-panel">
-          <h2>Control matrix</h2>
+          <h2>{t('controlMatrix')}</h2>
           <label className="pin">
-            SAFE_ACTION_PIN
+            {t('safePin')}
             <input
               value={safePin}
               onChange={(e) => setSafePin(e.target.value)}
@@ -204,10 +214,7 @@ export function OperatorPage() {
               autoComplete="off"
             />
           </label>
-          <p className="hint">
-            Type the value from .env. This demo uses the admin password:
-            change-me-admin-password
-          </p>
+          <p className="hint">{t('pinHint')}</p>
           {grid && (
             <div
               className="matrix"
@@ -237,21 +244,7 @@ export function OperatorPage() {
                     }}
                     aria-label={cell.label}
                   >
-                    <span>{cell.label}</span>
-                    {cell.feedbackRegister ? (
-                      <small className="cell-live">
-                        {String(
-                          tagValueForRegister(tags, cell.feedbackRegister.name),
-                        )}
-                      </small>
-                    ) : null}
-                    {cell.statusRegister ? (
-                      <small className="cell-live">
-                        {String(
-                          tagValueForRegister(tags, cell.statusRegister.name),
-                        )}
-                      </small>
-                    ) : null}
+                    {cell.label}
                   </motion.button>
                 ) : (
                   <div key={`empty-${idx}`} className="cell empty" />
@@ -260,7 +253,7 @@ export function OperatorPage() {
             </div>
           )}
           <p className="hint">
-            Hold motion buttons: deadman pulses while pressed. Release to stop.
+            {t('holdHint')}
           </p>
         </section>
       </div>

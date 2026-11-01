@@ -48,3 +48,19 @@ pnpm --filter @tele-pendant/mobile dev
 ```
 
 On a physical phone, set API base to your LAN/VPS URL (not `127.0.0.1`). Configure `expo.updates.url` in `apps/mobile/app.json` for self-hosted OTA.
+
+Publish a JS update with no EAS account:
+
+```bash
+pnpm --filter @tele-pendant/mobile ota:export
+```
+
+Camera and speech are native. Expo Go cannot load them. Use `npx expo run:android` inside `apps/mobile` for a local debug binary.
+
+Optional OPC UA simulator (Modbus on port 1502 stays the default):
+
+```bash
+docker compose -f docker-compose.dev.yml --profile opcua up --build opcua-sim
+```
+
+TLS stays on your reverse proxy and certificate. The API already sets Helmet and a request limit.

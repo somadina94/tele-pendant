@@ -32,6 +32,14 @@ import { HmiService } from './providers/hmi.service';
 export class HmiController {
   constructor(@Inject(HmiService) private readonly hmiService: HmiService) {}
 
+  private actor(req: Request & { user: JwtPayload }) {
+    return {
+      userId: req.user.sub,
+      userEmail: req.user.email,
+      ip: req.ip,
+    };
+  }
+
   @Get('layout')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Operator matrix, overlays, and register maps' })
@@ -49,57 +57,87 @@ export class HmiController {
   @Patch('registers/:id')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Set the Modbus address for a named register' })
-  updateRegister(@Param('id') id: string, @Body() dto: UpdateRegisterDto) {
-    return this.hmiService.updateRegister(id, dto.address);
+  updateRegister(
+    @Param('id') id: string,
+    @Body() dto: UpdateRegisterDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.updateRegister(id, dto.address, this.actor(req), {
+      nodeId: dto.nodeId,
+      trended: dto.trended,
+    });
   }
 
   @Post('cells')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Add a matrix cell' })
-  createCell(@Body() dto: SaveCellDto) {
-    return this.hmiService.createCell(dto);
+  createCell(
+    @Body() dto: SaveCellDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.createCell(dto, this.actor(req));
   }
 
   @Patch('cells/:id')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Update a matrix cell and its three addresses' })
-  updateCell(@Param('id') id: string, @Body() dto: SaveCellDto) {
-    return this.hmiService.updateCell(id, dto);
+  updateCell(
+    @Param('id') id: string,
+    @Body() dto: SaveCellDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.updateCell(id, dto, this.actor(req));
   }
 
   @Delete('cells/:id')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Remove a matrix cell' })
-  deleteCell(@Param('id') id: string) {
-    return this.hmiService.deleteCell(id);
+  deleteCell(
+    @Param('id') id: string,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.deleteCell(id, this.actor(req));
   }
 
   @Post('overlays')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Add a live label on the background' })
-  createOverlay(@Body() dto: SaveOverlayDto) {
-    return this.hmiService.createOverlay(dto);
+  createOverlay(
+    @Body() dto: SaveOverlayDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.createOverlay(dto, this.actor(req));
   }
 
   @Patch('overlays/:id')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Move or rebind a live label' })
-  updateOverlay(@Param('id') id: string, @Body() dto: SaveOverlayDto) {
-    return this.hmiService.updateOverlay(id, dto);
+  updateOverlay(
+    @Param('id') id: string,
+    @Body() dto: SaveOverlayDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.updateOverlay(id, dto, this.actor(req));
   }
 
   @Delete('overlays/:id')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Remove a live label' })
-  deleteOverlay(@Param('id') id: string) {
-    return this.hmiService.deleteOverlay(id);
+  deleteOverlay(
+    @Param('id') id: string,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.deleteOverlay(id, this.actor(req));
   }
 
   @Patch('background')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Update the active plant graphic' })
-  updateBackground(@Body() dto: SaveBackgroundDto) {
-    return this.hmiService.updateBackground(dto);
+  updateBackground(
+    @Body() dto: SaveBackgroundDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.updateBackground(dto, this.actor(req));
   }
 
   @Post('cells/:id/activate')

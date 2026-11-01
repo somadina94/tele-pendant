@@ -3,6 +3,8 @@ export type RegisterRef = {
   name: string;
   address: number;
   kind: string;
+  trended?: boolean;
+  nodeId?: string | null;
 };
 
 export type Cell = {
@@ -51,6 +53,7 @@ export type PlcConnection = {
   unitId?: number;
   enabled: boolean;
   isSimulator: boolean;
+  protocol?: 'modbus-tcp' | 'opcua';
 };
 
 export type ScreenName =

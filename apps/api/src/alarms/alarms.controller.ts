@@ -1,8 +1,11 @@
 import {
   Inject,
+  Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +16,10 @@ import { JwtAuthGuard } from '../auth/providers/jwt-auth.guard';
 import { RolesGuard } from '../auth/providers/roles.guard';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AlarmEngineService } from './providers/alarm-engine.service';
+import {
+  SaveAlarmDefinitionDto,
+  UpdateAlarmDefinitionDto,
+} from './dtos/save-alarm-definition.dto';
 
 @ApiTags('alarms')
 @Controller('alarms')
@@ -28,6 +35,37 @@ export class AlarmsController {
   @ApiOperation({ summary: 'List active/acked/shelved alarms' })
   list() {
     return this.alarms.listActive();
+  }
+
+  @Get('definitions')
+  @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'List alarm definitions' })
+  definitions() {
+    return this.alarms.listDefinitions();
+  }
+
+  @Post('definitions')
+  @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Create an alarm definition' })
+  createDefinition(@Body() body: SaveAlarmDefinitionDto) {
+    return this.alarms.createDefinition(body);
+  }
+
+  @Patch('definitions/:id')
+  @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update an alarm definition' })
+  updateDefinition(
+    @Param('id') id: string,
+    @Body() body: UpdateAlarmDefinitionDto,
+  ) {
+    return this.alarms.updateDefinition(id, body);
+  }
+
+  @Delete('definitions/:id')
+  @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Delete an alarm definition' })
+  deleteDefinition(@Param('id') id: string) {
+    return this.alarms.deleteDefinition(id);
   }
 
   @Post(':id/ack')

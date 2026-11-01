@@ -1,11 +1,23 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+
+const webRoot = fileURLToPath(new URL('.', import.meta.url));
 
 const apiProxyTarget =
   process.env.VITE_DEV_API_PROXY ?? 'http://127.0.0.1:3010';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@tele-pendant/shared': path.resolve(
+        webRoot,
+        '../../packages/shared/src/index.ts',
+      ),
+    },
+  },
   server: {
     host: process.env.VITE_DEV_API_PROXY ? '0.0.0.0' : '127.0.0.1',
     port: 5173,

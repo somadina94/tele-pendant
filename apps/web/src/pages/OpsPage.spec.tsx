@@ -25,8 +25,19 @@ describe('OpsPage', () => {
           },
         ];
       }
+      if (path === '/trends') return ['hoistHeightMm', 'loadKg', 'speed'];
+      if (path.startsWith('/trends/loadKg')) {
+        return [
+          { value: 4, createdAt: new Date().toISOString() },
+          { value: 4, createdAt: new Date().toISOString() },
+        ];
+      }
+      if (path.startsWith('/trends/speed')) return { nope: true };
       if (path.startsWith('/trends/')) {
-        return [{ value: 10, createdAt: new Date().toISOString() }];
+        return [
+          { value: 10, createdAt: new Date().toISOString() },
+          { value: 12, createdAt: new Date().toISOString() },
+        ];
       }
       return {
         plc: { connected: true, label: 'sim', lastError: 'timeout' },
@@ -38,7 +49,8 @@ describe('OpsPage', () => {
     renderWithProviders(<OpsPage />);
     await waitFor(() => expect(screen.getByText(/E-Stop/)).toBeInTheDocument());
     expect(screen.getByText(/Last error: timeout/)).toBeInTheDocument();
-    expect(screen.getByText(/10 mm/)).toBeInTheDocument();
+    expect(await screen.findByText(/12 mm/)).toBeInTheDocument();
+    expect(screen.getByText(/loadKg: 4/)).toBeInTheDocument();
     expect(screen.getByText(/shelved/)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Ack' })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Ack' }));

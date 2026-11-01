@@ -46,4 +46,21 @@ describe('LoginPage', () => {
     });
     expect(screen.getByLabelText('Email')).toHaveValue('a@b.com');
   });
+
+  it('switches the chrome to Spanish and saves a pinned locale', async () => {
+    const patch = vi.spyOn(api, 'apiPatch').mockRejectedValue(new Error('no'));
+    localStorage.setItem('accessToken', 'tok');
+    renderWithProviders(<LoginPage />);
+    fireEvent.change(screen.getByLabelText('Language'), {
+      target: { value: 'es' },
+    });
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('/auth/locale', { locale: 'es' }),
+    );
+    fireEvent.change(screen.getByLabelText('Idioma'), {
+      target: { value: 'en' },
+    });
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+  });
 });

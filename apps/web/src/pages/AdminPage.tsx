@@ -1,7 +1,16 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { apiDelete, apiGet, apiPatch, apiPost, HmiLayout } from '../lib/api';
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  apiPut,
+  HmiLayout,
+  RegisterRef,
+} from '../lib/api';
+import { useT } from '../lib/i18n';
 
 interface PlcConnectionRow {
   id: string;
@@ -11,6 +20,7 @@ interface PlcConnectionRow {
   unitId?: number;
   enabled: boolean;
   isSimulator: boolean;
+  protocol?: 'modbus-tcp' | 'opcua';
 }
 
 interface ConnectionInput {
@@ -19,6 +29,24 @@ interface ConnectionInput {
   port: number;
   unitId: number;
   enabled: boolean;
+  protocol: 'modbus-tcp' | 'opcua';
+}
+
+interface AlarmDefinitionRow {
+  id: string;
+  name: string;
+  severity: string;
+  compareOp: string;
+  threshold: number;
+  enabled: boolean;
+  register?: { id: string; name: string } | null;
+}
+
+interface SafetyRoleRow {
+  eStopRegisterId?: string | null;
+  deadmanRegisterId?: string | null;
+  heartbeatRegisterId?: string | null;
+  safeStateRegisterId?: string | null;
 }
 
 interface Note {
@@ -32,6 +60,7 @@ function noteText(err: unknown): string {
 
 export function AdminPage() {
   const queryClient = useQueryClient();
+  const { t } = useT();
   const [notes, setNotes] = useState<Record<string, Note>>({});
   const layoutQuery = useQuery({
     queryKey: ['hmi-layout'],
@@ -40,6 +69,20 @@ export function AdminPage() {
   const connections = useQuery({
     queryKey: ['plc-connections'],
     queryFn: () => apiGet<PlcConnectionRow[]>('/plc/connections'),
+  });
+  const alarmDefs = useQuery({
+    queryKey: ['alarm-definitions'],
+    queryFn: async () => {
+      const rows = await apiGet<unknown>('/alarms/definitions');
+      return Array.isArray(rows) ? (rows as AlarmDefinitionRow[]) : [];
+    },
+  });
+  const safetyRoles = useQuery({
+    queryKey: ['safety-roles'],
+    queryFn: async () => {
+      const row = await apiGet<SafetyRoleRow | null>('/safety/roles');
+      return row && 'eStopRegisterId' in row ? row : null;
+    },
   });
 
   function remember(key: string, note: Note) {
@@ -55,8 +98,11 @@ export function AdminPage() {
     await queryClient.invalidateQueries({ queryKey: ['plc-connections'] });
   }
 
-  async function saveRegister(id: string, address: number) {
-    await apiPatch(`/hmi/registers/${id}`, { address });
+  async function saveRegister(
+    id: string,
+    value: { address: number; trended: boolean; nodeId?: string },
+  ) {
+    await apiPatch(`/hmi/registers/${id}`, value);
     await queryClient.invalidateQueries({ queryKey: ['hmi-layout'] });
   }
 
@@ -66,12 +112,13 @@ export function AdminPage() {
 
   const layout = layoutQuery.data;
   const registers = layout?.registers ?? [];
+  const plcRows = connections.data ?? [];
 
   return (
     <main className="shell admin">
       <header className="op-header">
-        <h1>HMI config</h1>
-        <Link to="/operator">Operator</Link>
+        <h1>{t('hmiConfig')}</h1>
+        <Link to="/operator">{t('operator')}</Link>
       </header>
       <p className="lede">
         These fields are saved in SQLite. Check <strong>Use this PLC</strong>{' '}
@@ -80,7 +127,7 @@ export function AdminPage() {
       </p>
 
       <section>
-        <h2>PLC connections</h2>
+        <h2>{t('plcConnections')}</h2>
         {(connections.data ?? []).map((row) => (
           <ConnectionEditor
             key={row.id}
@@ -91,6 +138,7 @@ export function AdminPage() {
               port: row.port,
               unitId: row.unitId ?? 1,
               enabled: row.enabled,
+              protocol: row.protocol ?? 'modbus-tcp',
               isSimulator: row.isSimulator,
             }}
             submitLabel={`Save ${row.label}`}
@@ -108,6 +156,7 @@ export function AdminPage() {
             port: 502,
             unitId: 1,
             enabled: true,
+            protocol: 'modbus-tcp',
             isSimulator: false,
           }}
           submitLabel="Add PLC"
@@ -118,22 +167,25 @@ export function AdminPage() {
       </section>
 
       <section>
-        <h2>Register maps</h2>
+        <h2>{t('registerMaps')}</h2>
         {registers.map((row) => (
           <RegisterEditor
             key={row.id}
             name={row.name}
             kind={row.kind}
             address={row.address}
+            trended={Boolean(row.trended)}
+            nodeId={row.nodeId ?? ''}
+            showNode={plcRows.some((item) => item.protocol === 'opcua')}
             note={notes[row.id]}
             onNote={(note) => remember(row.id, note)}
-            onSubmit={(address) => saveRegister(row.id, address)}
+            onSubmit={(value) => saveRegister(row.id, value)}
           />
         ))}
       </section>
 
       <section>
-        <h2>Cells (3 PLC addresses each)</h2>
+        <h2>{t('cellsTitle')}</h2>
         {(layout?.cells ?? []).map((cell) => (
           <CellEditor
             key={cell.id}
@@ -255,9 +307,254 @@ export function AdminPage() {
           <p>No active background</p>
         )}
       </section>
+
+      <AlarmSection registers={registers} definitions={alarmDefs.data ?? []} />
+      <SafetySection
+        registers={registers}
+        roles={safetyRoles.data ?? null}
+      />
     </main>
   );
 }
+
+function AlarmSection({
+  registers,
+  definitions,
+}: {
+  registers: RegisterRef[];
+  definitions: AlarmDefinitionRow[];
+}) {
+  const { t } = useT();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+  const [registerId, setRegisterId] = useState(registers[0]?.id ?? '');
+  const [compareOp, setCompareOp] = useState('gt');
+  const [threshold, setThreshold] = useState('1');
+  const [severity, setSeverity] = useState('warning');
+  const [enabled, setEnabled] = useState(true);
+  const [note, setNote] = useState<Note | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await apiPost('/alarms/definitions', {
+        name,
+        registerId,
+        compareOp,
+        threshold: Number(threshold),
+        severity,
+        enabled,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['alarm-definitions'] });
+      setNote({ ok: true, text: 'Saved alarm.' });
+    } catch (err) {
+      setNote({ ok: false, text: noteText(err) });
+    }
+  }
+
+  async function remove(id: string) {
+    try {
+      await apiDelete(`/alarms/definitions/${id}`);
+      await queryClient.invalidateQueries({ queryKey: ['alarm-definitions'] });
+      setNote({ ok: true, text: 'Deleted alarm.' });
+    } catch (err) {
+      setNote({ ok: false, text: noteText(err) });
+    }
+  }
+
+  return (
+    <section>
+      <h2>{t('alarmDefinitions')}</h2>
+      {definitions.length === 0 ? <p>{t('noAlarmDefs')}</p> : null}
+      {definitions.map((row) => (
+        <p key={row.id}>
+          {row.name} {row.compareOp} {row.threshold}
+          <button type="button" onClick={() => void remove(row.id)}>
+            {t('delete')} {row.name}
+          </button>
+        </p>
+      ))}
+      <form className="config-form" onSubmit={(event) => void submit(event)}>
+        <label>
+          Name
+          <input
+            aria-label="alarm name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <label>
+          Register
+          <select
+            aria-label="alarm register"
+            value={registerId}
+            onChange={(event) => setRegisterId(event.target.value)}
+          >
+            {registers.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Operator
+          <select
+            aria-label="alarm operator"
+            value={compareOp}
+            onChange={(event) => setCompareOp(event.target.value)}
+          >
+            <option value="eq">eq</option>
+            <option value="gt">gt</option>
+            <option value="lt">lt</option>
+            <option value="neq">neq</option>
+          </select>
+        </label>
+        <label>
+          Threshold
+          <input
+            aria-label="alarm threshold"
+            value={threshold}
+            onChange={(event) => setThreshold(event.target.value)}
+          />
+        </label>
+        <label>
+          Severity
+          <input
+            aria-label="alarm severity"
+            value={severity}
+            onChange={(event) => setSeverity(event.target.value)}
+          />
+        </label>
+        <label className="config-check">
+          <input
+            type="checkbox"
+            aria-label="alarm enabled"
+            checked={enabled}
+            onChange={(event) => setEnabled(event.target.checked)}
+          />
+          Enabled
+        </label>
+        <button type="submit">{t('saveAlarm')}</button>
+        {note ? (
+          <p className={note.ok ? 'status-line' : 'error'}>{note.text}</p>
+        ) : null}
+      </form>
+    </section>
+  );
+}
+
+function SafetySection({
+  registers,
+  roles,
+}: {
+  registers: RegisterRef[];
+  roles: SafetyRoleRow | null;
+}) {
+  const { t } = useT();
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState<SafetyRoleRow>({});
+  const eStopRegisterId =
+    draft.eStopRegisterId ?? roles?.eStopRegisterId ?? '';
+  const deadmanRegisterId =
+    draft.deadmanRegisterId ?? roles?.deadmanRegisterId ?? '';
+  const heartbeatRegisterId =
+    draft.heartbeatRegisterId ?? roles?.heartbeatRegisterId ?? '';
+  const safeStateRegisterId =
+    draft.safeStateRegisterId ?? roles?.safeStateRegisterId ?? '';
+  const [note, setNote] = useState<Note | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await apiPut('/safety/roles', {
+        eStopRegisterId,
+        deadmanRegisterId,
+        heartbeatRegisterId,
+        safeStateRegisterId,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['safety-roles'] });
+      setNote({ ok: true, text: 'Saved safety roles.' });
+    } catch (err) {
+      setNote({ ok: false, text: noteText(err) });
+    }
+  }
+
+  return (
+    <section>
+      <h2>{t('safetyRoles')}</h2>
+      <form className="config-form" onSubmit={(event) => void submit(event)}>
+        <RoleSelect
+          label="E-stop"
+          value={eStopRegisterId}
+          registers={registers}
+          onChange={(value) =>
+            setDraft((current) => ({ ...current, eStopRegisterId: value }))
+          }
+        />
+        <RoleSelect
+          label="Deadman"
+          value={deadmanRegisterId}
+          registers={registers}
+          onChange={(value) =>
+            setDraft((current) => ({ ...current, deadmanRegisterId: value }))
+          }
+        />
+        <RoleSelect
+          label="Heartbeat"
+          value={heartbeatRegisterId}
+          registers={registers}
+          onChange={(value) =>
+            setDraft((current) => ({ ...current, heartbeatRegisterId: value }))
+          }
+        />
+        <RoleSelect
+          label="Safe state"
+          value={safeStateRegisterId}
+          registers={registers}
+          onChange={(value) =>
+            setDraft((current) => ({ ...current, safeStateRegisterId: value }))
+          }
+        />
+        <button type="submit">{t('saveSafety')}</button>
+        {note ? (
+          <p className={note.ok ? 'status-line' : 'error'}>{note.text}</p>
+        ) : null}
+      </form>
+    </section>
+  );
+}
+
+function RoleSelect({
+  label,
+  value,
+  registers,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  registers: RegisterRef[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label>
+      {label}
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">—</option>
+        {registers.map((row) => (
+          <option key={row.id} value={row.id}>
+            {row.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 
 function ConnectionEditor({
   noteKey,
@@ -278,6 +575,9 @@ function ConnectionEditor({
   const [host, setHost] = useState(initial.host);
   const [port, setPort] = useState(String(initial.port));
   const [unitId, setUnitId] = useState(String(initial.unitId));
+  const [protocol, setProtocol] = useState<'modbus-tcp' | 'opcua'>(
+    initial.protocol,
+  );
   const [enabled, setEnabled] = useState(initial.enabled);
 
   async function submit(event: FormEvent) {
@@ -289,6 +589,7 @@ function ConnectionEditor({
         port: Number(port),
         unitId: Number(unitId),
         enabled,
+        protocol,
       });
       onNote({
         ok: true,
@@ -340,6 +641,19 @@ function ConnectionEditor({
             inputMode="numeric"
           />
         </label>
+        <label>
+          Protocol
+          <select
+            aria-label={`${noteKey} protocol`}
+            value={protocol}
+            onChange={(event) =>
+              setProtocol(event.target.value === 'opcua' ? 'opcua' : 'modbus-tcp')
+            }
+          >
+            <option value="modbus-tcp">Modbus TCP</option>
+            <option value="opcua">OPC UA</option>
+          </select>
+        </label>
       </div>
       <label className="config-check">
         <input
@@ -362,6 +676,9 @@ function RegisterEditor({
   name,
   kind,
   address,
+  trended,
+  nodeId,
+  showNode,
   note,
   onNote,
   onSubmit,
@@ -369,16 +686,30 @@ function RegisterEditor({
   name: string;
   kind: string;
   address: number;
+  trended: boolean;
+  nodeId: string;
+  showNode: boolean;
   note?: Note;
   onNote: (note: Note) => void;
-  onSubmit: (address: number) => Promise<void>;
+  onSubmit: (value: {
+    address: number;
+    trended: boolean;
+    nodeId?: string;
+  }) => Promise<void>;
 }) {
+  const { t } = useT();
   const [value, setValue] = useState(String(address));
+  const [trend, setTrend] = useState(trended);
+  const [node, setNode] = useState(nodeId);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     try {
-      await onSubmit(Number(value));
+      await onSubmit({
+        address: Number(value),
+        trended: trend,
+        ...(showNode ? { nodeId: node } : {}),
+      });
       onNote({ ok: true, text: `Saved ${name}.` });
     } catch (err) {
       onNote({ ok: false, text: noteText(err) });
@@ -398,6 +729,25 @@ function RegisterEditor({
           onChange={(event) => setValue(event.target.value)}
           inputMode="numeric"
         />
+      </label>
+      {showNode ? (
+        <label>
+          Node id
+          <input
+            aria-label={`${name} node`}
+            value={node}
+            onChange={(event) => setNode(event.target.value)}
+          />
+        </label>
+      ) : null}
+      <label className="config-check">
+        <input
+          type="checkbox"
+          aria-label={`${name} trend`}
+          checked={trend}
+          onChange={(event) => setTrend(event.target.checked)}
+        />
+        {t('trended')}
       </label>
       <button type="submit">Save {name}</button>
       {note ? (
@@ -740,6 +1090,11 @@ function BackgroundEditor({
   const [name, setName] = useState(initial.name);
   const [cssBackground, setCssBackground] = useState(initial.cssBackground);
   const [imageUrl, setImageUrl] = useState(initial.imageUrl);
+  const [imageBroken, setImageBroken] = useState(false);
+
+  useEffect(() => {
+    setImageBroken(false);
+  }, [imageUrl]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -775,8 +1130,27 @@ function BackgroundEditor({
           aria-label="background image"
           value={imageUrl}
           onChange={(event) => setImageUrl(event.target.value)}
+          placeholder="https://images.example.com/bay.jpg"
         />
       </label>
+      <p className="hint">
+        Paste the image file address. A photo page such as unsplash.com/photos
+        will not draw. Right-click the picture and copy the image address.
+      </p>
+      {imageUrl.trim() ? (
+        <img
+          className="bg-preview"
+          alt="Background preview"
+          src={imageUrl.trim()}
+          onError={() => setImageBroken(true)}
+        />
+      ) : null}
+      {imageBroken ? (
+        <p className="error">
+          This link did not load as a picture. Copy the image address, not the
+          photo page.
+        </p>
+      ) : null}
       <button type="submit">Save background</button>
       {note ? (
         <p className={note.ok ? 'status-line' : 'error'}>{note.text}</p>

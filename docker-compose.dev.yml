@@ -61,8 +61,14 @@ services:
           path: ./packages/shared/src
           target: /app/packages/shared/src
         - action: sync
+          path: ./packages/shared/i18n
+          target: /app/packages/shared/i18n
+        - action: sync
           path: ./packages/modbus-core/src
           target: /app/packages/modbus-core/src
+        - action: sync
+          path: ./packages/plc-driver/src
+          target: /app/packages/plc-driver/src
         - action: rebuild
           path: ./apps/api/package.json
         - action: rebuild
@@ -94,12 +100,30 @@ services:
         - action: sync
           path: ./apps/web/vite.config.ts
           target: /app/apps/web/vite.config.ts
+        - action: sync
+          path: ./packages/shared/src
+          target: /app/packages/shared/src
+        - action: sync
+          path: ./packages/shared/i18n
+          target: /app/packages/shared/i18n
         - action: rebuild
           path: ./apps/web/package.json
         - action: rebuild
           path: ./pnpm-lock.yaml
     depends_on:
       - api
+    restart: unless-stopped
+
+  opcua-sim:
+    profiles: ['opcua']
+    build:
+      context: .
+      dockerfile: Dockerfile.opcua.dev
+    container_name: tele-pendant-opcua-sim-dev
+    ports:
+      - "${OPCUA_PORT:-4840}:4840"
+    environment:
+      OPCUA_PORT: 4840
     restart: unless-stopped
 
 volumes:

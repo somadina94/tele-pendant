@@ -4,10 +4,11 @@
     "module": "CommonJS",
     "declaration": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "strict": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "esModuleInterop": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "i18n/**/*.json"]
 }

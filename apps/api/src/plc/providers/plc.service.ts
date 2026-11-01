@@ -10,7 +10,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { ModbusDriver } from '@tele-pendant/modbus-core';
 import { TcpModbusDriver } from '@tele-pendant/modbus-core';
+import { OpcUaPort } from '@tele-pendant/plc-driver';
 import { Repository } from 'typeorm';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { PlcConnection } from '../entities/plc-connection.entity';
@@ -28,6 +30,8 @@ export interface PlcHealth {
 export class PlcService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PlcService.name);
   private readonly driver = new TcpModbusDriver();
+  private readonly opc = new OpcUaPort();
+  private activeProtocol: 'modbus-tcp' | 'opcua' = 'modbus-tcp';
   private active: PlcConnection | null = null;
   private lastConnectionId: string | null = null;
   private lastError: string | null = null;
@@ -60,7 +64,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.driver.disconnect();
+    await this.getDriver().disconnect();
   }
 
   private async ensureSimulatorConnection(): Promise<void> {
@@ -85,17 +89,19 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
         pollMs: 250,
         enabled: true,
         isSimulator: true,
+        protocol: 'modbus-tcp',
       }),
     );
   }
 
-  getDriver(): TcpModbusDriver {
+  getDriver(): ModbusDriver {
+    if (this.activeProtocol === 'opcua') return this.opc.asModbus();
     return this.driver;
   }
 
   health(): PlcHealth {
     return {
-      connected: this.driver.isConnected(),
+      connected: this.getDriver().isConnected(),
       connectionId: this.active?.id ?? null,
       label: this.active?.label ?? null,
       host: this.active?.host ?? null,
@@ -115,6 +121,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
     port: number;
     unitId: number;
     enabled: boolean;
+    protocol?: 'modbus-tcp' | 'opcua';
   }): Promise<PlcConnection> {
     const label = input.label.trim();
     const host = input.host.trim();
@@ -152,6 +159,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
     row.port = input.port;
     row.unitId = input.unitId;
     row.enabled = input.enabled;
+    row.protocol = input.protocol === 'opcua' ? 'opcua' : 'modbus-tcp';
     const saved = await this.connections.save(row);
 
     if (input.enabled) {
@@ -169,7 +177,8 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
         );
       }
     } else if (this.active?.id === saved.id) {
-      await this.driver.disconnect();
+      await this.getDriver().disconnect();
+      this.activeProtocol = 'modbus-tcp';
       this.active = null;
       this.lastConnectionId = null;
     }
@@ -207,6 +216,18 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
     return values;
   }
 
+  async trendedSamples(): Promise<Array<{ key: string; value: number }>> {
+    const rows = await this.registers.find();
+    const values = await this.readNamedValues();
+    const samples: Array<{ key: string; value: number }> = [];
+    for (const row of rows) {
+      if (!row.trended) continue;
+      const value = values[row.name];
+      if (typeof value === 'number') samples.push({ key: row.name, value });
+    }
+    return samples;
+  }
+
   private async readOne(row: RegisterMap): Promise<number | boolean> {
     const driver = this.getDriver();
     if (row.kind === 'coil') {
@@ -227,14 +248,31 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
 
   async connect(id: string): Promise<PlcHealth> {
     const connection = await this.connections.findOneByOrFail({ id });
-    await this.driver.disconnect();
+    await this.getDriver().disconnect();
+    this.activeProtocol = 'modbus-tcp';
     try {
-      await this.driver.connect({
-        host: connection.host,
-        port: connection.port,
-        unitId: connection.unitId,
-        timeoutMs: 3000,
-      });
+      if (connection.protocol === 'opcua') {
+        const rows = await this.registers.find();
+        this.opc.setPoints(
+          rows.map((row) => ({
+            kind: row.kind,
+            address: row.address,
+            nodeId: row.nodeId ?? null,
+          })),
+        );
+        await this.opc.connect({
+          host: connection.host,
+          port: connection.port,
+        });
+        this.activeProtocol = 'opcua';
+      } else {
+        await this.driver.connect({
+          host: connection.host,
+          port: connection.port,
+          unitId: connection.unitId,
+          timeoutMs: 3000,
+        });
+      }
       this.active = connection;
       this.lastConnectionId = connection.id;
       this.lastError = null;
@@ -244,6 +282,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
       }
       await this.connections.save(all);
     } catch (err) {
+      this.activeProtocol = 'modbus-tcp';
       this.active = null;
       this.lastError = err instanceof Error ? err.message : 'connect failed';
       throw err;
@@ -256,7 +295,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
    * The poller calls this whenever the socket is down.
    */
   async reconnectIfNeeded(): Promise<void> {
-    if (this.driver.isConnected()) return;
+    if (this.getDriver().isConnected()) return;
     if (!this.reconnecting) {
       this.reconnecting = this.tryReconnect().finally(() => {
         this.reconnecting = null;
@@ -285,14 +324,14 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
   }
 
   async readHolding(address: number, length = 1): Promise<number[]> {
-    return this.driver.readHoldingRegisters(address, length);
+    return this.getDriver().readHoldingRegisters(address, length);
   }
 
   async writeCoil(address: number, value: boolean): Promise<void> {
-    await this.driver.writeCoil(address, value);
+    await this.getDriver().writeCoil(address, value);
   }
 
   async writeHolding(address: number, value: number): Promise<void> {
-    await this.driver.writeRegister(address, value);
+    await this.getDriver().writeRegister(address, value);
   }
 }

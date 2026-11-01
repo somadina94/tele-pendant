@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  SafeAreaProvider,
+  SafeAreaView,
+} from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiPost, getApiBase } from './src/api';
@@ -12,6 +16,7 @@ import { MediaScreen } from './src/screens/MediaScreen';
 import { OperatorScreen } from './src/screens/OperatorScreen';
 import { OpsScreen } from './src/screens/OpsScreen';
 import type { ScreenName } from './src/types';
+import { LocaleProvider, useLocale } from './src/locale';
 import { Field, styles } from './src/ui';
 
 const queryClient = new QueryClient();
@@ -26,6 +31,7 @@ const NAV: Array<{ id: ScreenName; label: string }> = [
 ];
 
 function Pendant() {
+  const { t, setLocale, locale } = useLocale();
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState('admin@example.com');
   const [password, setPassword] = useState('change-me-admin-password');
@@ -70,17 +76,22 @@ function Pendant() {
         <Text style={styles.sub}>
           Expo handheld · set API base for device/LAN
         </Text>
-        <Field label="API base" value={apiBase} onChangeText={setApiBase} />
-        <Field label="Email" value={email} onChangeText={setEmail} />
         <Field
-          label="Password"
+          label={t('language')}
+          value={locale}
+          onChangeText={(value) => setLocale(value === 'es' ? 'es' : 'en')}
+        />
+        <Field label="API base" value={apiBase} onChangeText={setApiBase} />
+        <Field label={t('email')} value={email} onChangeText={setEmail} />
+        <Field
+          label={t('password')}
           value={password}
           onChangeText={setPassword}
           secure
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Pressable style={styles.btn} onPress={() => void login()}>
-          <Text style={styles.btnText}>Sign in</Text>
+          <Text style={styles.btnText}>{t('signIn')}</Text>
         </Pressable>
         <StatusBar style="light" />
       </SafeAreaView>
@@ -92,13 +103,13 @@ function Pendant() {
       <View style={styles.header}>
         <Text style={styles.titleSmall}>Tele-Pendant</Text>
         <Pressable onPress={() => void logout()}>
-          <Text style={styles.link}>Logout</Text>
+          <Text style={styles.link}>{t('logout')}</Text>
         </Pressable>
       </View>
       <ScrollView horizontal contentContainerStyle={styles.nav}>
         {NAV.map((item) => (
           <Pressable key={item.id} onPress={() => setScreen(item.id)}>
-            <Text style={styles.link}>{item.label}</Text>
+            <Text style={styles.link}>{t(item.id)}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -119,7 +130,11 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <Pendant />
+        <SafeAreaProvider>
+          <LocaleProvider>
+            <Pendant />
+          </LocaleProvider>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );

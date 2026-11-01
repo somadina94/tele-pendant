@@ -98,8 +98,10 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
 
       this.tick += 1;
       if (this.tick % 4 === 0) {
-        await this.trends.record('hoistHeightMm', height ?? 0);
-        await this.trends.record('loadKg', loadKg ?? 0);
+        const series = await this.plcService.trendedSamples();
+        for (const sample of series) {
+          await this.trends.record(sample.key, sample.value);
+        }
       }
     } catch (err) {
       this.logger.debug(

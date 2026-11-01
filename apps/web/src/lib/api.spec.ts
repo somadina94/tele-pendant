@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiDelete, apiGet, apiPatch, apiPost } from './api';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from './api';
 
 describe('api helpers', () => {
   afterEach(() => {
@@ -80,6 +80,10 @@ describe('api helpers', () => {
         json: async () => ({ apiVersion: 'v1', data: { ok: true } }),
       })
       .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ apiVersion: 'v1', data: { ok: true } }),
+      })
+      .mockResolvedValueOnce({
         ok: false,
         text: async () => 'denied',
       });
@@ -98,6 +102,10 @@ describe('api helpers', () => {
     await expect(apiPatch('/hmi/registers/r1')).resolves.toEqual({ ok: true });
     expect(fetchMock.mock.calls[1][1].body).toBeUndefined();
 
+    await expect(apiPut('/safety/roles', { eStopRegisterId: 'r1' })).resolves.toEqual({
+      ok: true,
+    });
+    expect(fetchMock.mock.calls[2][1].method).toBe('PUT');
     await expect(apiPatch('/fail', {})).rejects.toThrow('denied');
   });
 

@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Patch,
   Post,
   Req,
   Res,
@@ -15,6 +16,7 @@ import { ACCESS_TOKEN_COOKIE } from '../common/constants';
 import { ApiAuth } from '../common/swagger/api-auth.decorator';
 import { FaceImageDto, FaceLoginDto } from './dtos/face-image.dto';
 import { LoginDto } from './dtos/login.dto';
+import { UpdateLocaleDto } from './dtos/update-locale.dto';
 import { AuthService, JwtPayload } from './providers/auth.service';
 import { JwtAuthGuard } from './providers/jwt-auth.guard';
 
@@ -68,6 +70,17 @@ export class AuthController {
   @ApiOperation({ summary: 'Current session user' })
   me(@Req() req: Request & { user: JwtPayload }) {
     return this.authService.me(req.user);
+  }
+
+  @Patch('locale')
+  @UseGuards(JwtAuthGuard)
+  @ApiAuth()
+  @ApiOperation({ summary: 'Pin the signed-in user language' })
+  updateLocale(
+    @Body() body: UpdateLocaleDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.authService.updateLocale(req.user.sub, body.locale);
   }
 
   /**

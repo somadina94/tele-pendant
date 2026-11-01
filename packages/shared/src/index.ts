@@ -13,6 +13,16 @@ export interface HealthPayload {
   timestamp: string;
 }
 
+export {
+  normalizeLocale,
+  resolveLocale,
+  translate,
+  translateError,
+} from './i18n';
+export type { Locale } from './i18n';
+export { formatOverlay, tagValueForRegister } from './tags';
+export type { TagSnapshot } from './tags';
+
 export const WS_EVENTS = {
   TAGS_UPDATE: 'tags.update',
   SAFETY_STATE: 'safety.state',

@@ -14,6 +14,9 @@ export class PlcConnection {
   @Column({ type: 'varchar', unique: true })
   label!: string;
 
+  @Column({ type: 'varchar', default: 'modbus-tcp' })
+  protocol!: 'modbus-tcp' | 'opcua';
+
   @Column({ type: 'varchar', default: '127.0.0.1' })
   host!: string;
 

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { apiPost } from '../api';
+import { useLocale } from '../locale';
 import { Field, styles } from '../ui';
 
 export function FaceScreen({
@@ -12,6 +13,7 @@ export function FaceScreen({
   token: string;
   onToken: (token: string) => void;
 }) {
+  const { t, terror } = useLocale();
   const camera = useRef<CameraView>(null);
   const [email, setEmail] = useState('admin@example.com');
   const [msg, setMsg] = useState<string | null>(null);
@@ -69,13 +71,13 @@ export function FaceScreen({
       onToken(res.accessToken);
       setMsg(res.limitation);
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Face login failed');
+      setMsg(err instanceof Error ? terror(err.message) : t('err.face'));
     }
   }
 
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
-      <Text style={styles.section}>Face auth (basic)</Text>
+      <Text style={styles.section}>{t('faceTitle')}</Text>
       <Text style={styles.hint}>
         Convenience match only — not certified biometrics. Fail closed to
         password.

@@ -314,12 +314,23 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 3. Tap **Sign in**.
 4. **Success:** title **Tele-Pendant**, **Logout**, and the six header buttons. Operator shows banner `Safety: normal · H … mm`, a **SAFE_ACTION_PIN** field, and the same five cells.
 5. Press and hold **Hoist Up**. **Success:** banner includes **DEADMAN** and the held cell gets a green border. Height in the banner increases. Release: **DEADMAN** clears.
-6. Open **Media**. Tap **UP**, then **DOWN**. **Success:** **Heard: up. Executed: Hoist Up**, then the same line for **down** / **Hoist Down**. Type a known code or scan a QR with the camera and tap **Resolve**. **Success:** the code’s label. The listen sentence says device listen stays on the web.
+6. Open **Media**. Tap **Listen** (Expo Go explains that speech needs `npx expo run:android`). Tap **UP**, then **DOWN**. **Success:** **Heard: up. Executed: Hoist Up**, then the same line for **down** / **Hoist Down**. Type a known code or scan a QR with the camera and tap **Resolve**. **Success:** the code’s label.
 7. Open **Face**. **Success:** the sentence **Convenience match only — not certified biometrics. Fail closed to password.**
 8. Open **Ops**. **Success:** diagnostics, alarms (**Ack** and **Shelve** when one is active), and the height trend.
 9. Open **Config**. Change a register address or a cell label and save, then set it back. **Success:** a saved line.
 10. Open **Audit**. **Success:** the same list as the web (email, action, resource, result, time).
 11. Last, type `change-me-admin-password` in **SAFE_ACTION_PIN** and press **STOP**. **Success:** the banner shows **e_stop**. This latches the simulator the same way as the web STOP.
+
+## Languages, alarms, trends, safety roles, and OPC UA
+
+- The **Language** menu on the sign-in page follows the browser until you pick English or Español. That choice is saved on your user and then wins over the browser. The phone uses the device language the same way.
+- **Config** can create, edit, and delete alarm definitions (register, operator, threshold, severity). **Ops** still only acknowledges and shelves active alarms.
+- Mark a register **Trend**. **Ops** draws an SVG line for each trended series. Height and load start trended.
+- **Safety roles** bind E-stop, deadman, heartbeat, and safe-state to registers. Losing the deadman, the link, or e-stop clears the primary coil of every motion cell.
+- **Protocol** is Modbus TCP by default (simulator port 1502). OPC UA is optional: `docker compose -f docker-compose.dev.yml --profile opcua up opcua-sim`, then set the connection to OPC UA and fill each register’s node id (`ns=1;s=HoistUp` and the matching names).
+- The phone operator screen shows the same plant graphic, photo, and live labels as the web. Buttons stay the action name.
+- Phone **Listen** needs `npx expo run:android` in `apps/mobile`. Expo Go keeps **UP** and **DOWN**.
+- Face login detects one face and stores a local embedding. It is not liveness and not a certified biometric. See `FACE_LIMITATIONS.md`.
 
 ## What this software does not do
 

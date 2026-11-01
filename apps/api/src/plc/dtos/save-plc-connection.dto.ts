@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsBoolean,
+  IsIn,
   IsInt,
+  IsOptional,
   IsString,
   Max,
   MaxLength,
@@ -40,4 +42,9 @@ export class SavePlcConnectionDto {
   })
   @IsBoolean()
   enabled!: boolean;
+
+  @ApiProperty({ example: 'modbus-tcp', enum: ['modbus-tcp', 'opcua'] })
+  @IsOptional()
+  @IsIn(['modbus-tcp', 'opcua'])
+  protocol?: 'modbus-tcp' | 'opcua';
 }

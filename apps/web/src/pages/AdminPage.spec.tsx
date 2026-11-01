@@ -143,6 +143,7 @@ describe('AdminPage', () => {
       port: 502,
       unitId: 2,
       enabled: true,
+      protocol: 'modbus-tcp',
     });
 
     fireEvent.click(screen.getByLabelText('1 use'));
@@ -154,7 +155,10 @@ describe('AdminPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save coil.up' }));
     await screen.findByText('Saved coil.up.');
-    expect(patch).toHaveBeenCalledWith('/hmi/registers/r1', { address: 11 });
+    expect(patch).toHaveBeenCalledWith('/hmi/registers/r1', {
+      address: 11,
+      trended: false,
+    });
 
     fireEvent.change(screen.getByLabelText('new label'), {
       target: { value: 'plant' },
@@ -178,6 +182,7 @@ describe('AdminPage', () => {
         port: 502,
         unitId: 1,
         enabled: true,
+        protocol: 'modbus-tcp',
       }),
     );
   });
@@ -373,6 +378,10 @@ describe('AdminPage', () => {
     fireEvent.change(screen.getByLabelText('background image'), {
       target: { value: 'https://example.com/bay.png' },
     });
+    fireEvent.error(screen.getByRole('img', { name: 'Background preview' }));
+    expect(
+      await screen.findByText(/did not load as a picture/),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Save background' }));
     await screen.findByText('Saved background.');
     expect(patch).toHaveBeenCalledWith('/hmi/background', {
@@ -401,6 +410,7 @@ describe('AdminPage', () => {
   it('renders a picture background and a label with no register', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
       if (path === '/plc/connections') return [];
+      if (path === '/safety/roles') return null;
       return {
         ...layout,
         registers: [],
@@ -444,5 +454,143 @@ describe('AdminPage', () => {
     expect(
       screen.getByRole('button', { name: 'Delete label' }),
     ).toBeInTheDocument();
+  });
+
+  it('saves opc ua, a trend, an alarm, and safety roles', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/connections') {
+        return [
+          {
+            id: '1',
+            label: 'sim',
+            host: '127.0.0.1',
+            port: 4840,
+            unitId: 1,
+            enabled: true,
+            isSimulator: false,
+            protocol: 'opcua',
+          },
+        ];
+      }
+      if (path === '/alarms/definitions') {
+        return [
+          {
+            id: 'a1',
+            name: 'Overload',
+            severity: 'warning',
+            compareOp: 'gt',
+            threshold: 10,
+            enabled: true,
+            register: { id: 'r1', name: 'coil.up' },
+          },
+        ];
+      }
+      if (path === '/safety/roles') {
+        return {
+          eStopRegisterId: 'r1',
+          deadmanRegisterId: 'r2',
+          heartbeatRegisterId: 'r3',
+          safeStateRegisterId: 'r1',
+        };
+      }
+      return {
+        ...layout,
+        registers: [
+          ...layout.registers,
+          {
+            id: 'r4',
+            name: 'holding.height',
+            address: 4,
+            kind: 'holding',
+            trended: true,
+            nodeId: 'ns=1;s=Height',
+          },
+        ],
+      };
+    });
+    const patch = vi.spyOn(api, 'apiPatch').mockResolvedValue({});
+    const post = vi.spyOn(api, 'apiPost').mockResolvedValue({});
+    const put = vi.spyOn(api, 'apiPut').mockResolvedValue({});
+    const del = vi.spyOn(api, 'apiDelete').mockResolvedValue({});
+    renderWithProviders(<AdminPage />);
+    await screen.findByDisplayValue('sim');
+
+    fireEvent.change(screen.getByLabelText('1 protocol'), {
+      target: { value: 'modbus-tcp' },
+    });
+    fireEvent.change(screen.getByLabelText('1 protocol'), {
+      target: { value: 'opcua' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save sim' }));
+    await screen.findByText('Saved and connecting.');
+
+    fireEvent.change(screen.getByLabelText('holding.height node'), {
+      target: { value: 'ns=1;s=Moved' },
+    });
+    fireEvent.click(screen.getByLabelText('holding.height trend'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save holding.height' }));
+    await screen.findByText('Saved holding.height.');
+    expect(patch).toHaveBeenCalledWith(
+      '/hmi/registers/r4',
+      expect.objectContaining({ trended: false, nodeId: 'ns=1;s=Moved' }),
+    );
+
+    fireEvent.change(screen.getByLabelText('alarm name'), {
+      target: { value: 'Hot' },
+    });
+    fireEvent.change(screen.getByLabelText('alarm register'), {
+      target: { value: 'r2' },
+    });
+    fireEvent.change(screen.getByLabelText('alarm operator'), {
+      target: { value: 'lt' },
+    });
+    fireEvent.change(screen.getByLabelText('alarm threshold'), {
+      target: { value: '3' },
+    });
+    fireEvent.change(screen.getByLabelText('alarm severity'), {
+      target: { value: 'critical' },
+    });
+    fireEvent.click(screen.getByLabelText('alarm enabled'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save alarm' }));
+    await screen.findByText('Saved alarm.');
+    expect(post).toHaveBeenCalledWith('/alarms/definitions', {
+      name: 'Hot',
+      registerId: 'r2',
+      compareOp: 'lt',
+      threshold: 3,
+      severity: 'critical',
+      enabled: false,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Overload' }));
+    await screen.findByText('Deleted alarm.');
+    expect(del).toHaveBeenCalledWith('/alarms/definitions/a1');
+
+    post.mockRejectedValueOnce(new Error('alarm'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save alarm' }));
+    await screen.findByText('alarm');
+    del.mockRejectedValueOnce('nope');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Overload' }));
+    await screen.findByText('Save failed');
+
+    fireEvent.change(screen.getByLabelText('E-stop'), {
+      target: { value: 'r1' },
+    });
+    fireEvent.change(screen.getByLabelText('Deadman'), {
+      target: { value: 'r2' },
+    });
+    fireEvent.change(screen.getByLabelText('Heartbeat'), {
+      target: { value: 'r3' },
+    });
+    fireEvent.change(screen.getByLabelText('Safe state'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save safety roles' }));
+    await screen.findByText('Saved safety roles.');
+    expect(put).toHaveBeenCalled();
+
+    put.mockRejectedValueOnce(new Error('roles'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save safety roles' }));
+    await screen.findByText('roles');
   });
 });

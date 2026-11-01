@@ -1,10 +1,15 @@
 import { FormEvent, useState } from 'react';
 import { motion } from 'framer-motion';
+import { translate, type Locale } from '@tele-pendant/shared';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiPost, PublicUser } from '../lib/api';
+import { LanguageSelect } from '../lib/LanguageSelect';
+import { readLocale } from '../lib/i18n';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [locale, setLocale] = useState<Locale>(readLocale);
+  const t = (key: string) => translate(locale, key);
   const [email, setEmail] = useState('admin@example.com');
   const [password, setPassword] = useState('change-me-admin-password');
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +28,7 @@ export function LoginPage() {
       localStorage.setItem('user', JSON.stringify(data.user));
       navigate('/operator');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : t('loginFailed'));
     } finally {
       setBusy(false);
     }
@@ -34,10 +39,11 @@ export function LoginPage() {
       <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
         Tele-Pendant
       </motion.h1>
-      <p className="lede">Sign in to operate the demo crane</p>
+      <p className="lede">{t('loginLede')}</p>
+      <LanguageSelect onLocale={setLocale} />
       <form className="login-form" onSubmit={onSubmit}>
         <label>
-          Email
+          {t('email')}
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -46,7 +52,7 @@ export function LoginPage() {
           />
         </label>
         <label>
-          Password
+          {t('password')}
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -57,9 +63,9 @@ export function LoginPage() {
         </label>
         {error && <p className="error">{error}</p>}
         <button type="submit" disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? t('signingIn') : t('signIn')}
         </button>
-        <Link to="/face">Face login (basic)</Link>
+        <Link to="/face">{t('faceLogin')}</Link>
       </form>
     </main>
   );

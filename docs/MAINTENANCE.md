@@ -24,7 +24,7 @@ pnpm --filter @tele-pendant/modbus-core test:integration
 ## OTA
 
 - **Web:** redeploy container / static assets (`docker compose ... up -d`).
-- **Mobile:** host Expo Updates manifest at `updates.url`; rebuild native binary when native modules change.
+- **Mobile:** `pnpm --filter @tele-pendant/mobile ota:export` writes the manifest into `apps/api/ota`. Rebuild the binary when camera or speech changes.
 
 ## Modbus map changes
 

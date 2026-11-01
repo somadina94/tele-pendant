@@ -20,6 +20,10 @@ export async function apiPost<T>(path: string, payload?: unknown): Promise<T> {
   return apiSend<T>('POST', path, payload);
 }
 
+export async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
+  return apiSend<T>('PUT', path, payload);
+}
+
 export async function apiPatch<T>(path: string, payload?: unknown): Promise<T> {
   return apiSend<T>('PATCH', path, payload);
 }
@@ -29,7 +33,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
 }
 
 async function apiSend<T>(
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   payload?: unknown,
 ): Promise<T> {
@@ -56,6 +60,8 @@ export interface RegisterRef {
   name: string;
   address: number;
   kind: string;
+  trended?: boolean;
+  nodeId?: string | null;
 }
 
 export interface CellDto {

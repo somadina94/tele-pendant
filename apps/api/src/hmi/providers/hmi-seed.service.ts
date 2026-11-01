@@ -6,6 +6,28 @@ import { BackgroundDisplay } from '../../backgrounds/entities/background-display
 import { Cell } from '../../cells/entities/cell.entity';
 import { OverlayLabel } from '../../overlays/entities/overlay-label.entity';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
+import { SafetyRoles } from '../../safety/entities/safety-roles.entity';
+
+const DEMO_NODE_IDS: Record<string, string> = {
+  'coil.hoistUp': 'ns=1;s=HoistUp',
+  'coil.hoistDown': 'ns=1;s=HoistDown',
+  'coil.trolleyLeft': 'ns=1;s=TrolleyLeft',
+  'coil.trolleyRight': 'ns=1;s=TrolleyRight',
+  'coil.bridgeFwd': 'ns=1;s=BridgeFwd',
+  'coil.bridgeRev': 'ns=1;s=BridgeRev',
+  'coil.deadman': 'ns=1;s=Deadman',
+  'coil.eStop': 'ns=1;s=EStop',
+  'holding.hoistHeightMm': 'ns=1;s=HoistHeightMm',
+  'holding.loadKg': 'ns=1;s=LoadKg',
+  'holding.speedPct': 'ns=1;s=SpeedPct',
+  'holding.heartbeat': 'ns=1;s=Heartbeat',
+  'holding.safeState': 'ns=1;s=SafeState',
+  'discrete.motorRunning': 'ns=1;s=MotorRunning',
+  'discrete.fault': 'ns=1;s=Fault',
+  'discrete.commsOk': 'ns=1;s=CommsOk',
+};
+
+const TRENDED = new Set(['holding.hoistHeightMm', 'holding.loadKg']);
 
 @Injectable()
 export class HmiSeedService implements OnModuleInit {
@@ -20,6 +42,8 @@ export class HmiSeedService implements OnModuleInit {
     private readonly backgrounds: Repository<BackgroundDisplay>,
     @InjectRepository(OverlayLabel)
     private readonly overlays: Repository<OverlayLabel>,
+    @InjectRepository(SafetyRoles)
+    private readonly roles: Repository<SafetyRoles>,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -29,6 +53,7 @@ export class HmiSeedService implements OnModuleInit {
       await this.seed();
     }
     await this.ensureRuntimeRegisters();
+    await this.ensureSafetyRoles();
   }
 
   /** Rows the safety poller looks up by name. Never overwrites a saved address. */
@@ -85,6 +110,21 @@ export class HmiSeedService implements OnModuleInit {
           'bool',
           'r',
         ],
+        ['coil.eStop', DEMO_CRANE_MAP.coils.eStop, 'coil', 'bool', 'rw'],
+        [
+          'holding.hoistHeightMm',
+          DEMO_CRANE_MAP.holdings.hoistHeightMm,
+          'holding',
+          'uint16',
+          'r',
+        ],
+        [
+          'holding.loadKg',
+          DEMO_CRANE_MAP.holdings.loadKg,
+          'holding',
+          'uint16',
+          'r',
+        ],
       ];
     for (const [name, address, kind, dataType, rw] of extras) {
       await this.upsertRegister(name, address, kind, dataType, rw);
@@ -99,12 +139,49 @@ export class HmiSeedService implements OnModuleInit {
     rw: string,
   ): Promise<RegisterMap> {
     let row = await this.registers.findOne({ where: { name } });
+    const nodeId = DEMO_NODE_IDS[name] ?? null;
+    const trended = TRENDED.has(name);
     if (!row) {
       row = await this.registers.save(
-        this.registers.create({ name, address, kind, dataType, rw, scale: 1 }),
+        this.registers.create({
+          name,
+          address,
+          kind,
+          dataType,
+          rw,
+          scale: 1,
+          trended,
+          nodeId,
+        }),
       );
+      return row;
     }
+    let dirty = false;
+    if (trended && !row.trended) {
+      row.trended = true;
+      dirty = true;
+    }
+    if (nodeId && !row.nodeId) {
+      row.nodeId = nodeId;
+      dirty = true;
+    }
+    if (dirty) row = await this.registers.save(row);
     return row;
+  }
+
+  private async ensureSafetyRoles(): Promise<void> {
+    const [existing] = await this.roles.find({ take: 1 });
+    if (existing) return;
+    const idOf = async (name: string) =>
+      (await this.registers.findOne({ where: { name } }))?.id ?? null;
+    await this.roles.save(
+      this.roles.create({
+        eStopRegisterId: await idOf('coil.eStop'),
+        deadmanRegisterId: await idOf('coil.deadman'),
+        heartbeatRegisterId: await idOf('holding.heartbeat'),
+        safeStateRegisterId: await idOf('holding.safeState'),
+      }),
+    );
   }
 
   async seed(): Promise<void> {

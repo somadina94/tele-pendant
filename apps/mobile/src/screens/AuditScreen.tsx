@@ -1,6 +1,7 @@
 import { ScrollView, Text } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '../api';
+import { useLocale } from '../locale';
 import { styles } from '../ui';
 
 type AuditRow = {
@@ -13,6 +14,7 @@ type AuditRow = {
 };
 
 export function AuditScreen({ token }: { token: string }) {
+  const { t } = useLocale();
   const audit = useQuery({
     queryKey: ['audit', token],
     queryFn: () => apiGet<AuditRow[]>('/audit', token),
@@ -20,10 +22,10 @@ export function AuditScreen({ token }: { token: string }) {
 
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
-      <Text style={styles.section}>Audit</Text>
+      <Text style={styles.section}>{t('auditTitle')}</Text>
       {audit.isError ? (
         <Text style={styles.error}>
-          {audit.error instanceof Error ? audit.error.message : 'Audit failed'}
+          {audit.error instanceof Error ? audit.error.message : t('auditFailed')}
         </Text>
       ) : null}
       {(audit.data ?? []).map((row) => (

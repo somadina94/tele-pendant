@@ -242,6 +242,29 @@ describe('HmiService', () => {
         details: 'coil.eStop=20',
       }),
     );
+    const tagged = await service.updateRegister(
+      'r1',
+      21,
+      { userEmail: 'admin@example.com' },
+      { nodeId: ' ns=1;s=EStop ', trended: true },
+    );
+    expect(tagged.nodeId).toBe('ns=1;s=EStop');
+    expect(tagged.trended).toBe(true);
+    const cleared = await service.updateRegister(
+      'r1',
+      21,
+      { userId: 'u1', ip: '127.0.0.1' },
+      { nodeId: '  ', trended: false },
+    );
+    expect(cleared.nodeId).toBeNull();
+    const untouched = await service.updateRegister('r1', 22, undefined, {
+      nodeId: null,
+    });
+    expect(untouched.nodeId).toBeNull();
+    const trendOnly = await service.updateRegister('r1', 23, undefined, {
+      trended: true,
+    });
+    expect(trendOnly.address).toBe(23);
   });
 
   it('rejects a missing register and an address outside 0..65535', async () => {

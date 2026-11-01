@@ -7,7 +7,7 @@ export async function getApiBase(): Promise<string> {
 }
 
 async function apiSend<T>(
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   body?: unknown,
   token?: string | null,
@@ -21,7 +21,18 @@ async function apiSend<T>(
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const text = await res.text();
+    let message = text;
+    try {
+      const body = JSON.parse(text) as { message?: string | string[] };
+      if (typeof body.message === 'string') message = body.message;
+      else if (Array.isArray(body.message)) message = body.message.join(', ');
+    } catch {
+      message = text;
+    }
+    throw new Error(message || `Request failed (${res.status})`);
+  }
   const json = (await res.json()) as { data: T };
   return json.data;
 }
@@ -32,6 +43,14 @@ export async function apiPost<T>(
   token?: string | null,
 ): Promise<T> {
   return apiSend<T>('POST', path, body, token);
+}
+
+export async function apiPut<T>(
+  path: string,
+  body: unknown,
+  token: string,
+): Promise<T> {
+  return apiSend<T>('PUT', path, body, token);
 }
 
 export async function apiPatch<T>(

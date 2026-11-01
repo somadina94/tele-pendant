@@ -2,6 +2,7 @@ import {
   Inject,
   Injectable,
   OnModuleInit,
+  BadRequestException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,9 +16,9 @@ import { UserRole } from '../../users/enums/user-role.enum';
 import { User } from '../../users/entities/user.entity';
 import { LoginDto } from '../dtos/login.dto';
 import {
-  cosineSimilarity,
   descriptorFromImageDataUrl,
   FACE_MATCH_THRESHOLD,
+  matchScore,
   parseDescriptor,
   serializeDescriptor,
 } from './face.util';
@@ -89,6 +90,7 @@ export class AuthService implements OnModuleInit {
       role: user.role,
       displayName: user.displayName ?? null,
       locale: user.locale,
+      localePinned: user.localePinned === true,
       hasFaceTemplate: Boolean(user.faceTemplate),
     };
   }
@@ -187,7 +189,7 @@ export class AuthService implements OnModuleInit {
       for (const user of candidates) {
         if (!user.faceTemplate) continue;
         const stored = parseDescriptor(user.faceTemplate);
-        const score = cosineSimilarity(probe, stored);
+        const score = matchScore(probe, stored);
         if (!best || score > best.score) {
           best = { user, score };
         }
@@ -224,5 +226,21 @@ export class AuthService implements OnModuleInit {
       });
       throw err;
     }
+  }
+
+  async updateLocale(userId: string, locale: string) {
+    const user = await this.usersRepository.findOneByOrFail({ id: userId });
+    const normalized = locale.toLowerCase().startsWith('es')
+      ? 'es'
+      : locale.toLowerCase().startsWith('en')
+        ? 'en'
+        : null;
+    if (!normalized) {
+      throw new BadRequestException('Locale must be en or es');
+    }
+    user.locale = normalized;
+    user.localePinned = true;
+    await this.usersRepository.save(user);
+    return this.toPublicUser(user);
   }
 }

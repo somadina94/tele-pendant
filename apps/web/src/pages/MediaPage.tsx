@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 type SpeechAlt = { transcript: string };
 type SpeechResult = ArrayLike<SpeechAlt> & { isFinal?: boolean };
@@ -27,6 +28,7 @@ declare global {
 
 export function MediaPage() {
   const navigate = useNavigate();
+  const { t } = useT();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [camError, setCamError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<string | null>(null);
@@ -234,7 +236,7 @@ export function MediaPage() {
   return (
     <main className="shell admin">
       <header className="op-header">
-        <h1>Camera · QR · Voice</h1>
+        <h1>{t('mediaTitle')}</h1>
         <nav className="op-nav">
           <Link to="/operator">Operator</Link>
           <Link to="/ops">Ops</Link>

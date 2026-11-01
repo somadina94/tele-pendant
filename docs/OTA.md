@@ -21,9 +21,15 @@ The API serves a small folder with no login:
 Responses include `expo-protocol-version: 1` and runtime version `0.0.1`. On this machine that is `http://localhost:3010/ota/manifest`.
 
 1. Point `expo.updates.url` in `apps/mobile/app.json` at `http://<api-host>:3010/ota/manifest`.
-2. Drop a new `manifest.json` and bundle into `apps/api/ota` (the bundle path is `apps/api/ota/assets/`). That folder is the update.
-3. Rebuild the **native** binary whenever you change native modules (camera, reanimated, etc.). JS-only changes are what this folder ships.
-4. `runtimeVersion.policy: appVersion` ties updates to the store/binary version (`0.0.1`).
+2. From `apps/mobile`, publish with the local command (no EAS account):
+
+```bash
+pnpm --filter @tele-pendant/mobile ota:export
+```
+
+That runs `expo export` and writes a protocol-1 `manifest.json` plus the bundle into `apps/api/ota`. The API already serves that folder.
+3. Camera and on-device speech are native modules. They are not in Expo Go. A JS update does not add them. Build a local debug binary with `npx expo run:android` inside `apps/mobile`. No cloud speech service.
+4. `runtimeVersion.policy: appVersion` ties updates to the binary version (`0.0.1`).
 
 ## Checklist
 

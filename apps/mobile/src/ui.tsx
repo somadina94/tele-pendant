@@ -71,6 +71,23 @@ export const styles = StyleSheet.create({
   section: { color: '#E8EEF4', fontSize: 18, fontWeight: '700', marginTop: 16 },
   row: { flexDirection: 'row', gap: 8 },
   camera: { height: 220, borderRadius: 8, marginBottom: 12 },
+  graphic: {
+    minHeight: 180,
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  graphicPhoto: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
+  overlay: { position: 'absolute' },
 });
 
 export function Field({

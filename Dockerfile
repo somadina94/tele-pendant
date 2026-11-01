@@ -13,6 +13,7 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc turbo.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/modbus-core/package.json ./packages/modbus-core/
+COPY packages/plc-driver/package.json ./packages/plc-driver/
 COPY apps/api/package.json ./apps/api/
 COPY apps/modbus-sim/package.json ./apps/modbus-sim/
 COPY apps/web/package.json ./apps/web/
@@ -26,6 +27,7 @@ COPY apps/web ./apps/web
 
 RUN pnpm --filter @tele-pendant/shared build \
   && pnpm --filter @tele-pendant/modbus-core build \
+  && pnpm --filter @tele-pendant/plc-driver build \
   && pnpm --filter @tele-pendant/api build \
   && pnpm --filter @tele-pendant/web build \
   && pnpm --filter @tele-pendant/modbus-sim build
@@ -49,15 +51,19 @@ ENV DATABASE_PATH=/app/data/tele-pendant.sqlite
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/modbus-core/package.json ./packages/modbus-core/
+COPY packages/plc-driver/package.json ./packages/plc-driver/
 COPY apps/api/package.json ./apps/api/
 
 RUN pnpm install --frozen-lockfile --prod --filter @tele-pendant/api...
 
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/modbus-core/dist ./packages/modbus-core/dist
+COPY --from=builder /app/packages/plc-driver/dist ./packages/plc-driver/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/assets ./apps/api/assets
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/
 COPY --from=builder /app/packages/modbus-core/package.json ./packages/modbus-core/
+COPY --from=builder /app/packages/plc-driver/package.json ./packages/plc-driver/
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 RUN mkdir -p /app/data \

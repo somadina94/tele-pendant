@@ -14,6 +14,20 @@ describe('SafetyStateService', () => {
   const auditService = {
     write: jest.fn().mockResolvedValue({}),
   };
+  const cells = {
+    find: jest.fn().mockResolvedValue([]),
+  };
+  const registers = {
+    findOneBy: jest.fn().mockResolvedValue(null),
+  };
+  const roles = {
+    find: jest.fn().mockResolvedValue([]),
+    create: jest.fn((value: Record<string, unknown>) => ({ ...value })),
+    save: jest.fn(async (value: Record<string, unknown>) => ({
+      id: 'role-1',
+      ...value,
+    })),
+  };
 
   let service: SafetyStateService;
 
@@ -24,9 +38,15 @@ describe('SafetyStateService', () => {
     driver.readCoils.mockResolvedValue([false]);
     driver.writeRegister.mockResolvedValue(undefined);
     driver.writeCoil.mockResolvedValue(undefined);
+    cells.find.mockResolvedValue([]);
+    registers.findOneBy.mockResolvedValue(null);
+    roles.find.mockResolvedValue([]);
     service = new SafetyStateService(
       plcService as never,
       auditService as never,
+      cells as never,
+      registers as never,
+      roles as never,
     );
   });
 
@@ -127,5 +147,48 @@ describe('SafetyStateService', () => {
     });
     await enter('e_stop', 'flip');
     expect(service.snapshot().mode).toBe('e_stop');
+  });
+
+  it('uses configured role registers and clears motion coils', async () => {
+    roles.find.mockResolvedValue([
+      {
+        eStopRegisterId: 'estop',
+        deadmanRegisterId: 'dead',
+        heartbeatRegisterId: 'missing',
+        safeStateRegisterId: null,
+      },
+    ]);
+    registers.findOneBy.mockImplementation(async ({ id }: { id: string }) =>
+      id === 'missing' ? null : { id, address: 40 },
+    );
+    cells.find.mockResolvedValue([
+      { primaryRegister: { kind: 'coil', address: 7 } },
+      { primaryRegister: { kind: 'holding', address: 8 } },
+      { primaryRegister: null },
+    ]);
+    service.pulseDeadman();
+    jest.useFakeTimers();
+    const now = Date.now();
+    jest.setSystemTime(now);
+    service.pulseDeadman();
+    jest.setSystemTime(now + 5000);
+    await service.tick();
+    expect(driver.writeCoil).toHaveBeenCalledWith(7, false);
+    await service.saveRoles({
+      eStopRegisterId: '',
+      deadmanRegisterId: '',
+      heartbeatRegisterId: '',
+      safeStateRegisterId: '',
+    });
+    const saved = await service.saveRoles({
+      eStopRegisterId: 'estop',
+      deadmanRegisterId: 'dead',
+      heartbeatRegisterId: 'beat',
+      safeStateRegisterId: 'safe',
+    });
+    expect(saved.eStopRegisterId).toBe('estop');
+    roles.find.mockResolvedValue([]);
+    const created = await service.getRoles();
+    expect(created.id).toBe('role-1');
   });
 });

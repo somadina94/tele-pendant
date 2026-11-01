@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { apiGet, apiPost } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 interface AlarmEvent {
   id: string;
@@ -16,14 +17,18 @@ interface TrendPoint {
 }
 
 export function OpsPage() {
+  const { t } = useT();
   const alarms = useQuery({
     queryKey: ['alarms'],
     queryFn: () => apiGet<AlarmEvent[]>('/alarms'),
     refetchInterval: 2000,
   });
-  const trends = useQuery({
-    queryKey: ['trends-height'],
-    queryFn: () => apiGet<TrendPoint[]>('/trends/hoistHeightMm?minutes=30'),
+  const trendKeys = useQuery({
+    queryKey: ['trend-keys'],
+    queryFn: async () => {
+      const rows = await apiGet<unknown>('/trends');
+      return Array.isArray(rows) ? (rows as string[]) : [];
+    },
     refetchInterval: 3000,
   });
   const diagnostics = useQuery({
@@ -44,12 +49,12 @@ export function OpsPage() {
   return (
     <main className="shell admin">
       <header className="op-header">
-        <h1>Alarms · Trends · Diagnostics</h1>
-        <Link to="/operator">Operator</Link>
+        <h1>{t('alarmsTitle')}</h1>
+        <Link to="/operator">{t('operator')}</Link>
       </header>
 
       <section>
-        <h2>Diagnostics</h2>
+        <h2>{t('diagnostics')}</h2>
         <ul className="list">
           <li>
             PLC connected: {String(diagnostics.data?.plc.connected ?? '—')} (
@@ -69,9 +74,9 @@ export function OpsPage() {
       </section>
 
       <section>
-        <h2>Alarms</h2>
+        <h2>{t('alarms')}</h2>
         <ul className="list">
-          {(alarms.data ?? []).length === 0 && <li>No active alarms</li>}
+          {(alarms.data ?? []).length === 0 && <li>{t('noAlarms')}</li>}
           {(alarms.data ?? []).map((a) => (
             <li key={a.id}>
               <strong>[{a.definition.severity}]</strong> {a.definition.name} —{' '}
@@ -88,7 +93,7 @@ export function OpsPage() {
                       )
                     }
                   >
-                    Ack
+                    {t('ack')}
                   </button>{' '}
                   <button
                     type="button"
@@ -99,7 +104,7 @@ export function OpsPage() {
                       )
                     }
                   >
-                    Shelve
+                    {t('shelve')}
                   </button>
                 </>
               )}
@@ -109,16 +114,53 @@ export function OpsPage() {
       </section>
 
       <section>
-        <h2>Trend: hoist height (recent)</h2>
-        <ul className="list">
-          {(trends.data ?? []).slice(-12).map((p, i) => (
-            <li key={`${p.createdAt}-${i}`}>
-              {new Date(p.createdAt).toLocaleTimeString()} — {p.value} mm
-            </li>
-          ))}
-          {(trends.data ?? []).length === 0 && <li>No samples yet</li>}
-        </ul>
+        <h2>{t('trends')}</h2>
+        {(trendKeys.data ?? []).length === 0 ? <p>{t('noSamples')}</p> : null}
+        {(trendKeys.data ?? []).map((key) => (
+          <TrendChart key={key} seriesKey={key} />
+        ))}
       </section>
     </main>
+  );
+}
+
+function TrendChart({ seriesKey }: { seriesKey: string }) {
+  const query = useQuery({
+    queryKey: ['trend', seriesKey],
+    queryFn: async () => {
+      const rows = await apiGet<unknown>(
+        `/trends/${encodeURIComponent(seriesKey)}?minutes=30`,
+      );
+      return Array.isArray(rows) ? (rows as TrendPoint[]) : [];
+    },
+    refetchInterval: 3000,
+  });
+  const points = query.data ?? [];
+  if (points.length === 0) return <p>No samples yet</p>;
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(max - min, 1);
+  const width = 280;
+  const height = 80;
+  const coords = values
+    .map((value, index) => {
+      const x = (index / Math.max(values.length - 1, 1)) * width;
+      const y = height - ((value - min) / span) * height;
+      return `${x},${y}`;
+    })
+    .join(' ');
+  const last = values[values.length - 1];
+  const unit = seriesKey.toLowerCase().includes('mm') ? ' mm' : '';
+  return (
+    <figure>
+      <figcaption>
+        {seriesKey}: {last}
+        {unit}
+      </figcaption>
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="80" role="img">
+        <polyline fill="none" stroke="#7dcea0" strokeWidth="2" points={coords} />
+      </svg>
+    </figure>
   );
 }

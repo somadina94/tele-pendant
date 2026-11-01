@@ -27,6 +27,9 @@ export class User {
   @Column({ name: 'locale', type: 'varchar', default: 'en' })
   locale!: string;
 
+  @Column({ name: 'locale_pinned', type: 'boolean', default: false })
+  localePinned!: boolean;
+
   @Column({ name: 'face_template', type: 'text', nullable: true })
   faceTemplate?: string | null;
 

@@ -1,0 +1,10 @@
+{
+  "minR": 95,
+  "minG": 40,
+  "minB": 20,
+  "minDeltaRG": 15,
+  "cell": 8,
+  "minSkinFraction": 0.45,
+  "minCells": 2,
+  "grid": 8
+}

@@ -9,4 +9,6 @@
 - [FACE_LIMITATIONS.md](./FACE_LIMITATIONS.md)
 - [OTA.md](./OTA.md)
 
+Modbus TCP is the default driver. OPC UA is optional (`docker compose --profile opcua`). Languages are `packages/shared/i18n/en.json` and `es.json`. Add another language by dropping in a JSON file.
+
 API Compodoc guides: `apps/api/docs/`.

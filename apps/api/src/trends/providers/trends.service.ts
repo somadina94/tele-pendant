@@ -24,6 +24,11 @@ export class TrendsService {
     }
   }
 
+  async keys(): Promise<string[]> {
+    const rows = await this.samples.find();
+    return [...new Set(rows.map((row) => row.seriesKey))];
+  }
+
   async series(seriesKey: string, minutes = 15) {
     const since = new Date(Date.now() - minutes * 60_000);
     return this.samples.find({

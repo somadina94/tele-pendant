@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiPost } from '../lib/api';
+import { useT } from '../lib/i18n';
 import { captureDataUrl } from '../lib/face-capture';
 
 export function FacePage({
   skipCamera = false,
 }: { skipCamera?: boolean } = {}) {
   const navigate = useNavigate();
+  const { t } = useT();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [email, setEmail] = useState('admin@example.com');
@@ -53,7 +55,7 @@ export function FacePage({
   return (
     <main className="shell">
       <header className="op-header">
-        <h1>Face auth (basic)</h1>
+        <h1>{t('faceTitle')}</h1>
         <Link to="/">Password login</Link>
       </header>
       <p className="lede">

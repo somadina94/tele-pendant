@@ -21,6 +21,13 @@ import { TrendsService } from './providers/trends.service';
 export class TrendsController {
   constructor(@Inject(TrendsService) private readonly trends: TrendsService) {}
 
+  @Get()
+  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Series keys that have samples' })
+  keys() {
+    return this.trends.keys();
+  }
+
   @Get(':seriesKey')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Trend samples for a series key' })

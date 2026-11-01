@@ -16,6 +16,8 @@ import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { SafetyStateService } from '../../safety/providers/safety-state.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 
+type Actor = { userId?: string; userEmail?: string; ip?: string };
+
 @Injectable()
 export class HmiService {
   private readonly cells: Repository<Cell>;
@@ -76,7 +78,12 @@ export class HmiService {
     return this.registers.find({ order: { name: 'ASC' } });
   }
 
-  async updateRegister(id: string, address: number): Promise<RegisterMap> {
+  async updateRegister(
+    id: string,
+    address: number,
+    actor?: Actor,
+    extra?: { nodeId?: string | null; trended?: boolean },
+  ): Promise<RegisterMap> {
     if (!Number.isInteger(address) || address < 0 || address > 65535) {
       throw new BadRequestException(
         'Address must be an integer from 0 to 65535',
@@ -85,15 +92,30 @@ export class HmiService {
     const row = await this.registers.findOneBy({ id });
     if (!row) throw new NotFoundException('Register not found');
     row.address = address;
+    if (extra && extra.nodeId !== undefined) {
+      row.nodeId = extra.nodeId?.trim() ? extra.nodeId.trim() : null;
+    }
+    if (extra && typeof extra.trended === 'boolean') {
+      row.trended = extra.trended;
+    }
     const saved = await this.registers.save(row);
     this.plcService.forgetAddresses();
     await this.auditService.write({
+      ...this.actorFields(actor),
       action: 'register.update',
       resource: saved.id,
       details: `${saved.name}=${address}`,
       result: 'success',
     });
     return saved;
+  }
+
+  private actorFields(actor?: Actor) {
+    return {
+      userId: actor?.userId,
+      userEmail: actor?.userEmail,
+      ip: actor?.ip,
+    };
   }
 
   async activateCell(
@@ -167,10 +189,11 @@ export class HmiService {
     return { ok: true, cellId: cell.id, value };
   }
 
-  async createCell(input: CellInput): Promise<Cell> {
+  async createCell(input: CellInput, actor?: Actor): Promise<Cell> {
     const fields = await this.cellFields(input);
     const saved = await this.cells.save(this.cells.create(fields));
     await this.auditService.write({
+      ...this.actorFields(actor),
       action: 'cell.create',
       resource: saved.id,
       details: saved.label,
@@ -179,13 +202,14 @@ export class HmiService {
     return saved;
   }
 
-  async updateCell(id: string, input: CellInput): Promise<Cell> {
+  async updateCell(id: string, input: CellInput, actor?: Actor): Promise<Cell> {
     const row = await this.cells.findOneBy({ id });
     if (!row) throw new NotFoundException('Cell not found');
     const fields = await this.cellFields(input);
     Object.assign(row, fields);
     const saved = await this.cells.save(row);
     await this.auditService.write({
+      ...this.actorFields(actor),
       action: 'cell.update',
       resource: saved.id,
       details: saved.label,
@@ -194,11 +218,12 @@ export class HmiService {
     return saved;
   }
 
-  async deleteCell(id: string): Promise<{ ok: true }> {
+  async deleteCell(id: string, actor?: Actor): Promise<{ ok: true }> {
     const row = await this.cells.findOneBy({ id });
     if (!row) throw new NotFoundException('Cell not found');
     await this.cells.delete({ id });
     await this.auditService.write({
+      ...this.actorFields(actor),
       action: 'cell.delete',
       resource: id,
       details: row.label,
@@ -207,13 +232,14 @@ export class HmiService {
     return { ok: true };
   }
 
-  async createOverlay(input: OverlayInput): Promise<OverlayLabel> {
+  async createOverlay(input: OverlayInput, actor?: Actor): Promise<OverlayLabel> {
     const background = await this.activeBackground();
     const fields = await this.overlayFields(input);
     const saved = await this.overlays.save(
       this.overlays.create({ ...fields, background }),
     );
     await this.auditService.write({
+      ...this.actorFields(actor),
       action: 'overlay.create',
       resource: saved.id,
       details: saved.label,
@@ -222,12 +248,17 @@ export class HmiService {
     return saved;
   }
 
-  async updateOverlay(id: string, input: OverlayInput): Promise<OverlayLabel> {
+  async updateOverlay(
+    id: string,
+    input: OverlayInput,
+    actor?: Actor,
+  ): Promise<OverlayLabel> {
     const row = await this.overlays.findOneBy({ id });
     if (!row) throw new NotFoundException('Overlay not found');
     Object.assign(row, await this.overlayFields(input));
     const saved = await this.overlays.save(row);
     await this.auditService.write({
+      ...this.actorFields(actor),
       action: 'overlay.update',
       resource: saved.id,
       details: saved.label,
@@ -236,11 +267,12 @@ export class HmiService {
     return saved;
   }
 
-  async deleteOverlay(id: string): Promise<{ ok: true }> {
+  async deleteOverlay(id: string, actor?: Actor): Promise<{ ok: true }> {
     const row = await this.overlays.findOneBy({ id });
     if (!row) throw new NotFoundException('Overlay not found');
     await this.overlays.delete({ id });
     await this.auditService.write({
+      ...this.actorFields(actor),
       action: 'overlay.delete',
       resource: id,
       details: row.label,
@@ -249,11 +281,14 @@ export class HmiService {
     return { ok: true };
   }
 
-  async updateBackground(input: {
-    name: string;
-    cssBackground?: string | null;
-    imageUrl?: string | null;
-  }): Promise<BackgroundDisplay> {
+  async updateBackground(
+    input: {
+      name: string;
+      cssBackground?: string | null;
+      imageUrl?: string | null;
+    },
+    actor?: Actor,
+  ): Promise<BackgroundDisplay> {
     const name = input.name.trim();
     if (!name) throw new BadRequestException('Background name is required');
     const row = await this.activeBackground();
@@ -262,6 +297,7 @@ export class HmiService {
     row.imageUrl = input.imageUrl?.trim() || null;
     const saved = await this.backgrounds.save(row);
     await this.auditService.write({
+      ...this.actorFields(actor),
       action: 'background.update',
       resource: saved.id,
       details: saved.name,

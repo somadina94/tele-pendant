@@ -1,49 +1,53 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  type DimensionValue,
-} from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Image, ScrollView, Text, View, type DimensionValue } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { formatOverlay, tagValueForRegister, type TagSnapshot } from '@tele-pendant/shared';
 import { io, Socket } from 'socket.io-client';
 import { apiGet, apiPost, getApiBase } from '../api';
 import type { Cell, Layout } from '../types';
+import { useLocale } from '../locale';
 import { Field, styles } from '../ui';
 
-/** Reanimated class components disagree with RN JSX element typing under TS 5.x. */
-const AnimatedView = Animated.View as unknown as typeof View;
+function panelColor(css?: string | null): string {
+  const value = css?.trim() ?? '';
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value) ? value : '#1a2332';
+}
 
 export function OperatorScreen({ token }: { token: string }) {
+  const { t, terror } = useLocale();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [holdingId, setHoldingId] = useState<string | null>(null);
   const [safetyMode, setSafetyMode] = useState('unknown');
   const [height, setHeight] = useState<number | null>(null);
-  const scale = useSharedValue(1);
+  const [tags, setTags] = useState<TagSnapshot | null>(null);
+  const [photoOk, setPhotoOk] = useState(true);
+  const socketRef = useRef<Socket | null>(null);
+  const heldId = useRef<string | null>(null);
+  const latched = useRef(false);
 
   useEffect(() => {
     let socket: Socket | null = null;
+    let closed = false;
     void (async () => {
       const base = await getApiBase();
+      if (closed) return;
       const origin = base.replace(/\/api\/v1$/, '');
       socket = io(`${origin}/realtime`, {
         transports: ['websocket'],
         path: '/socket.io',
       });
+      socketRef.current = socket;
       socket.on('safety.state', (s: { mode: string }) => setSafetyMode(s.mode));
-      socket.on('tags.update', (t: { hoistHeightMm: number }) =>
-        setHeight(t.hoistHeightMm),
-      );
+      socket.on('tags.update', (payload: TagSnapshot & { hoistHeightMm: number }) => {
+        setHeight(payload.hoistHeightMm);
+        setTags(payload);
+      });
     })();
     return () => {
+      closed = true;
       socket?.disconnect();
+      socketRef.current = null;
     };
   }, []);
 
@@ -53,16 +57,38 @@ export function OperatorScreen({ token }: { token: string }) {
   });
 
   const pulseDeadman = useCallback(() => {
-    void apiPost('/safety/deadman/pulse', undefined, token);
+    socketRef.current?.emit('deadman.pulse');
+    return apiPost('/safety/deadman/pulse', undefined, token).catch(
+      () => undefined,
+    );
   }, [token]);
+
+  const dropDeadman = useCallback(() => {
+    socketRef.current?.emit('deadman.release');
+    return apiPost('/safety/deadman/release', undefined, token).catch(
+      () => undefined,
+    );
+  }, [token]);
+
+  useEffect(() => {
+    if (!holdingId) return;
+    const id = setInterval(() => {
+      void pulseDeadman();
+    }, 400);
+    return () => clearInterval(id);
+  }, [holdingId, pulseDeadman]);
 
   const pressCell = async (cell: Cell) => {
     setError(null);
+    heldId.current = cell.id;
     try {
       if (cell.isMotion) {
-        pulseDeadman();
         setHoldingId(cell.id);
-        scale.value = withSpring(0.96);
+        await pulseDeadman();
+        if (heldId.current !== cell.id) {
+          await dropDeadman();
+          return;
+        }
       }
       await apiPost(
         `/hmi/cells/${cell.id}/activate`,
@@ -72,22 +98,56 @@ export function OperatorScreen({ token }: { token: string }) {
         },
         token,
       );
+      if (heldId.current !== cell.id) {
+        if (cell.isMotion) {
+          await apiPost(
+            `/hmi/cells/${cell.id}/activate`,
+            { value: false },
+            token,
+          ).catch(() => undefined);
+          await dropDeadman();
+        }
+        return;
+      }
+      if (cell.isMotion) latched.current = true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Activate failed');
-      setHoldingId(null);
+      setError(err instanceof Error ? terror(err.message) : 'Activate failed');
+      if (heldId.current === cell.id) {
+        heldId.current = null;
+        latched.current = false;
+        setHoldingId(null);
+        if (cell.isMotion) await dropDeadman();
+      }
     }
   };
 
   const releaseCell = async (cell: Cell) => {
     if (!cell.isMotion) return;
+    const mine = heldId.current === cell.id;
+    heldId.current = null;
+    setHoldingId(null);
+    if (!mine) return;
+    const wasLatched = latched.current;
+    latched.current = false;
     try {
-      await apiPost(`/hmi/cells/${cell.id}/activate`, { value: false }, token);
+      if (wasLatched) {
+        await apiPost(
+          `/hmi/cells/${cell.id}/activate`,
+          { value: false },
+          token,
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? terror(err.message) : 'Release failed');
     } finally {
-      setHoldingId(null);
-      scale.value = withSpring(1);
-      void apiPost('/safety/deadman/release', undefined, token);
+      await dropDeadman();
     }
   };
+
+  const imageUrl = layoutQuery.data?.background?.imageUrl ?? '';
+  useEffect(() => {
+    setPhotoOk(true);
+  }, [imageUrl]);
 
   const grid = useMemo(() => {
     const layout = layoutQuery.data;
@@ -102,23 +162,56 @@ export function OperatorScreen({ token }: { token: string }) {
     return { cols: layout.matrix.cols, cells };
   }, [layoutQuery.data]);
 
-  const holdStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
       <Text style={styles.banner}>
-        Safety: {safetyMode} · H {height ?? '—'} mm
-        {holdingId ? ' · DEADMAN' : ''}
+        {t('safety')}: {safetyMode} · H {height ?? '—'} mm
+        {holdingId ? ` · ${t('deadmanHold')}` : ''}
       </Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Field label="SAFE_ACTION_PIN" value={pin} onChangeText={setPin} secure />
-      <Text style={styles.hint}>
-        STOP sends this pin. This demo uses the admin password:
-        change-me-admin-password
-      </Text>
-      <AnimatedView style={[styles.matrix, holdStyle]}>
+      <Field label={t('safePin')} value={pin} onChangeText={setPin} secure />
+      <Text style={styles.hint}>{t('pinHint')}</Text>
+      <View
+        style={[
+          styles.graphic,
+          {
+            backgroundColor: panelColor(
+              layoutQuery.data?.background?.cssBackground,
+            ),
+          },
+        ]}
+      >
+        {imageUrl && photoOk ? (
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.graphicPhoto}
+            onError={() => setPhotoOk(false)}
+          />
+        ) : null}
+        <Text style={styles.cellText}>
+          {layoutQuery.data?.background?.name ?? t('plantGraphic')}
+        </Text>
+        {(layoutQuery.data?.overlays ?? []).map((overlay) => (
+          <View
+            key={overlay.id}
+            style={[
+              styles.overlay,
+              { left: `${overlay.xPct}%`, top: `${overlay.yPct}%` },
+            ]}
+          >
+            <Text style={styles.hint}>{overlay.label}</Text>
+            <Text style={styles.cellText}>
+              {String(
+                formatOverlay(
+                  overlay.format,
+                  tagValueForRegister(tags, overlay.register?.name),
+                ),
+              )}
+            </Text>
+          </View>
+        ))}
+      </View>
+      <View style={styles.matrix}>
         {grid &&
           grid.cells.map((cell, idx) => {
             const cellWidth: DimensionValue =
@@ -126,7 +219,7 @@ export function OperatorScreen({ token }: { token: string }) {
                 ? (`${Math.floor(100 / grid.cols) - 2}%` as DimensionValue)
                 : '31%';
             return cell ? (
-              <Pressable
+              <View
                 key={cell.id}
                 style={[
                   styles.cell,
@@ -134,11 +227,20 @@ export function OperatorScreen({ token }: { token: string }) {
                   cell.style === 'estop' && styles.estop,
                   holdingId === cell.id && styles.holding,
                 ]}
-                onPressIn={() => void pressCell(cell)}
-                onPressOut={() => void releaseCell(cell)}
+                onStartShouldSetResponder={() => true}
+                onResponderTerminationRequest={() => false}
+                onResponderGrant={() => {
+                  void pressCell(cell);
+                }}
+                onResponderRelease={() => {
+                  void releaseCell(cell);
+                }}
+                onResponderTerminate={() => {
+                  void releaseCell(cell);
+                }}
               >
                 <Text style={styles.cellText}>{cell.label}</Text>
-              </Pressable>
+              </View>
             ) : (
               <View
                 key={`e-${idx}`}
@@ -146,9 +248,9 @@ export function OperatorScreen({ token }: { token: string }) {
               />
             );
           })}
-      </AnimatedView>
+      </View>
       <Text style={styles.hint}>
-        Hold motion cells for deadman. Release to stop.
+        {t('holdHint')}
       </Text>
     </ScrollView>
   );

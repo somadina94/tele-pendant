@@ -192,24 +192,6 @@ describe('OperatorPage', () => {
         ...layout.background,
         imageUrl: 'https://example.com/bay.png',
       },
-      cells: [
-        {
-          ...layout.cells[0],
-          feedbackRegister: {
-            id: 'fb',
-            name: 'coil.eStop',
-            address: 11,
-            kind: 'coil',
-          },
-          statusRegister: {
-            id: 'st',
-            name: 'discrete.fault',
-            address: 1,
-            kind: 'discrete',
-          },
-        },
-        layout.cells[1],
-      ],
     });
     vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
       if (String(path).includes('/hmi/cells/')) {
@@ -219,26 +201,14 @@ describe('OperatorPage', () => {
     });
     renderWithProviders(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
-    const tagsHandler = socket.on.mock.calls.find(
-      (c) => c[0] === 'tags.update',
-    )?.[1] as (p: unknown) => void;
-    tagsHandler({
-      hoistHeightMm: 100,
-      loadKg: 5,
-      speedPct: 1,
-      motorRunning: false,
-      fault: false,
-      commsOk: true,
-      values: { 'coil.eStop': true, 'discrete.fault': false },
-      at: '',
-    });
-    expect(await screen.findByText('true')).toBeInTheDocument();
-    expect(screen.getByText('false')).toBeInTheDocument();
+    expect(hoist).toHaveTextContent('Hoist Up');
+    expect(hoist).not.toHaveTextContent('IDLE');
+    const photo = screen.getByRole('img', { name: 'Plant background' });
+    expect(photo).toHaveAttribute('src', 'https://example.com/bay.png');
+    fireEvent.error(photo);
     expect(
-      screen.getByRole('heading', { name: 'Bay' }).parentElement,
-    ).toHaveStyle({
-      backgroundImage: 'url(https://example.com/bay.png)',
-    });
+      screen.queryByRole('img', { name: 'Plant background' }),
+    ).not.toBeInTheDocument();
     fireEvent.pointerDown(hoist);
     expect(await screen.findByText('blocked')).toBeInTheDocument();
     await waitFor(() =>

@@ -1,3 +1,4 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AlarmEngineService } from './alarm-engine.service';
 
 describe('AlarmEngineService', () => {
@@ -15,6 +16,8 @@ describe('AlarmEngineService', () => {
     ]),
     save: jest.fn().mockImplementation(async (x) => x),
     create: jest.fn((x) => x),
+    findOneBy: jest.fn(),
+    remove: jest.fn().mockImplementation(async (x) => x),
   };
   const events = {
     find: jest.fn().mockResolvedValue([]),
@@ -27,6 +30,7 @@ describe('AlarmEngineService', () => {
     findOne: jest.fn().mockResolvedValue(null),
     save: jest.fn().mockImplementation(async (x) => ({ id: 'r1', ...x })),
     create: jest.fn((x) => x),
+    findOneBy: jest.fn(),
   };
   const driver = {
     isConnected: jest.fn().mockReturnValue(true),
@@ -217,5 +221,89 @@ describe('AlarmEngineService', () => {
     expect(driver.readHoldingRegisters).toHaveBeenCalled();
     expect(driver.readInputRegisters).toHaveBeenCalled();
     expect(driver.readDiscreteInputs).toHaveBeenCalled();
+  });
+
+  it('creates, updates, and deletes alarm definitions', async () => {
+    await expect(
+      service.createDefinition({ name: '  ', registerId: 'r' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createDefinition({
+        name: 'High',
+        registerId: 'r',
+        compareOp: 'nope' as 'eq',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    registers.findOneBy.mockResolvedValue(null);
+    await expect(
+      service.createDefinition({ name: 'High', registerId: 'missing' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    registers.findOneBy.mockResolvedValue({ id: 'r', kind: 'holding' });
+    await service.createDefinition({ name: 'Plain', registerId: 'r' });
+    const created = await service.createDefinition({
+      name: ' High ',
+      registerId: 'r',
+      severity: '  ',
+      threshold: Number.NaN,
+      enabled: false,
+    });
+    expect(created.severity).toBe('warning');
+    expect(created.enabled).toBe(false);
+    expect(created.threshold).toBe(1);
+    const named = await service.createDefinition({
+      name: 'Load',
+      registerId: 'r',
+      compareOp: 'gt',
+      threshold: 50,
+      severity: 'critical',
+      enabled: true,
+    });
+    expect(named.compareOp).toBe('gt');
+
+    definitions.findOneBy.mockResolvedValue(null);
+    await expect(
+      service.updateDefinition('missing', {}),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.deleteDefinition('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    const row = {
+      id: 'd2',
+      name: 'Load',
+      severity: 'warning',
+      compareOp: 'eq' as const,
+      threshold: 1,
+      enabled: true,
+      register: { id: 'r' },
+    };
+    definitions.findOneBy.mockResolvedValue(row);
+    await service.updateDefinition('d2', {});
+    await expect(
+      service.updateDefinition('d2', { name: '  ' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.updateDefinition('d2', { compareOp: 'bad' as 'eq' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    registers.findOneBy.mockResolvedValue(null);
+    await expect(
+      service.updateDefinition('d2', { registerId: 'missing' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    registers.findOneBy.mockResolvedValue({ id: 'r2' });
+    const updated = await service.updateDefinition('d2', {
+      name: ' Load ',
+      severity: '',
+      compareOp: 'lt',
+      threshold: Number.NaN,
+      enabled: false,
+      registerId: 'r2',
+    });
+    expect(updated.name).toBe('Load');
+    expect(updated.severity).toBe('warning');
+    expect(updated.enabled).toBe(false);
+    await service.updateDefinition('d2', { threshold: 8, severity: 'info' });
+    expect(row.threshold).toBe(8);
+    await expect(service.listDefinitions()).resolves.toBeDefined();
+    await expect(service.deleteDefinition('d2')).resolves.toEqual({ ok: true });
   });
 });

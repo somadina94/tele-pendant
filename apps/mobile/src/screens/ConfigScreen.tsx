@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, Text } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiDelete, apiGet, apiPatch, apiPost } from '../api';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../api';
 import type {
   Cell,
   Layout,
@@ -9,6 +9,7 @@ import type {
   PlcConnection,
   RegisterRef,
 } from '../types';
+import { useLocale } from '../locale';
 import { Field, styles } from '../ui';
 
 function noteOf(err: unknown): string {
@@ -16,6 +17,7 @@ function noteOf(err: unknown): string {
 }
 
 export function ConfigScreen({ token }: { token: string }) {
+  const { t } = useLocale();
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState<Record<string, string>>({});
   const layoutQuery = useQuery({
@@ -43,7 +45,7 @@ export function ConfigScreen({ token }: { token: string }) {
         These fields are saved in SQLite. Turn on Use this PLC and press Save to
         connect. Each register address is the Modbus number the buttons use.
       </Text>
-      <Text style={styles.section}>PLC connections</Text>
+      <Text style={styles.section}>{t('plcConnections')}</Text>
       {(connections.data ?? []).map((row) => (
         <PlcForm
           key={row.id}
@@ -76,15 +78,15 @@ export function ConfigScreen({ token }: { token: string }) {
           }
         }}
       />
-      <Text style={styles.section}>Register maps</Text>
+      <Text style={styles.section}>{t('registerMaps')}</Text>
       {registers.map((row) => (
         <RegisterForm
           key={row.id}
           row={row}
           note={notes[row.id]}
-          onSave={async (address) => {
+          onSave={async (value) => {
             try {
-              await apiPatch(`/hmi/registers/${row.id}`, { address }, token);
+              await apiPatch(`/hmi/registers/${row.id}`, value, token);
               await refreshLayout();
               remember(row.id, `Saved ${row.name}.`);
             } catch (err) {
@@ -93,7 +95,7 @@ export function ConfigScreen({ token }: { token: string }) {
           }}
         />
       ))}
-      <Text style={styles.section}>Cells (3 PLC addresses each)</Text>
+      <Text style={styles.section}>{t('cellsTitle')}</Text>
       {(layout?.cells ?? []).map((cell) => (
         <CellForm
           key={cell.id}
@@ -135,7 +137,7 @@ export function ConfigScreen({ token }: { token: string }) {
           }
         }}
       />
-      <Text style={styles.section}>Live labels</Text>
+      <Text style={styles.section}>{t('liveLabels')}</Text>
       {(layout?.overlays ?? []).map((overlay) => (
         <OverlayForm
           key={overlay.id}
@@ -176,7 +178,7 @@ export function ConfigScreen({ token }: { token: string }) {
           }
         }}
       />
-      <Text style={styles.section}>Background</Text>
+      <Text style={styles.section}>{t('background')}</Text>
       {layout?.background ? (
         <BackgroundForm
           name={layout.background.name}
@@ -196,6 +198,8 @@ export function ConfigScreen({ token }: { token: string }) {
       ) : (
         <Text style={styles.hint}>No active background</Text>
       )}
+      <AlarmBlock token={token} registers={registers} />
+      <SafetyBlock token={token} registers={registers} />
     </ScrollView>
   );
 }
@@ -213,6 +217,7 @@ function PlcForm({
     port: number;
     unitId: number;
     enabled: boolean;
+    protocol: 'modbus-tcp' | 'opcua';
   }) => Promise<void>;
 }) {
   const [label, setLabel] = useState(row?.label ?? '');
@@ -220,6 +225,9 @@ function PlcForm({
   const [port, setPort] = useState(String(row?.port ?? 502));
   const [unitId, setUnitId] = useState(String(row?.unitId ?? 1));
   const [enabled, setEnabled] = useState(row?.enabled ?? true);
+  const [protocol, setProtocol] = useState<'modbus-tcp' | 'opcua'>(
+    row?.protocol ?? 'modbus-tcp',
+  );
   return (
     <>
       <Field label="Label" value={label} onChangeText={setLabel} />
@@ -230,6 +238,15 @@ function PlcForm({
         <Text style={styles.link}>Use this PLC: {enabled ? 'yes' : 'no'}</Text>
       </Pressable>
       <Pressable
+        onPress={() =>
+          setProtocol((current) =>
+            current === 'opcua' ? 'modbus-tcp' : 'opcua',
+          )
+        }
+      >
+        <Text style={styles.link}>Protocol: {protocol}</Text>
+      </Pressable>
+      <Pressable
         style={styles.btn}
         onPress={() =>
           void onSave({
@@ -238,6 +255,7 @@ function PlcForm({
             port: Number(port),
             unitId: Number(unitId),
             enabled,
+            protocol,
           })
         }
       >
@@ -257,18 +275,34 @@ function RegisterForm({
 }: {
   row: RegisterRef;
   note?: string;
-  onSave: (address: number) => Promise<void>;
+  onSave: (value: {
+    address: number;
+    trended: boolean;
+    nodeId?: string;
+  }) => Promise<void>;
 }) {
   const [address, setAddress] = useState(String(row.address));
+  const [trended, setTrended] = useState(Boolean(row.trended));
+  const [nodeId, setNodeId] = useState(row.nodeId ?? '');
   return (
     <>
       <Text style={styles.label}>
         {row.name} ({row.kind})
       </Text>
       <Field label="Address" value={address} onChangeText={setAddress} />
+      <Field label="OPC UA node id" value={nodeId} onChangeText={setNodeId} />
+      <Pressable onPress={() => setTrended((on) => !on)}>
+        <Text style={styles.link}>Trend: {trended ? 'yes' : 'no'}</Text>
+      </Pressable>
       <Pressable
         style={styles.btn}
-        onPress={() => void onSave(Number(address))}
+        onPress={() =>
+          void onSave({
+            address: Number(address),
+            trended,
+            ...(nodeId ? { nodeId } : {}),
+          })
+        }
       >
         <Text style={styles.btnText}>Save {row.name}</Text>
       </Pressable>
@@ -469,6 +503,160 @@ function BackgroundForm({
         onPress={() => void onSave({ name, cssBackground, imageUrl })}
       >
         <Text style={styles.btnText}>Save background</Text>
+      </Pressable>
+      {note ? <Text style={styles.ok}>{note}</Text> : null}
+    </>
+  );
+}
+
+function AlarmBlock({
+  token,
+  registers,
+}: {
+  token: string;
+  registers: RegisterRef[];
+}) {
+  const { t } = useLocale();
+  const queryClient = useQueryClient();
+  const defs = useQuery({
+    queryKey: ['alarm-definitions', token],
+    queryFn: async () => {
+      const rows = await apiGet<
+        Array<{ id: string; name: string; compareOp: string; threshold: number }>
+      >('/alarms/definitions', token);
+      return Array.isArray(rows) ? rows : [];
+    },
+  });
+  const [name, setName] = useState('');
+  const [registerId, setRegisterId] = useState(registers[0]?.id ?? '');
+  const [threshold, setThreshold] = useState('1');
+  const [note, setNote] = useState('');
+  return (
+    <>
+      <Text style={styles.section}>{t('alarmDefinitions')}</Text>
+      {(defs.data ?? []).length === 0 ? (
+        <Text style={styles.hint}>{t('noAlarmDefs')}</Text>
+      ) : null}
+      {(defs.data ?? []).map((row) => (
+        <Pressable
+          key={row.id}
+          onPress={() =>
+            void apiDelete(`/alarms/definitions/${row.id}`, token).then(() =>
+              queryClient.invalidateQueries({
+                queryKey: ['alarm-definitions', token],
+              }),
+            )
+          }
+        >
+          <Text style={styles.link}>
+            Delete {row.name} ({row.compareOp} {row.threshold})
+          </Text>
+        </Pressable>
+      ))}
+      <Field label="Alarm name" value={name} onChangeText={setName} />
+      <Field label="Register id" value={registerId} onChangeText={setRegisterId} />
+      <Field label="Threshold" value={threshold} onChangeText={setThreshold} />
+      <Pressable
+        style={styles.btn}
+        onPress={() =>
+          void apiPost(
+            '/alarms/definitions',
+            {
+              name,
+              registerId,
+              compareOp: 'gt',
+              threshold: Number(threshold),
+              severity: 'warning',
+              enabled: true,
+            },
+            token,
+          )
+            .then(() => {
+              setNote('Saved alarm.');
+              return queryClient.invalidateQueries({
+                queryKey: ['alarm-definitions', token],
+              });
+            })
+            .catch((err: unknown) => setNote(noteOf(err)))
+        }
+      >
+        <Text style={styles.btnText}>Save alarm</Text>
+      </Pressable>
+      {note ? <Text style={styles.ok}>{note}</Text> : null}
+    </>
+  );
+}
+
+function SafetyBlock({
+  token,
+  registers,
+}: {
+  token: string;
+  registers: RegisterRef[];
+}) {
+  const { t } = useLocale();
+  const roles = useQuery({
+    queryKey: ['safety-roles', token],
+    queryFn: () =>
+      apiGet<{
+        eStopRegisterId?: string | null;
+        deadmanRegisterId?: string | null;
+        heartbeatRegisterId?: string | null;
+        safeStateRegisterId?: string | null;
+      }>('/safety/roles', token),
+  });
+  const [eStop, setEStop] = useState('');
+  const [deadman, setDeadman] = useState('');
+  const [heartbeat, setHeartbeat] = useState('');
+  const [safeState, setSafe] = useState('');
+  const [note, setNote] = useState('');
+  const current = roles.data;
+  return (
+    <>
+      <Text style={styles.section}>{t('safetyRoles')}</Text>
+      <Text style={styles.hint}>
+        Saved e-stop {current?.eStopRegisterId ?? 'unset'}
+      </Text>
+      <Field
+        label="E-stop register"
+        value={eStop || current?.eStopRegisterId || ''}
+        onChangeText={setEStop}
+      />
+      <Field
+        label="Deadman register"
+        value={deadman || current?.deadmanRegisterId || ''}
+        onChangeText={setDeadman}
+      />
+      <Field
+        label="Heartbeat register"
+        value={heartbeat || current?.heartbeatRegisterId || ''}
+        onChangeText={setHeartbeat}
+      />
+      <Field
+        label="Safe-state register"
+        value={safeState || current?.safeStateRegisterId || ''}
+        onChangeText={setSafe}
+      />
+      <Text style={styles.hint}>{registers.length} registers available</Text>
+      <Pressable
+        style={styles.btn}
+        onPress={() =>
+          void apiPut(
+            '/safety/roles',
+            {
+              eStopRegisterId: eStop || current?.eStopRegisterId || '',
+              deadmanRegisterId: deadman || current?.deadmanRegisterId || '',
+              heartbeatRegisterId:
+                heartbeat || current?.heartbeatRegisterId || '',
+              safeStateRegisterId: safeState || current?.safeStateRegisterId || '',
+            },
+            token,
+          )
+            .then(() => setNote('Saved safety roles.'))
+            .catch((err: unknown) => setNote(noteOf(err)))
+        }
+      >
+        <Text style={styles.btnText}>Save safety roles</Text>
       </Pressable>
       {note ? <Text style={styles.ok}>{note}</Text> : null}
     </>

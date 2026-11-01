@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { apiGet } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 interface AuditRow {
   id: string;
@@ -12,6 +13,7 @@ interface AuditRow {
 }
 
 export function AuditPage() {
+  const { t } = useT();
   const audit = useQuery({
     queryKey: ['audit'],
     queryFn: () => apiGet<AuditRow[]>('/audit'),
@@ -20,12 +22,12 @@ export function AuditPage() {
   return (
     <main className="shell admin">
       <header className="op-header">
-        <h1>Audit</h1>
-        <Link to="/operator">Operator</Link>
+        <h1>{t('auditTitle')}</h1>
+        <Link to="/operator">{t('operator')}</Link>
       </header>
       {audit.isError ? (
         <p className="error">
-          {audit.error instanceof Error ? audit.error.message : 'Audit failed'}
+          {audit.error instanceof Error ? audit.error.message : t('auditFailed')}
         </p>
       ) : null}
       <ul className="list">

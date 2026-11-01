@@ -1,4 +1,11 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DEMO_CRANE_MAP } from '@tele-pendant/modbus-core';
 import { Repository } from 'typeorm';
@@ -169,5 +176,85 @@ export class AlarmEngineService implements OnModuleInit {
     }
     const v = await driver.readInputRegisters(reg.address, 1);
     return v[0] ?? 0;
+  }
+
+  async listDefinitions() {
+    return this.definitions.find({ order: { name: 'ASC' } });
+  }
+
+  async createDefinition(input: {
+    name: string;
+    registerId: string;
+    compareOp?: AlarmDefinition['compareOp'];
+    threshold?: number;
+    severity?: string;
+    enabled?: boolean;
+  }) {
+    const name = input.name.trim();
+    if (!name) throw new BadRequestException('Name is required');
+    const compareOp = input.compareOp ?? 'eq';
+    if (!['eq', 'gt', 'lt', 'neq'].includes(compareOp)) {
+      throw new BadRequestException('Operator must be eq, gt, lt, or neq');
+    }
+    const register = await this.registers.findOneBy({ id: input.registerId });
+    if (!register) throw new NotFoundException('Register not found');
+    return this.definitions.save(
+      this.definitions.create({
+        name,
+        severity: input.severity?.trim() || 'warning',
+        compareOp,
+        threshold: Number.isFinite(input.threshold) ? Number(input.threshold) : 1,
+        enabled: input.enabled !== false,
+        register,
+      }),
+    );
+  }
+
+  async updateDefinition(
+    id: string,
+    input: {
+      name?: string;
+      registerId?: string;
+      compareOp?: AlarmDefinition['compareOp'];
+      threshold?: number;
+      severity?: string;
+      enabled?: boolean;
+    },
+  ) {
+    const row = await this.definitions.findOneBy({ id });
+    if (!row) throw new NotFoundException('Alarm definition not found');
+    if (input.name !== undefined) {
+      const name = input.name.trim();
+      if (!name) throw new BadRequestException('Name is required');
+      row.name = name;
+    }
+    if (input.severity !== undefined) {
+      row.severity = input.severity.trim() || 'warning';
+    }
+    if (input.compareOp !== undefined) {
+      if (!['eq', 'gt', 'lt', 'neq'].includes(input.compareOp)) {
+        throw new BadRequestException('Operator must be eq, gt, lt, or neq');
+      }
+      row.compareOp = input.compareOp;
+    }
+    if (input.threshold !== undefined) {
+      const threshold = Number(input.threshold);
+      if (Number.isFinite(threshold)) row.threshold = threshold;
+    }
+    if (input.enabled !== undefined) row.enabled = input.enabled;
+    if (input.registerId !== undefined) {
+      const register = await this.registers.findOneBy({ id: input.registerId });
+      if (!register) throw new NotFoundException('Register not found');
+      row.register = register;
+    }
+    return this.definitions.save(row);
+  }
+
+  async deleteDefinition(id: string) {
+    const row = await this.definitions.findOneBy({ id });
+    if (!row) throw new NotFoundException('Alarm definition not found');
+    await this.definitions.remove(row);
+    this.activeByDef.delete(id);
+    return { ok: true as const };
   }
 }
