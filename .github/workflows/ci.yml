@@ -55,6 +55,7 @@ jobs:
         run: |
           pnpm --filter @tele-pendant/shared build
           pnpm --filter @tele-pendant/modbus-core build
+          pnpm --filter @tele-pendant/plc-driver build
           pnpm --filter @tele-pendant/api build
           pnpm --filter @tele-pendant/web build
 
