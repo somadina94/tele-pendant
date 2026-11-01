@@ -175,6 +175,6 @@ jobs:
             export TELE_PENDANT_API_IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-api:latest"
             export TELE_PENDANT_SIM_IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-sim:latest"
             export TELE_PENDANT_WEB_IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-web:latest"
-            export PORT=3010
-            export WEB_PORT=8080
+            # Host ports come from the server .env (PORT / WEB_PORT). Do not export
+            # them here — an exported value wins over .env inside deploy.sh.
             ./deploy.sh
