@@ -22,8 +22,7 @@ export function readLocale(): Locale {
     pinned = false;
     saved = null;
   }
-  const device =
-    typeof navigator === 'undefined' ? 'en' : navigator.language;
+  const device = typeof navigator === 'undefined' ? 'en' : navigator.language;
   return resolveLocale({ pinned, saved, device });
 }
 

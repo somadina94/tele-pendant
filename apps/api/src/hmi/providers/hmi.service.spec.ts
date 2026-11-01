@@ -334,9 +334,9 @@ describe('HmiService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     cells.findOneBy.mockResolvedValue(null);
-    await expect(service.updateCell('missing', cellInput)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.updateCell('missing', cellInput),
+    ).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.deleteCell('missing')).rejects.toBeInstanceOf(
       NotFoundException,
     );

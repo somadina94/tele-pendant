@@ -1,4 +1,12 @@
-import { Inject, Body, Controller, Get, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  Inject,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiAuth } from '../common/swagger/api-auth.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -27,7 +35,9 @@ export class SafetyController {
 
   @Get('roles')
   @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Registers bound to E-stop, deadman, heartbeat, safe-state' })
+  @ApiOperation({
+    summary: 'Registers bound to E-stop, deadman, heartbeat, safe-state',
+  })
   roles() {
     return this.safetyState.getRoles();
   }

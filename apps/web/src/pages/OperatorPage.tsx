@@ -152,9 +152,7 @@ export function OperatorPage() {
 
       <div className={`banner mode-${mode}`}>
         {t('safety')}: <strong>{mode}</strong>
-        {safety?.deadmanActive || holdingCellId
-          ? ` · ${t('deadmanHold')}`
-          : ''}
+        {safety?.deadmanActive || holdingCellId ? ` · ${t('deadmanHold')}` : ''}
         {safety?.eStopActive ? ` · ${t('estop')}` : ''}
       </div>
 
@@ -252,9 +250,7 @@ export function OperatorPage() {
               )}
             </div>
           )}
-          <p className="hint">
-            {t('holdHint')}
-          </p>
+          <p className="hint">{t('holdHint')}</p>
         </section>
       </div>
     </div>

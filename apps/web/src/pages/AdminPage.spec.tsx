@@ -528,7 +528,9 @@ describe('AdminPage', () => {
       target: { value: 'ns=1;s=Moved' },
     });
     fireEvent.click(screen.getByLabelText('holding.height trend'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save holding.height' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save holding.height' }),
+    );
     await screen.findByText('Saved holding.height.');
     expect(patch).toHaveBeenCalledWith(
       '/hmi/registers/r4',

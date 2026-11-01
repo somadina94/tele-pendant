@@ -1,4 +1,9 @@
-import type { ModbusShapedDriver, PlcConnectOptions, PlcPoint, PlcPort } from './port';
+import type {
+  ModbusShapedDriver,
+  PlcConnectOptions,
+  PlcPoint,
+  PlcPort,
+} from './port';
 
 export interface OpcSession {
   read(nodeId: string): Promise<unknown>;
@@ -43,7 +48,8 @@ export class OpcUaPort implements PlcPort {
 
   async read(point: PlcPoint): Promise<number | boolean> {
     const value = await this.sessionOrThrow().read(this.nodeId(point));
-    if (point.kind === 'coil' || point.kind === 'discrete') return Boolean(value);
+    if (point.kind === 'coil' || point.kind === 'discrete')
+      return Boolean(value);
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : 0;
   }
@@ -78,7 +84,10 @@ export class OpcUaPort implements PlcPort {
       },
       writeRegisters: async (address, values) => {
         for (let i = 0; i < values.length; i++) {
-          await this.write({ kind: 'holding', address: address + i }, values[i]);
+          await this.write(
+            { kind: 'holding', address: address + i },
+            values[i],
+          );
         }
       },
     };
@@ -112,7 +121,8 @@ export class OpcUaPort implements PlcPort {
   private nodeId(point: PlcPoint): string {
     if (point.nodeId) return point.nodeId;
     const hit = this.points.find(
-      (row) => row.kind === point.kind && row.address === point.address && row.nodeId,
+      (row) =>
+        row.kind === point.kind && row.address === point.address && row.nodeId,
     );
     if (!hit?.nodeId) {
       throw new Error(`No OPC UA node for ${point.kind} ${point.address}`);

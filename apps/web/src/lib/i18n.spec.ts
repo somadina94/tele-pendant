@@ -5,10 +5,7 @@ describe('i18n', () => {
   it('follows the browser until a locale is pinned', () => {
     localStorage.clear();
     expect(readLocale()).toBe('en');
-    localStorage.setItem(
-      'user',
-      JSON.stringify({ locale: 'es' }),
-    );
+    localStorage.setItem('user', JSON.stringify({ locale: 'es' }));
     expect(readLocale()).toBe('en');
     localStorage.setItem('localePinned', '1');
     localStorage.removeItem('localeOverride');

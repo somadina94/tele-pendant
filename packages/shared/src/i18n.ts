@@ -21,9 +21,7 @@ export function resolveLocale(options: {
 }): Locale {
   if (options.pinned) {
     return (
-      normalizeLocale(options.saved) ??
-      normalizeLocale(options.device) ??
-      'en'
+      normalizeLocale(options.saved) ?? normalizeLocale(options.device) ?? 'en'
     );
   }
   return (

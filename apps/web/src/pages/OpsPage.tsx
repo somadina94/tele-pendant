@@ -158,8 +158,18 @@ function TrendChart({ seriesKey }: { seriesKey: string }) {
         {seriesKey}: {last}
         {unit}
       </figcaption>
-      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="80" role="img">
-        <polyline fill="none" stroke="#7dcea0" strokeWidth="2" points={coords} />
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        height="80"
+        role="img"
+      >
+        <polyline
+          fill="none"
+          stroke="#7dcea0"
+          strokeWidth="2"
+          points={coords}
+        />
       </svg>
     </figure>
   );

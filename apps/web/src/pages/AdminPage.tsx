@@ -309,10 +309,7 @@ export function AdminPage() {
       </section>
 
       <AlarmSection registers={registers} definitions={alarmDefs.data ?? []} />
-      <SafetySection
-        registers={registers}
-        roles={safetyRoles.data ?? null}
-      />
+      <SafetySection registers={registers} roles={safetyRoles.data ?? null} />
     </main>
   );
 }
@@ -454,8 +451,7 @@ function SafetySection({
   const { t } = useT();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<SafetyRoleRow>({});
-  const eStopRegisterId =
-    draft.eStopRegisterId ?? roles?.eStopRegisterId ?? '';
+  const eStopRegisterId = draft.eStopRegisterId ?? roles?.eStopRegisterId ?? '';
   const deadmanRegisterId =
     draft.deadmanRegisterId ?? roles?.deadmanRegisterId ?? '';
   const heartbeatRegisterId =
@@ -555,7 +551,6 @@ function RoleSelect({
   );
 }
 
-
 function ConnectionEditor({
   noteKey,
   initial,
@@ -647,7 +642,9 @@ function ConnectionEditor({
             aria-label={`${noteKey} protocol`}
             value={protocol}
             onChange={(event) =>
-              setProtocol(event.target.value === 'opcua' ? 'opcua' : 'modbus-tcp')
+              setProtocol(
+                event.target.value === 'opcua' ? 'opcua' : 'modbus-tcp',
+              )
             }
           >
             <option value="modbus-tcp">Modbus TCP</option>

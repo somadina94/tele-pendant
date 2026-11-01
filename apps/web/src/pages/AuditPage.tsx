@@ -27,7 +27,9 @@ export function AuditPage() {
       </header>
       {audit.isError ? (
         <p className="error">
-          {audit.error instanceof Error ? audit.error.message : t('auditFailed')}
+          {audit.error instanceof Error
+            ? audit.error.message
+            : t('auditFailed')}
         </p>
       ) : null}
       <ul className="list">

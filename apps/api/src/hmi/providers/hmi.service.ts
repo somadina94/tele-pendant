@@ -232,7 +232,10 @@ export class HmiService {
     return { ok: true };
   }
 
-  async createOverlay(input: OverlayInput, actor?: Actor): Promise<OverlayLabel> {
+  async createOverlay(
+    input: OverlayInput,
+    actor?: Actor,
+  ): Promise<OverlayLabel> {
     const background = await this.activeBackground();
     const fields = await this.overlayFields(input);
     const saved = await this.overlays.save(

@@ -25,7 +25,9 @@ export function AuditScreen({ token }: { token: string }) {
       <Text style={styles.section}>{t('auditTitle')}</Text>
       {audit.isError ? (
         <Text style={styles.error}>
-          {audit.error instanceof Error ? audit.error.message : t('auditFailed')}
+          {audit.error instanceof Error
+            ? audit.error.message
+            : t('auditFailed')}
         </Text>
       ) : null}
       {(audit.data ?? []).map((row) => (

@@ -253,11 +253,17 @@ describe('AuthService', () => {
   });
 
   it('pins en or es and rejects anything else', async () => {
-    usersRepository.findOneByOrFail.mockResolvedValue({ ...user, locale: 'en' });
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      locale: 'en',
+    });
     const spanish = await service.updateLocale(user.id, 'es-MX');
     expect(spanish.locale).toBe('es');
     expect(spanish.localePinned).toBe(true);
-    usersRepository.findOneByOrFail.mockResolvedValue({ ...user, locale: 'es' });
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      locale: 'es',
+    });
     const english = await service.updateLocale(user.id, 'EN');
     expect(english.locale).toBe('en');
     await expect(service.updateLocale(user.id, 'fr')).rejects.toBeInstanceOf(

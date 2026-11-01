@@ -2,7 +2,9 @@ import { OpcUaPort } from './opcua-port';
 
 describe('OpcUaPort', () => {
   const session = {
-    read: jest.fn(async (nodeId: string) => (nodeId.endsWith('Up') ? true : 12)),
+    read: jest.fn(async (nodeId: string) =>
+      nodeId.endsWith('Up') ? true : 12,
+    ),
     write: jest.fn(async () => undefined),
     close: jest.fn(async () => undefined),
   };

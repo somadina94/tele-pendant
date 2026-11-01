@@ -203,7 +203,9 @@ export class AlarmEngineService implements OnModuleInit {
         name,
         severity: input.severity?.trim() || 'warning',
         compareOp,
-        threshold: Number.isFinite(input.threshold) ? Number(input.threshold) : 1,
+        threshold: Number.isFinite(input.threshold)
+          ? Number(input.threshold)
+          : 1,
         enabled: input.enabled !== false,
         register,
       }),

@@ -1,9 +1,4 @@
-import {
-  DataType,
-  OPCUAServer,
-  StatusCodes,
-  Variant,
-} from 'node-opcua';
+import { DataType, OPCUAServer, StatusCodes, Variant } from 'node-opcua';
 
 const port = Number(process.env.OPCUA_PORT ?? 4840);
 
@@ -33,7 +28,11 @@ async function main(): Promise<void> {
   const server = new OPCUAServer({
     port,
     resourcePath: '/tele-pendant',
-    buildInfo: { productName: 'tele-pendant-opcua-sim', buildNumber: '1', buildDate: new Date() },
+    buildInfo: {
+      productName: 'tele-pendant-opcua-sim',
+      buildNumber: '1',
+      buildDate: new Date(),
+    },
   });
   await server.initialize();
   const addressSpace = server.engine.addressSpace;
@@ -51,7 +50,8 @@ async function main(): Promise<void> {
       nodeId: `s=${name}`,
       dataType: 'Boolean',
       value: {
-        get: () => new Variant({ dataType: DataType.Boolean, value: coils[name] }),
+        get: () =>
+          new Variant({ dataType: DataType.Boolean, value: coils[name] }),
         set: (variant: Variant) => {
           coils[name] = Boolean(variant.value);
           return StatusCodes.Good;
@@ -67,7 +67,8 @@ async function main(): Promise<void> {
       nodeId: `s=${name}`,
       dataType: 'Double',
       value: {
-        get: () => new Variant({ dataType: DataType.Double, value: numbers[name] }),
+        get: () =>
+          new Variant({ dataType: DataType.Double, value: numbers[name] }),
         set: (variant: Variant) => {
           numbers[name] = Number(variant.value) || 0;
           return StatusCodes.Good;
@@ -78,8 +79,10 @@ async function main(): Promise<void> {
 
   setInterval(() => {
     if (coils.EStop || !coils.Deadman) return;
-    if (coils.HoistUp) numbers.HoistHeightMm = Math.min(5000, numbers.HoistHeightMm + 25);
-    if (coils.HoistDown) numbers.HoistHeightMm = Math.max(0, numbers.HoistHeightMm - 25);
+    if (coils.HoistUp)
+      numbers.HoistHeightMm = Math.min(5000, numbers.HoistHeightMm + 25);
+    if (coils.HoistDown)
+      numbers.HoistHeightMm = Math.max(0, numbers.HoistHeightMm - 25);
     numbers.LoadKg = coils.HoistUp || coils.HoistDown ? 120 : 0;
   }, 250);
 

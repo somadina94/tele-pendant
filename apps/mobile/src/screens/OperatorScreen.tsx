@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, ScrollView, Text, View, type DimensionValue } from 'react-native';
+import {
+  Image,
+  ScrollView,
+  Text,
+  View,
+  type DimensionValue,
+} from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { formatOverlay, tagValueForRegister, type TagSnapshot } from '@tele-pendant/shared';
+import {
+  formatOverlay,
+  tagValueForRegister,
+  type TagSnapshot,
+} from '@tele-pendant/shared';
 import { io, Socket } from 'socket.io-client';
 import { apiGet, apiPost, getApiBase } from '../api';
 import type { Cell, Layout } from '../types';
@@ -39,10 +49,13 @@ export function OperatorScreen({ token }: { token: string }) {
       });
       socketRef.current = socket;
       socket.on('safety.state', (s: { mode: string }) => setSafetyMode(s.mode));
-      socket.on('tags.update', (payload: TagSnapshot & { hoistHeightMm: number }) => {
-        setHeight(payload.hoistHeightMm);
-        setTags(payload);
-      });
+      socket.on(
+        'tags.update',
+        (payload: TagSnapshot & { hoistHeightMm: number }) => {
+          setHeight(payload.hoistHeightMm);
+          setTags(payload);
+        },
+      );
     })();
     return () => {
       closed = true;
@@ -249,9 +262,7 @@ export function OperatorScreen({ token }: { token: string }) {
             );
           })}
       </View>
-      <Text style={styles.hint}>
-        {t('holdHint')}
-      </Text>
+      <Text style={styles.hint}>{t('holdHint')}</Text>
     </ScrollView>
   );
 }

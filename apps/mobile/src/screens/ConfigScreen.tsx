@@ -522,7 +522,12 @@ function AlarmBlock({
     queryKey: ['alarm-definitions', token],
     queryFn: async () => {
       const rows = await apiGet<
-        Array<{ id: string; name: string; compareOp: string; threshold: number }>
+        Array<{
+          id: string;
+          name: string;
+          compareOp: string;
+          threshold: number;
+        }>
       >('/alarms/definitions', token);
       return Array.isArray(rows) ? rows : [];
     },
@@ -554,7 +559,11 @@ function AlarmBlock({
         </Pressable>
       ))}
       <Field label="Alarm name" value={name} onChangeText={setName} />
-      <Field label="Register id" value={registerId} onChangeText={setRegisterId} />
+      <Field
+        label="Register id"
+        value={registerId}
+        onChangeText={setRegisterId}
+      />
       <Field label="Threshold" value={threshold} onChangeText={setThreshold} />
       <Pressable
         style={styles.btn}
@@ -648,7 +657,8 @@ function SafetyBlock({
               deadmanRegisterId: deadman || current?.deadmanRegisterId || '',
               heartbeatRegisterId:
                 heartbeat || current?.heartbeatRegisterId || '',
-              safeStateRegisterId: safeState || current?.safeStateRegisterId || '',
+              safeStateRegisterId:
+                safeState || current?.safeStateRegisterId || '',
             },
             token,
           )

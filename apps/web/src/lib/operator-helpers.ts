@@ -1,4 +1,1 @@
-export {
-  formatOverlay,
-  tagValueForRegister,
-} from '@tele-pendant/shared';
+export { formatOverlay, tagValueForRegister } from '@tele-pendant/shared';

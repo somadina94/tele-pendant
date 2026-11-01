@@ -27,16 +27,16 @@ function normalize(transcript: string): string[] {
 function levenshtein(a: string, b: string): number {
   const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
-    let diag = prev[0]!;
+    let diag = prev[0];
     prev[0] = i;
     for (let j = 1; j <= b.length; j++) {
-      const next = prev[j]!;
+      const next = prev[j];
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      prev[j] = Math.min(prev[j - 1]! + 1, prev[j]! + 1, diag + cost);
+      prev[j] = Math.min(prev[j - 1] + 1, prev[j] + 1, diag + cost);
       diag = next;
     }
   }
-  return prev[b.length]!;
+  return prev[b.length];
 }
 
 function near(token: string, words: Set<string>, maxDist: number): boolean {

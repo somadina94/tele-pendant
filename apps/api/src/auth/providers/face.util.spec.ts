@@ -77,7 +77,9 @@ describe('face.util', () => {
     const desc = descriptorFromImageDataUrl(url);
     const again = descriptorFromImageDataUrl(url.split(',')[1]);
     expect(matchScore(desc, again)).toBe(1);
-    expect(matchScore(desc, again)).toBeGreaterThanOrEqual(FACE_MATCH_THRESHOLD);
+    expect(matchScore(desc, again)).toBeGreaterThanOrEqual(
+      FACE_MATCH_THRESHOLD,
+    );
     const other = descriptorFromImageDataUrl(dataUrl(ringFace()));
     expect(matchScore(desc, other)).toBeLessThan(FACE_MATCH_THRESHOLD);
     expect(serializeDescriptor(desc)).toContain('[');
@@ -116,9 +118,9 @@ describe('face.util', () => {
     expect(() => descriptorFromImageDataUrl(dataUrl(speck()))).toThrow(
       /No face detected/,
     );
-    expect(() => descriptorFromImageDataUrl(dataUrl(paint(32, 32, () => dark)))).toThrow(
-      /No face detected/,
-    );
+    expect(() =>
+      descriptorFromImageDataUrl(dataUrl(paint(32, 32, () => dark))),
+    ).toThrow(/No face detected/);
   });
 
   it('rejects bad templates and scores an empty descriptor as no match', () => {

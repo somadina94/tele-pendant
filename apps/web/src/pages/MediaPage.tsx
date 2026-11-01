@@ -122,7 +122,10 @@ export function MediaPage() {
     await resolveCode(value);
   }
 
-  async function commandDirection(direction: 'up' | 'down', heard = direction) {
+  async function commandDirection(
+    direction: 'up' | 'down',
+    heard: string = direction,
+  ) {
     setVoiceLog(`Heard: ${heard}`);
     try {
       const res = await apiPost<{
@@ -150,8 +153,9 @@ export function MediaPage() {
     let hit: { word: 'up' | 'down'; phrase: string } | null = null;
     for (const phrase of phrases) {
       const match = phrase.toLowerCase().match(/\b(up|down)\b/);
-      if (match?.[1] === 'up' || match?.[1] === 'down') {
-        hit = { word: match[1], phrase };
+      const word = match?.[1];
+      if (word === 'up' || word === 'down') {
+        hit = { word, phrase };
       }
     }
     return hit;

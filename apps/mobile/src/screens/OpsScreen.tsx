@@ -113,7 +113,13 @@ export function OpsScreen({ token }: { token: string }) {
   );
 }
 
-function TrendChart({ token, seriesKey }: { token: string; seriesKey: string }) {
+function TrendChart({
+  token,
+  seriesKey,
+}: {
+  token: string;
+  seriesKey: string;
+}) {
   const { t } = useLocale();
   const query = useQuery({
     queryKey: ['trend', token, seriesKey],
@@ -150,7 +156,12 @@ function TrendChart({ token, seriesKey }: { token: string; seriesKey: string }) 
         {seriesKey}: {values[values.length - 1]}
       </Text>
       <Svg width="100%" height={80} viewBox="0 0 280 80">
-        <Polyline points={coords} fill="none" stroke="#7dcea0" strokeWidth={2} />
+        <Polyline
+          points={coords}
+          fill="none"
+          stroke="#7dcea0"
+          strokeWidth={2}
+        />
       </Svg>
     </>
   );

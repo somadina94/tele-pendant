@@ -102,7 +102,9 @@ describe('api helpers', () => {
     await expect(apiPatch('/hmi/registers/r1')).resolves.toEqual({ ok: true });
     expect(fetchMock.mock.calls[1][1].body).toBeUndefined();
 
-    await expect(apiPut('/safety/roles', { eStopRegisterId: 'r1' })).resolves.toEqual({
+    await expect(
+      apiPut('/safety/roles', { eStopRegisterId: 'r1' }),
+    ).resolves.toEqual({
       ok: true,
     });
     expect(fetchMock.mock.calls[2][1].method).toBe('PUT');

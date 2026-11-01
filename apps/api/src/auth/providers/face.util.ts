@@ -69,7 +69,10 @@ export function serializeDescriptor(desc: number[]): string {
 
 export function parseDescriptor(raw: string): number[] {
   const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'number')) {
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every((item) => typeof item === 'number')
+  ) {
     throw new Error('Invalid face template');
   }
   return parsed;
@@ -101,7 +104,12 @@ function decodeRaster(buf: Buffer): Raster {
   throw new Error('Invalid face image');
 }
 
-function isSkin(image: Raster, x: number, y: number, model: SkinModel): boolean {
+function isSkin(
+  image: Raster,
+  x: number,
+  y: number,
+  model: SkinModel,
+): boolean {
   const i = (y * image.width + x) * 4;
   const r = image.data[i];
   const g = image.data[i + 1];
@@ -141,7 +149,9 @@ function faceBoxes(image: Raster, model: SkinModel): Box[] {
   const skin: boolean[] = [];
   for (let cy = 0; cy < rows; cy++) {
     for (let cx = 0; cx < cols; cx++) {
-      skin.push(cellSkinFraction(image, cx, cy, model) >= model.minSkinFraction);
+      skin.push(
+        cellSkinFraction(image, cx, cy, model) >= model.minSkinFraction,
+      );
     }
   }
   const seen = new Array<boolean>(skin.length).fill(false);
@@ -198,7 +208,10 @@ function embed(image: Raster, box: Box, model: SkinModel): number[] {
       for (let y = sy0; y < sy1; y++) {
         for (let x = sx0; x < sx1; x++) {
           const i = (y * image.width + x) * 4;
-          sum += image.data[i] * 0.3 + image.data[i + 1] * 0.59 + image.data[i + 2] * 0.11;
+          sum +=
+            image.data[i] * 0.3 +
+            image.data[i + 1] * 0.59 +
+            image.data[i + 2] * 0.11;
           count += 1;
         }
       }
