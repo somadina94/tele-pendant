@@ -2,7 +2,7 @@
 
 The fake crane is the **demo-simulator** row (host `modbus-sim` or `127.0.0.1`, port `1502`). The real crane is another row you save on **Config**. Same buttons either way.
 
-1. Sign in as the admin user and open **Config** (http://localhost:8080/admin).
+1. Sign in as the admin user and open **Config** (live https://tele-pendant.jahbyte.com/admin, or local http://localhost:8080/admin).
 2. Under **Add a PLC**, type a label (for example `bay-a`), the PLC IP, port `502`, and the unit id from the PLC program. Leave **Use this PLC** checked. Click **Add PLC**.
 3. **Success:** **Saved and connecting.** Open **Ops**. **PLC connected: true** and the new label. If the red text says the PLC did not connect, the IP or port is wrong and the fake crane is no longer the active row. Fix the host and click **Save** again.
 4. On each **Register maps** row, type the address from the PLC program and click **Save**. The name stays (`coil.eStop`, `holding.hoistHeightMm`, and the rest). Only the number changes. **Success:** **Saved** plus that name.

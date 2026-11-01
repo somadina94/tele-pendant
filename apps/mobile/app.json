@@ -27,7 +27,7 @@
       "fallbackToCacheTimeout": 0
     },
     "extra": {
-      "otaNote": "Point updates.url at http://<api-host>:3010/ota/manifest. The API serves apps/api/ota with no login. Native modules (camera) still need a binary rebuild; JS-only changes are what that folder ships."
+      "otaNote": "Production updates.url: https://api.tele-pendant.jahbyte.com/ota/manifest. Local lab: http://<lan-host>:3010/ota/manifest. The API serves apps/api/ota with no login. Native modules (camera, speech) still need a binary rebuild; JS-only changes are what that folder ships."
     }
   }
 }

@@ -1,5 +1,16 @@
 # Tele-Pendant — Maintenance
 
+## Live checks
+
+| Check | URL |
+| ----- | --- |
+| Web | https://tele-pendant.jahbyte.com |
+| Health | https://api.tele-pendant.jahbyte.com/api/v1/health |
+| Swagger | https://api.tele-pendant.jahbyte.com/api |
+| OTA | https://api.tele-pendant.jahbyte.com/ota/manifest |
+
+`APP_URL=https://api.tele-pendant.jahbyte.com` · `FRONTEND_URL=https://tele-pendant.jahbyte.com`
+
 ## Verify before deploy
 
 ```bash
@@ -23,8 +34,8 @@ pnpm --filter @tele-pendant/modbus-core test:integration
 
 ## OTA
 
-- **Web:** redeploy container / static assets (`docker compose ... up -d`).
-- **Mobile:** `pnpm --filter @tele-pendant/mobile ota:export` writes the manifest into `apps/api/ota`. Rebuild the binary when camera or speech changes.
+- **Web:** redeploy container / static assets (`docker compose ... up -d`). Live site: https://tele-pendant.jahbyte.com
+- **Mobile:** `OTA_PUBLIC_URL=https://api.tele-pendant.jahbyte.com pnpm --filter @tele-pendant/mobile ota:export` writes the manifest into `apps/api/ota`. Live check: https://api.tele-pendant.jahbyte.com/ota/manifest. Rebuild the binary when camera or speech changes.
 
 ## Modbus map changes
 

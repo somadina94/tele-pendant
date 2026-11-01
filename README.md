@@ -56,12 +56,26 @@ Same as freelancer_bot: `SERVER_HOST`, `SERVER_USERNAME`, `SERVER_PORT`, and eit
 
 Images pushed on main: `tele-pendant-api`, `tele-pendant-sim`, `tele-pendant-web` under `ghcr.io/<owner>/`.
 
+### Live (production)
+
+| Surface | URL |
+| ------- | --- |
+| Web HMI | https://tele-pendant.jahbyte.com |
+| API health | https://api.tele-pendant.jahbyte.com/api/v1/health |
+| Swagger UI | https://api.tele-pendant.jahbyte.com/api |
+| OTA manifest | https://api.tele-pendant.jahbyte.com/ota/manifest |
+| Phone API base | https://api.tele-pendant.jahbyte.com/api/v1 |
+
+`APP_URL=https://api.tele-pendant.jahbyte.com` · `FRONTEND_URL=https://tele-pendant.jahbyte.com`
+
+### Local
+
 - API health: http://localhost:3010/api/v1/health
 - Swagger: http://localhost:3010/api
 - Compodoc: `pnpm --filter @tele-pendant/api docs:serve`
 - httpyac: `apps/api/src/**/http/*.endpoints.http`
-- Web: http://localhost:5173 — `/operator`, `/ops`, `/media` (camera/QR/voice), `/admin`, `/assistant`, `/face`
-- Expo: `pnpm --filter @tele-pendant/mobile dev` (set API base to LAN/VPS on phone)
+- Web: http://localhost:5173 (host) or http://localhost:8080 (Docker `WEB_PORT`) — `/operator`, `/ops`, `/media`, `/admin`, `/assistant`, `/face`
+- Expo: `pnpm --filter @tele-pendant/mobile dev` (set API base to LAN or the live API URL on the phone)
 - Default admin: `admin@example.com` / `change-me-admin-password` (from `.env`)
 - Safe-action PIN (e-stop cell): `SAFE_ACTION_PIN`
 - Seed QR: `TP-CRANE-DEMO-01`

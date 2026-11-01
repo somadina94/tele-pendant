@@ -1,10 +1,26 @@
 # Tele-Pendant — Installation
 
+## Live hosts
+
+| Surface | URL |
+| ------- | --- |
+| Web HMI | https://tele-pendant.jahbyte.com |
+| API | https://api.tele-pendant.jahbyte.com |
+| Health | https://api.tele-pendant.jahbyte.com/api/v1/health |
+| Swagger | https://api.tele-pendant.jahbyte.com/api |
+| OTA | https://api.tele-pendant.jahbyte.com/ota/manifest |
+
+```env
+APP_URL=https://api.tele-pendant.jahbyte.com
+FRONTEND_URL=https://tele-pendant.jahbyte.com
+COOKIE_SECURE=true
+```
+
 ## Requirements
 
 - Node 22+, pnpm 9.15
 - Docker (recommended for VPS)
-- Open ports: API `3010`, Modbus sim `1502` (internal), web `5173` or `8080`
+- Open ports: API host `PORT` (maps to container `3010`), Modbus sim `1502` (internal), web host `WEB_PORT` (maps to container `80`)
 
 ## Host install
 

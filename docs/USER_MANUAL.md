@@ -1,8 +1,22 @@
 # Tele-Pendant — click-through test manual
 
-Use this while the Docker dev stack is running. Every feature below is a click on the web UI, plus the Expo handheld at the end. Do the steps in order. **STOP is last** because it latches until the simulator is restarted.
+Use this on the **live** site or while the Docker **dev** stack is running. Every feature below is a click on the web UI, plus the Expo handheld at the end. Do the steps in order. **STOP is last** because it latches until the simulator is restarted.
 
-## What is already running
+## Live deployment
+
+| Check   | Where                                                      | Success              |
+| ------- | ---------------------------------------------------------- | -------------------- |
+| Web     | https://tele-pendant.jahbyte.com                           | Tele-Pendant loads   |
+| API     | https://api.tele-pendant.jahbyte.com/api/v1/health         | JSON `status` is `ok` |
+| Swagger | https://api.tele-pendant.jahbyte.com/api                   | Swagger UI loads     |
+| OTA     | https://api.tele-pendant.jahbyte.com/ota/manifest          | JSON `runtimeVersion` |
+| Phone   | API base `https://api.tele-pendant.jahbyte.com/api/v1`     | Sign-in works        |
+
+`APP_URL=https://api.tele-pendant.jahbyte.com` · `FRONTEND_URL=https://tele-pendant.jahbyte.com`
+
+On live, open https://tele-pendant.jahbyte.com/operator after sign-in. The click paths below use local Docker URLs; the same menus and routes apply on the live host (replace `http://localhost:8080` with `https://tele-pendant.jahbyte.com`).
+
+## What is already running (local Docker)
 
 | Check     | Where                               | Success                                                                            |
 | --------- | ----------------------------------- | ---------------------------------------------------------------------------------- |
@@ -11,7 +25,7 @@ Use this while the Docker dev stack is running. Every feature below is a click o
 | Web       | http://localhost:8080               | Tele-Pendant page (port comes from `WEB_PORT` in `.env`; this stack uses **8080**) |
 | Simulator | host port **1502**                  | Container `tele-pendant-modbus-sim-dev` is up                                      |
 
-You are already signed in. The operator screen is http://localhost:8080/operator.
+You are already signed in. The operator screen is http://localhost:8080/operator (live: https://tele-pendant.jahbyte.com/operator).
 
 Sign-in values if you get logged out (from `.env`):
 
@@ -301,15 +315,15 @@ Clear the coil again with `docker restart tele-pendant-modbus-sim-dev` if you st
 
 The API serves `apps/api/ota` with no login.
 
-1. Open http://localhost:3010/ota/manifest.
+1. Open https://api.tele-pendant.jahbyte.com/ota/manifest (local: http://localhost:3010/ota/manifest).
 2. **Success:** JSON with `runtimeVersion` `0.0.1`, and the header `expo-protocol-version: 1`.
-3. Point the phone `updates.url` at `http://<api-host>:3010/ota/manifest`. Replacing `manifest.json` and `assets/bundle.js` in that folder is the JavaScript update. The camera is a native module, so it still needs a binary rebuild.
+3. Point the phone `updates.url` at `https://api.tele-pendant.jahbyte.com/ota/manifest` for production builds. Replacing `manifest.json` and `assets/bundle.js` in that folder is the JavaScript update. The camera is a native module, so it still needs a binary rebuild.
 
 ## 14. Expo handheld
 
 Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit**.
 
-1. On the phone, set **API base** to your computer’s LAN URL ending in `/api/v1`, for example `http://192.168.x.x:3010/api/v1` (not `localhost`).
+1. On the phone, set **API base** to `https://api.tele-pendant.jahbyte.com/api/v1` for the live API, or your computer’s LAN URL ending in `/api/v1` for a local stack (not `localhost` on a physical phone).
 2. Email and password are the same as step 0.
 3. Tap **Sign in**.
 4. **Success:** title **Tele-Pendant**, **Logout**, and the six header buttons. Operator shows banner `Safety: normal · H … mm`, a **SAFE_ACTION_PIN** field, and the same five cells.
