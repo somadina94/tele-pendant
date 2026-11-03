@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
-import { Pressable, ScrollView, Text } from 'react-native';
+import { ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { ScanFace, UserPlus } from 'lucide-react-native';
 import { apiPost } from '../api';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import { Field, styles } from '../ui';
+import { Btn, BtnText, Field, Hint, OkText, Section } from '../ui';
 
 export function FaceScreen({
   token,
@@ -77,33 +78,40 @@ export function FaceScreen({
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.scroll}>
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="p-4 pb-12"
+    >
       <HelpTip id="tour.face.title">
         <>
-          <Text style={styles.section}>{t('faceTitle')}</Text>
-          <Text style={styles.hint}>
+          <Section>{t('faceTitle')}</Section>
+          <Hint>
             Convenience match only — not certified biometrics. Fail closed to
             password.
-          </Text>
+          </Hint>
         </>
       </HelpTip>
       {open && permission?.granted ? (
-        <CameraView ref={camera} style={styles.camera} facing="front" />
+        <CameraView
+          ref={camera}
+          className="mb-3 h-[220px] rounded-lg"
+          facing="front"
+        />
       ) : null}
       <Field label="Email hint (login)" value={email} onChangeText={setEmail} />
       <HelpTip id="tour.face.enroll">
-        <Pressable style={styles.btn} onPress={() => void enroll()}>
-          <Text style={styles.btnText}>
-            Enroll (requires logged-in session)
-          </Text>
-        </Pressable>
+        <Btn onPress={() => void enroll()}>
+          <UserPlus size={16} color="#041018" />
+          <BtnText>Enroll (requires logged-in session)</BtnText>
+        </Btn>
       </HelpTip>
       <HelpTip id="tour.face.login">
-        <Pressable style={styles.btn} onPress={() => void faceLogin()}>
-          <Text style={styles.btnText}>Face login</Text>
-        </Pressable>
+        <Btn onPress={() => void faceLogin()}>
+          <ScanFace size={16} color="#041018" />
+          <BtnText>Face login</BtnText>
+        </Btn>
       </HelpTip>
-      {msg ? <Text style={styles.ok}>{msg}</Text> : null}
+      {msg ? <OkText>{msg}</OkText> : null}
     </ScrollView>
   );
 }

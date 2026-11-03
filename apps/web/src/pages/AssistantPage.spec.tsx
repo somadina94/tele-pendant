@@ -4,6 +4,12 @@ import { AssistantPage } from './AssistantPage';
 import { renderWithProviders } from '../test/render';
 import * as api from '../lib/api';
 
+async function expandDocsSettings() {
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Docs settings/i }),
+  );
+}
+
 describe('AssistantPage', () => {
   it('asks and shows answer', async () => {
     vi.spyOn(api, 'apiGet').mockResolvedValue({
@@ -22,7 +28,7 @@ describe('AssistantPage', () => {
     await waitFor(() =>
       expect(screen.getByText(/comms lost/)).toBeInTheDocument(),
     );
-    expect(screen.getByText(/\(local\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/\(local\)/)).not.toBeInTheDocument();
   });
 
   it('shows error paths', async () => {
@@ -34,6 +40,7 @@ describe('AssistantPage', () => {
     });
     vi.spyOn(api, 'apiPost').mockRejectedValueOnce(new Error('down'));
     renderWithProviders(<AssistantPage />);
+    await expandDocsSettings();
     expect(await screen.findByRole('link', { name: /Open docs/i })).toHaveAttribute(
       'href',
       'https://example.com/docs',
@@ -64,6 +71,7 @@ describe('AssistantPage', () => {
     });
     const post = vi.spyOn(api, 'apiPost').mockResolvedValue({ indexed: 9 });
     renderWithProviders(<AssistantPage />);
+    await expandDocsSettings();
     await screen.findByDisplayValue('docs');
     fireEvent.change(screen.getByLabelText('Docs root path'), {
       target: { value: 'manuals' },
@@ -96,6 +104,7 @@ describe('AssistantPage', () => {
       .mockRejectedValueOnce('nope')
       .mockRejectedValueOnce(new Error('reindex boom'));
     renderWithProviders(<AssistantPage />);
+    await expandDocsSettings();
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole('button', { name: 'Reindex' }));
@@ -106,7 +115,7 @@ describe('AssistantPage', () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
   });
 
-  it('shows cursor mode note when ask returns a mode', async () => {
+  it('shows plain answer without note or markdown stars', async () => {
     vi.spyOn(api, 'apiGet').mockResolvedValue({
       docsRoot: 'docs',
       docsLink: '',
@@ -114,8 +123,8 @@ describe('AssistantPage', () => {
       cursorConfigured: true,
     });
     vi.spyOn(api, 'apiPost').mockResolvedValue({
-      answer: 'Hold deadman',
-      note: 'Cursor Agent',
+      answer: '**Hold** deadman *while* pressing.',
+      note: 'Answered by Cursor Agent with local manuals + feature handbook.',
       mode: 'cursor',
     });
     renderWithProviders(<AssistantPage />);
@@ -123,6 +132,89 @@ describe('AssistantPage', () => {
       await screen.findByText(/Cursor Agent is configured/),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
-    expect(await screen.findByText(/· cursor/)).toBeInTheDocument();
+    expect(
+      await screen.findByText('Hold deadman while pressing.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/· cursor/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Answered by Cursor Agent/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('fills and asks from a suggested question', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      docsRoot: 'docs',
+      docsLink: '',
+      indexed: 4,
+      cursorConfigured: false,
+    });
+    const post = vi.spyOn(api, 'apiPost').mockResolvedValue({
+      answer: 'deadman pulses while pressed',
+      note: 'local',
+      mode: 'local-fts',
+    });
+    renderWithProviders(<AssistantPage />);
+    expect(
+      await screen.findByText('Suggested questions'),
+    ).toBeInTheDocument();
+    // safety group is open by default
+    fireEvent.click(
+      screen.getByRole('button', { name: 'How does deadman hold work?' }),
+    );
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/assistant/ask', {
+        question: 'How does deadman hold work?',
+      }),
+    );
+    expect(
+      await screen.findByText(/deadman pulses while pressed/),
+    ).toBeInTheDocument();
+  });
+
+  it('ignores blank ask submissions', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      docsRoot: 'docs',
+      docsLink: '',
+      indexed: 1,
+      cursorConfigured: false,
+    });
+    const post = vi.spyOn(api, 'apiPost');
+    renderWithProviders(<AssistantPage />);
+    const question = await screen.findByLabelText('Question');
+    fireEvent.change(question, { target: { value: '   ' } });
+    expect(screen.getByRole('button', { name: 'Ask' })).toBeDisabled();
+    fireEvent.submit(question.closest('form')!);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('ignores a second ask while busy', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      docsRoot: 'docs',
+      docsLink: '',
+      indexed: 2,
+      cursorConfigured: false,
+    });
+    let resolveAsk!: (value: {
+      answer: string;
+      note: string;
+    }) => void;
+    const post = vi.spyOn(api, 'apiPost').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAsk = resolve;
+        }),
+    );
+    renderWithProviders(<AssistantPage />);
+    const question = await screen.findByLabelText('Question');
+    const form = question.closest('form');
+    expect(form).toBeTruthy();
+    fireEvent.submit(form!);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    fireEvent.submit(form!);
+    expect(post).toHaveBeenCalledTimes(1);
+    resolveAsk({ answer: 'ok', note: 'local' });
+    expect(await screen.findByText(/ok/)).toBeInTheDocument();
   });
 });
+
+

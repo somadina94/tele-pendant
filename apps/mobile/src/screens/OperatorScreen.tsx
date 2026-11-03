@@ -17,7 +17,7 @@ import { apiGet, apiPost, getApiBase } from '../api';
 import type { Cell, Layout } from '../types';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import { Field, styles } from '../ui';
+import { Banner, ErrorText, Field, Hint } from '../ui';
 
 function panelColor(css?: string | null): string {
   const value = css?.trim() ?? '';
@@ -177,14 +177,17 @@ export function OperatorScreen({ token }: { token: string }) {
   }, [layoutQuery.data]);
 
   return (
-    <ScrollView contentContainerStyle={styles.scroll}>
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="p-4 pb-12"
+    >
       <HelpTip id="tour.operator.banner">
-        <Text style={styles.banner}>
+        <Banner>
           {t('safety')}: {safetyMode} · H {height ?? '—'} mm
           {holdingId ? ` · ${t('deadmanHold')}` : ''}
-        </Text>
+        </Banner>
       </HelpTip>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <ErrorText>{error}</ErrorText> : null}
       <HelpTip id="tour.operator.safePin">
         <>
           <Field
@@ -193,40 +196,39 @@ export function OperatorScreen({ token }: { token: string }) {
             onChangeText={setPin}
             secure
           />
-          <Text style={styles.hint}>{t('pinHint')}</Text>
+          <Hint>{t('pinHint')}</Hint>
         </>
       </HelpTip>
       <HelpTip id="tour.operator.graphic">
         <View
-          style={[
-            styles.graphic,
-            {
-              backgroundColor: panelColor(
-                layoutQuery.data?.background?.cssBackground,
-              ),
-            },
-          ]}
+          className="relative mb-3 min-h-[180px] overflow-hidden rounded-xl"
+          style={{
+            backgroundColor: panelColor(
+              layoutQuery.data?.background?.cssBackground,
+            ),
+          }}
         >
           {imageUrl && photoOk ? (
             <Image
               source={{ uri: imageUrl }}
-              style={styles.graphicPhoto}
+              className="absolute inset-0 h-full w-full"
               onError={() => setPhotoOk(false)}
             />
           ) : null}
-          <Text style={styles.cellText}>
+          <Text className="p-2 text-center font-bold text-foreground">
             {layoutQuery.data?.background?.name ?? t('plantGraphic')}
           </Text>
           {(layoutQuery.data?.overlays ?? []).map((overlay) => (
             <View
               key={overlay.id}
-              style={[
-                styles.overlay,
-                { left: `${overlay.xPct}%`, top: `${overlay.yPct}%` },
-              ]}
+              className="absolute"
+              style={{
+                left: `${overlay.xPct}%` as DimensionValue,
+                top: `${overlay.yPct}%` as DimensionValue,
+              }}
             >
-              <Text style={styles.hint}>{overlay.label}</Text>
-              <Text style={styles.cellText}>
+              <Hint>{overlay.label}</Hint>
+              <Text className="font-bold text-foreground">
                 {String(
                   formatOverlay(
                     overlay.format,
@@ -239,7 +241,7 @@ export function OperatorScreen({ token }: { token: string }) {
         </View>
       </HelpTip>
       <HelpTip id="tour.operator.matrix">
-        <View style={styles.matrix}>
+        <View className="flex-row flex-wrap gap-2">
           {grid &&
             grid.cells.map((cell, idx) => {
               const cellWidth: DimensionValue =
@@ -249,12 +251,12 @@ export function OperatorScreen({ token }: { token: string }) {
               return cell ? (
                 <View
                   key={cell.id}
-                  style={[
-                    styles.cell,
-                    { width: cellWidth },
-                    cell.style === 'estop' && styles.estop,
-                    holdingId === cell.id && styles.holding,
-                  ]}
+                  className={`min-h-[88px] items-center justify-center rounded-[10px] border p-2 ${
+                    cell.style === 'estop'
+                      ? 'border-estop-border bg-estop'
+                      : 'border-cell-border bg-cell'
+                  } ${holdingId === cell.id ? 'border-2 border-success' : ''}`}
+                  style={{ width: cellWidth }}
                   onStartShouldSetResponder={() => true}
                   onResponderTerminationRequest={() => false}
                   onResponderGrant={() => {
@@ -267,19 +269,22 @@ export function OperatorScreen({ token }: { token: string }) {
                     void releaseCell(cell);
                   }}
                 >
-                  <Text style={styles.cellText}>{cell.label}</Text>
+                  <Text className="text-center font-bold text-foreground">
+                    {cell.label}
+                  </Text>
                 </View>
               ) : (
                 <View
                   key={`e-${idx}`}
-                  style={[styles.empty, { width: cellWidth }]}
+                  className="min-h-[88px]"
+                  style={{ width: cellWidth }}
                 />
               );
             })}
         </View>
       </HelpTip>
       <HelpTip id="tour.operator.holdHint">
-        <Text style={styles.hint}>{t('holdHint')}</Text>
+        <Hint>{t('holdHint')}</Hint>
       </HelpTip>
     </ScrollView>
   );

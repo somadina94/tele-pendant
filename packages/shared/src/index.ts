@@ -24,6 +24,8 @@ export { formatOverlay, tagValueForRegister } from './tags';
 export type { TagSnapshot } from './tags';
 export { tourStepsFor } from './tour';
 export type { TourScreen } from './tour';
+export { ASSISTANT_SUGGESTION_GROUPS } from './assistant-suggestions';
+export type { SuggestionGroup } from './assistant-suggestions';
 
 export const WS_EVENTS = {
   TAGS_UPDATE: 'tags.update',

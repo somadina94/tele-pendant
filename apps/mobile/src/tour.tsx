@@ -7,11 +7,11 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Modal, Pressable, Switch, Text, View, StyleSheet } from 'react-native';
+import { Modal, Pressable, Switch, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { tourStepsFor, type TourScreen } from '@tele-pendant/shared';
 import { useLocale } from './locale';
-import { styles as ui } from './ui';
+import { Btn, BtnText, Hint, LinkText } from './ui';
 
 const STORAGE_KEY = 'tourEnabled';
 
@@ -135,13 +135,38 @@ export function useTour(): TourContextValue {
   return ctx;
 }
 
-export function TourBar({ screen }: { screen: TourScreen }) {
+export function TourBar({
+  screen,
+  compact,
+}: {
+  screen: TourScreen;
+  compact?: boolean;
+}) {
   const { enabled, setEnabled, startWalkthrough } = useTour();
   const { t } = useLocale();
+
+  if (compact) {
+    return (
+      <View className="flex-row items-center gap-2">
+        <Switch
+          value={enabled}
+          onValueChange={setEnabled}
+          accessibilityLabel={t('tour.toggle')}
+        />
+        {enabled ? (
+          <Pressable onPress={() => startWalkthrough(screen)}>
+            <Text className="text-xs text-primary">{t('tour.start')}</Text>
+          </Pressable>
+        ) : null}
+        <WalkthroughModal screen={screen} />
+      </View>
+    );
+  }
+
   return (
-    <View style={tourStyles.bar}>
-      <View style={tourStyles.toggleRow}>
-        <Text style={ui.hint}>{t('tour.toggle')}</Text>
+    <View className="mb-3 gap-2">
+      <View className="flex-row items-center justify-between">
+        <Hint>{t('tour.toggle')}</Hint>
         <Switch
           value={enabled}
           onValueChange={setEnabled}
@@ -149,9 +174,9 @@ export function TourBar({ screen }: { screen: TourScreen }) {
         />
       </View>
       {enabled ? (
-        <Pressable style={ui.btn} onPress={() => startWalkthrough(screen)}>
-          <Text style={ui.btnText}>{t('tour.start')}</Text>
-        </Pressable>
+        <Btn onPress={() => startWalkthrough(screen)}>
+          <BtnText>{t('tour.start')}</BtnText>
+        </Btn>
       ) : null}
       <WalkthroughModal screen={screen} />
     </View>
@@ -167,14 +192,18 @@ export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
   if (!enabled) return <>{children}</>;
 
   return (
-    <View style={[tourStyles.tip, highlighted ? tourStyles.tipActive : null]}>
+    <View
+      className={`relative mb-1 ${
+        highlighted ? 'rounded-lg border-2 border-primary p-1' : ''
+      }`}
+    >
       {children}
       <Pressable
-        style={tourStyles.chip}
+        className="absolute right-0 top-0 z-10 h-[22px] w-[22px] items-center justify-center rounded-full bg-primary"
         onPress={() => setOpen(true)}
         accessibilityLabel={`Help: ${id}`}
       >
-        <Text style={tourStyles.chipText}>?</Text>
+        <Text className="text-xs font-bold text-primary-foreground">?</Text>
       </Pressable>
       <Modal
         visible={open || highlighted}
@@ -183,14 +212,14 @@ export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
         onRequestClose={() => setOpen(false)}
       >
         <Pressable
-          style={tourStyles.modalBackdrop}
+          className="flex-1 justify-center bg-black/60 p-6"
           onPress={() => setOpen(false)}
         >
-          <View style={tourStyles.modalCard}>
-            <Text style={ui.hint}>{t(id)}</Text>
-            <Pressable style={ui.btn} onPress={() => setOpen(false)}>
-              <Text style={ui.btnText}>{t('tour.done')}</Text>
-            </Pressable>
+          <View className="gap-3 rounded-xl border border-border bg-card p-4">
+            <Hint>{t(id)}</Hint>
+            <Btn onPress={() => setOpen(false)}>
+              <BtnText>{t('tour.done')}</BtnText>
+            </Btn>
           </View>
         </Pressable>
       </Modal>
@@ -227,95 +256,27 @@ function WalkthroughModal({ screen }: { screen: TourScreen }) {
 
   return (
     <Modal visible transparent animationType="fade">
-      <View style={tourStyles.walkBackdrop}>
-        <View style={tourStyles.walkCard}>
-          <Text style={ui.hint}>{stepLabel}</Text>
-          <Text style={tourStyles.walkText}>{t(currentStepId)}</Text>
-          <View style={tourStyles.walkActions}>
+      <View className="flex-1 justify-end bg-black/55 p-4">
+        <View className="gap-2.5 rounded-xl border border-border bg-card p-4">
+          <Hint>{stepLabel}</Hint>
+          <Text className="leading-5 text-foreground">{t(currentStepId)}</Text>
+          <View className="flex-row flex-wrap items-center justify-end gap-3">
             <Pressable
               onPress={prevStep}
               disabled={stepIndex === 0}
-              style={tourStyles.linkBtn}
+              className="px-1 py-2"
             >
-              <Text style={ui.link}>{t('tour.back')}</Text>
+              <LinkText>{t('tour.back')}</LinkText>
             </Pressable>
-            <Pressable onPress={stopWalkthrough} style={tourStyles.linkBtn}>
-              <Text style={ui.link}>{t('tour.done')}</Text>
+            <Pressable onPress={stopWalkthrough} className="px-1 py-2">
+              <LinkText>{t('tour.done')}</LinkText>
             </Pressable>
-            <Pressable style={ui.btn} onPress={nextStep}>
-              <Text style={ui.btnText}>
-                {last ? t('tour.done') : t('tour.next')}
-              </Text>
-            </Pressable>
+            <Btn onPress={nextStep}>
+              <BtnText>{last ? t('tour.done') : t('tour.next')}</BtnText>
+            </Btn>
           </View>
         </View>
       </View>
     </Modal>
   );
 }
-
-const tourStyles = StyleSheet.create({
-  bar: { marginBottom: 12, gap: 8 },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  tip: { position: 'relative', marginBottom: 4 },
-  tipActive: {
-    borderColor: '#3D9CFD',
-    borderWidth: 2,
-    borderRadius: 8,
-    padding: 4,
-  },
-  chip: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#3D9CFD',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  chipText: { color: '#041018', fontWeight: '700', fontSize: 12 },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(4,10,16,0.6)',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    backgroundColor: '#161D27',
-    borderRadius: 12,
-    padding: 16,
-    borderColor: '#2A3A4D',
-    borderWidth: 1,
-    gap: 12,
-  },
-  walkBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(4,10,16,0.55)',
-    justifyContent: 'flex-end',
-    padding: 16,
-  },
-  walkCard: {
-    backgroundColor: '#161D27',
-    borderRadius: 12,
-    padding: 16,
-    borderColor: '#2A3A4D',
-    borderWidth: 1,
-    gap: 10,
-  },
-  walkText: { color: '#E8EEF4', lineHeight: 20 },
-  walkActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 12,
-    flexWrap: 'wrap',
-  },
-  linkBtn: { paddingVertical: 8, paddingHorizontal: 4 },
-});

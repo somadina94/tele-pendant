@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from './accordion';
 import { Alert, AlertDescription, AlertTitle } from './alert';
 import { Badge } from './badge';
 import { Button } from './button';
@@ -53,6 +59,7 @@ import {
 import { Skeleton } from './skeleton';
 import { Toaster } from './sonner';
 import { Switch } from './switch';
+import { Textarea } from './textarea';
 import {
   Table,
   TableBody,
@@ -110,14 +117,29 @@ describe('ui primitives', () => {
         </Card>
         <Checkbox aria-label="check" />
         <Input aria-label="field" />
+        <Textarea aria-label="notes" defaultValue="hello" />
         <Label>Label</Label>
         <Separator />
         <Separator orientation="vertical" />
         <Skeleton className="h-4 w-4" />
         <Switch aria-label="sw" />
+        <Accordion type="single" collapsible defaultValue="one">
+          <AccordionItem value="one">
+            <AccordionTrigger>Section one</AccordionTrigger>
+            <AccordionContent>Open body</AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="two">
+            <AccordionTrigger>Section two</AccordionTrigger>
+            <AccordionContent>Closed body</AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>,
     );
     expect(screen.getByText('Title')).toBeInTheDocument();
+    expect(screen.getByLabelText('notes')).toHaveValue('hello');
+    expect(screen.getByText('Open body')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Section two' }));
+    expect(screen.getByText('Closed body')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox', { name: 'check' }));
     fireEvent.click(screen.getByRole('switch', { name: 'sw' }));
   });

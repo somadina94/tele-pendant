@@ -1,10 +1,18 @@
-import { Pressable, ScrollView, Text } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import { useQuery } from '@tanstack/react-query';
+import { Check, Pause, RefreshCw } from 'lucide-react-native';
 import { apiGet, apiPost } from '../api';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import { styles } from '../ui';
+import {
+  Btn,
+  BtnText,
+  ErrorText,
+  Hint,
+  LinkText,
+  Section,
+} from '../ui';
 
 type Alarm = {
   id: string;
@@ -45,42 +53,41 @@ export function OpsScreen({ token }: { token: string }) {
   const safety = diagnostics.data?.safety;
 
   return (
-    <ScrollView contentContainerStyle={styles.scroll}>
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="p-4 pb-12"
+    >
       <HelpTip id="tour.ops.diagnostics">
         <>
-          <Text style={styles.section}>{t('diagnostics')}</Text>
-          <Text style={styles.hint}>
+          <Section>{t('diagnostics')}</Section>
+          <Hint>
             PLC connected: {String(plc?.connected ?? '—')} (
             {plc?.label ?? 'n/a'})
-          </Text>
-          <Text style={styles.hint}>Safety mode: {safety?.mode ?? '—'}</Text>
-          <Text style={styles.hint}>
-            Watchdog OK: {String(safety?.watchdogOk ?? '—')}
-          </Text>
-          <Text style={styles.hint}>
-            Uptime: {diagnostics.data?.uptimeSec ?? '—'} s
-          </Text>
+          </Hint>
+          <Hint>Safety mode: {safety?.mode ?? '—'}</Hint>
+          <Hint>Watchdog OK: {String(safety?.watchdogOk ?? '—')}</Hint>
+          <Hint>Uptime: {diagnostics.data?.uptimeSec ?? '—'} s</Hint>
           {plc?.lastError ? (
-            <Text style={styles.error}>Last error: {plc.lastError}</Text>
+            <ErrorText>Last error: {plc.lastError}</ErrorText>
           ) : null}
         </>
       </HelpTip>
       <HelpTip id="tour.ops.alarms">
-        <Text style={styles.section}>{t('alarms')}</Text>
+        <Section>{t('alarms')}</Section>
       </HelpTip>
       {(alarms.data ?? []).length === 0 ? (
-        <Text style={styles.hint}>{t('noAlarms')}</Text>
+        <Hint>{t('noAlarms')}</Hint>
       ) : null}
       {(alarms.data ?? []).map((alarm) => (
         <HelpTip key={alarm.id} id="tour.ops.ack">
-          <Text style={styles.hint}>
-            [{alarm.definition.severity}] {alarm.definition.name} —{' '}
-            {alarm.state} (value {alarm.value})
+          <View className="mb-2">
+            <Hint>
+              [{alarm.definition.severity}] {alarm.definition.name} —{' '}
+              {alarm.state} (value {alarm.value})
+            </Hint>
             {alarm.state === 'active' ? (
-              <>
-                {' '}
-                <Text
-                  style={styles.link}
+              <View className="mt-1 flex-row gap-4">
+                <LinkText
                   onPress={() =>
                     void apiPost(
                       `/alarms/${alarm.id}/ack`,
@@ -89,11 +96,11 @@ export function OpsScreen({ token }: { token: string }) {
                     ).then(() => alarms.refetch())
                   }
                 >
-                  {t('ack')}
-                </Text>
-                {'  '}
-                <Text
-                  style={styles.link}
+                  <Text className="text-primary">
+                    <Check size={12} color="#3D9CFD" /> {t('ack')}
+                  </Text>
+                </LinkText>
+                <LinkText
                   onPress={() =>
                     void apiPost(
                       `/alarms/${alarm.id}/shelve`,
@@ -102,27 +109,30 @@ export function OpsScreen({ token }: { token: string }) {
                     ).then(() => alarms.refetch())
                   }
                 >
-                  {t('shelve')}
-                </Text>
-              </>
+                  <Text className="text-primary">
+                    <Pause size={12} color="#3D9CFD" /> {t('shelve')}
+                  </Text>
+                </LinkText>
+              </View>
             ) : null}
-          </Text>
+          </View>
         </HelpTip>
       ))}
       <HelpTip id="tour.ops.trends">
         <>
-          <Text style={styles.section}>{t('trends')}</Text>
+          <Section>{t('trends')}</Section>
           {(trendKeys.data ?? []).length === 0 ? (
-            <Text style={styles.hint}>{t('noSamples')}</Text>
+            <Hint>{t('noSamples')}</Hint>
           ) : null}
           {(trendKeys.data ?? []).map((key) => (
             <TrendChart key={key} token={token} seriesKey={key} />
           ))}
         </>
       </HelpTip>
-      <Pressable style={styles.btn} onPress={() => void alarms.refetch()}>
-        <Text style={styles.btnText}>Refresh</Text>
-      </Pressable>
+      <Btn onPress={() => void alarms.refetch()}>
+        <RefreshCw size={16} color="#041018" />
+        <BtnText>Refresh</BtnText>
+      </Btn>
     </ScrollView>
   );
 }
@@ -148,9 +158,9 @@ function TrendChart({
   const points = query.data ?? [];
   if (points.length === 0) {
     return (
-      <Text style={styles.hint}>
+      <Hint>
         {seriesKey}: {t('noSamples')}
-      </Text>
+      </Hint>
     );
   }
   const values = points.map((point) => point.value);
@@ -166,9 +176,9 @@ function TrendChart({
     .join(' ');
   return (
     <>
-      <Text style={styles.hint}>
+      <Hint>
         {seriesKey}: {values[values.length - 1]}
-      </Text>
+      </Hint>
       <Svg width="100%" height={80} viewBox="0 0 280 80">
         <Polyline
           points={coords}

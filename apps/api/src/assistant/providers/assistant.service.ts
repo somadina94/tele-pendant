@@ -258,7 +258,7 @@ export class AssistantService implements OnModuleInit {
       }
       return {
         question,
-        answer: result.result.trim(),
+        answer: this.toPlainAnswer(result.result),
         hits,
         mode: 'cursor' as const,
         note: 'Answered by Cursor Agent with local manuals + feature handbook.',
@@ -278,6 +278,10 @@ export class AssistantService implements OnModuleInit {
     }
   }
 
+  private toPlainAnswer(raw: string): string {
+    return raw.replace(/\*/g, '').trim();
+  }
+
   private buildPrompt(question: string, hits: AssistantHit[]): string {
     const handbook = this.loadHandbook();
     const docsBlock =
@@ -293,6 +297,8 @@ export class AssistantService implements OnModuleInit {
       'Answer using the feature handbook and retrieved manual snippets.',
       'Be concise. Advisory only — never tell the operator to bypass safety or invent PLC addresses.',
       'If unsure, say what to check in Config/Ops/manuals.',
+      'Reply in plain text only: no markdown, no asterisks, no bold, no bullet markers like * or **.',
+      'Do not add a footer, signature, or source note.',
       '',
       '## Feature handbook',
       handbook,

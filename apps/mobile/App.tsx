@@ -1,49 +1,33 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LogIn } from 'lucide-react-native';
 import { apiPost, getApiBase } from './src/api';
-import { AuditScreen } from './src/screens/AuditScreen';
-import { ConfigScreen } from './src/screens/ConfigScreen';
-import { FaceScreen } from './src/screens/FaceScreen';
-import { MediaScreen } from './src/screens/MediaScreen';
-import { OperatorScreen } from './src/screens/OperatorScreen';
-import { OpsScreen } from './src/screens/OpsScreen';
-import type { ScreenName } from './src/types';
 import { LocaleProvider, useLocale } from './src/locale';
+import { AppShell } from './src/navigation';
 import { HelpTip, TourBar, TourProvider } from './src/tour';
-import { Field, styles } from './src/ui';
+import { ThemeProvider, ThemeToggle, useTheme } from './src/theme';
+import { Btn, BtnText, ErrorText, Field, Subtitle, Title } from './src/ui';
 
 const queryClient = new QueryClient();
 
-const NAV: Array<{ id: ScreenName; label: string }> = [
-  { id: 'operator', label: 'Operator' },
-  { id: 'media', label: 'Media' },
-  { id: 'face', label: 'Face' },
-  { id: 'ops', label: 'Ops' },
-  { id: 'config', label: 'Config' },
-  { id: 'audit', label: 'Audit' },
-];
-
-function Pendant() {
+function LoginScreen({
+  onLoggedIn,
+}: {
+  onLoggedIn: (token: string) => void;
+}) {
   const { t, setLocale, locale } = useLocale();
-  const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState('admin@example.com');
   const [password, setPassword] = useState('change-me-admin-password');
   const [apiBase, setApiBase] = useState('http://127.0.0.1:3010/api/v1');
   const [error, setError] = useState<string | null>(null);
-  const [screen, setScreen] = useState<ScreenName>('operator');
 
   useEffect(() => {
-    void (async () => {
-      const saved = await AsyncStorage.getItem('accessToken');
-      const base = await getApiBase();
-      setApiBase(base);
-      if (saved) setToken(saved);
-    })();
+    void getApiBase().then(setApiBase);
   }, []);
 
   const login = async () => {
@@ -55,84 +39,98 @@ function Pendant() {
         password,
       });
       await AsyncStorage.setItem('accessToken', data.accessToken);
-      setToken(data.accessToken);
+      onLoggedIn(data.accessToken);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     }
   };
 
+  return (
+    <SafeAreaView className="flex-1 bg-background px-4">
+      <View className="mb-2 mt-2 flex-row items-center justify-between">
+        <Title>Tele-Pendant</Title>
+        <ThemeToggle />
+      </View>
+      <Subtitle>Expo handheld · set API base for device/LAN</Subtitle>
+      <TourBar screen="login" />
+      <HelpTip id="tour.login.language">
+        <Field
+          label={t('language')}
+          value={locale}
+          onChangeText={(value) => setLocale(value === 'es' ? 'es' : 'en')}
+        />
+      </HelpTip>
+      <Field label="API base" value={apiBase} onChangeText={setApiBase} />
+      <HelpTip id="tour.login.email">
+        <Field label={t('email')} value={email} onChangeText={setEmail} />
+      </HelpTip>
+      <HelpTip id="tour.login.password">
+        <Field
+          label={t('password')}
+          value={password}
+          onChangeText={setPassword}
+          secure
+        />
+      </HelpTip>
+      {error ? <ErrorText>{error}</ErrorText> : null}
+      <HelpTip id="tour.login.signIn">
+        <Btn onPress={() => void login()}>
+          <LogIn size={16} color="#041018" />
+          <BtnText>{t('signIn')}</BtnText>
+        </Btn>
+      </HelpTip>
+    </SafeAreaView>
+  );
+}
+
+function Pendant() {
+  const { theme } = useTheme();
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    void AsyncStorage.getItem('accessToken').then((saved) => {
+      if (saved) setToken(saved);
+    });
+  }, []);
+
   const logout = async () => {
     await AsyncStorage.removeItem('accessToken');
     setToken(null);
-    setScreen('operator');
   };
 
+  const navTheme =
+    theme === 'dark'
+      ? {
+          ...DarkTheme,
+          colors: {
+            ...DarkTheme.colors,
+            primary: '#3D9CFD',
+            background: '#0F1419',
+            card: '#161D27',
+            text: '#E8EEF4',
+            border: '#2A3A4D',
+          },
+        }
+      : {
+          ...DefaultTheme,
+          colors: {
+            ...DefaultTheme.colors,
+            primary: '#3D9CFD',
+            background: '#F4F7FB',
+            card: '#FFFFFF',
+            text: '#0F1419',
+            border: '#C5D0DC',
+          },
+        };
+
   if (!token) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.title}>Tele-Pendant</Text>
-        <Text style={styles.sub}>
-          Expo handheld · set API base for device/LAN
-        </Text>
-        <TourBar screen="login" />
-        <HelpTip id="tour.login.language">
-          <Field
-            label={t('language')}
-            value={locale}
-            onChangeText={(value) => setLocale(value === 'es' ? 'es' : 'en')}
-          />
-        </HelpTip>
-        <Field label="API base" value={apiBase} onChangeText={setApiBase} />
-        <HelpTip id="tour.login.email">
-          <Field label={t('email')} value={email} onChangeText={setEmail} />
-        </HelpTip>
-        <HelpTip id="tour.login.password">
-          <Field
-            label={t('password')}
-            value={password}
-            onChangeText={setPassword}
-            secure
-          />
-        </HelpTip>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <HelpTip id="tour.login.signIn">
-          <Pressable style={styles.btn} onPress={() => void login()}>
-            <Text style={styles.btnText}>{t('signIn')}</Text>
-          </Pressable>
-        </HelpTip>
-        <StatusBar style="light" />
-      </SafeAreaView>
-    );
+    return <LoginScreen onLoggedIn={setToken} />;
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.titleSmall}>Tele-Pendant</Text>
-        <Pressable onPress={() => void logout()}>
-          <Text style={styles.link}>{t('logout')}</Text>
-        </Pressable>
-      </View>
-      <HelpTip id="tour.operator.nav">
-        <ScrollView horizontal contentContainerStyle={styles.nav}>
-          {NAV.map((item) => (
-            <Pressable key={item.id} onPress={() => setScreen(item.id)}>
-              <Text style={styles.link}>{t(item.id)}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </HelpTip>
-      <TourBar screen={screen} />
-      {screen === 'operator' ? <OperatorScreen token={token} /> : null}
-      {screen === 'media' ? <MediaScreen token={token} /> : null}
-      {screen === 'face' ? (
-        <FaceScreen token={token} onToken={setToken} />
-      ) : null}
-      {screen === 'ops' ? <OpsScreen token={token} /> : null}
-      {screen === 'config' ? <ConfigScreen token={token} /> : null}
-      {screen === 'audit' ? <AuditScreen token={token} /> : null}
-      <StatusBar style="light" />
-    </SafeAreaView>
+    <NavigationContainer theme={navTheme}>
+      <AppShell token={token} onLogout={() => void logout()} onToken={setToken} />
+    </NavigationContainer>
   );
 }
 
@@ -141,11 +139,13 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
-          <LocaleProvider>
-            <TourProvider>
-              <Pendant />
-            </TourProvider>
-          </LocaleProvider>
+          <ThemeProvider>
+            <LocaleProvider>
+              <TourProvider>
+                <Pendant />
+              </TourProvider>
+            </LocaleProvider>
+          </ThemeProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>

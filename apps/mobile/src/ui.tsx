@@ -1,118 +1,154 @@
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  type PressableProps,
+  type TextInputProps,
+} from 'react-native';
+import type { ReactNode } from 'react';
 
-export const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0F1419',
-    padding: 16,
-  },
-  scroll: { paddingBottom: 48 },
-  title: {
-    color: '#E8EEF4',
-    fontSize: 32,
-    fontWeight: '700',
-    marginBottom: 8,
-    marginTop: 24,
-  },
-  titleSmall: { color: '#E8EEF4', fontSize: 22, fontWeight: '700' },
-  sub: { color: '#8B9AAB', marginBottom: 16 },
-  label: { color: '#8B9AAB', marginBottom: 4, marginTop: 8 },
-  input: {
-    backgroundColor: '#161D27',
-    borderColor: '#2A3A4D',
-    borderWidth: 1,
-    borderRadius: 8,
-    color: '#E8EEF4',
-    padding: 12,
-    marginBottom: 10,
-  },
-  btn: {
-    backgroundColor: '#3D9CFD',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  btnText: { color: '#041018', fontWeight: '700' },
-  error: { color: '#FF5C5C', marginVertical: 8 },
-  ok: { color: '#3DD68C', marginVertical: 8 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  nav: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  link: { color: '#3D9CFD' },
-  banner: {
-    color: '#8B9AAB',
-    marginBottom: 12,
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2A3A4D',
-  },
-  matrix: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  cell: {
-    minHeight: 88,
-    backgroundColor: '#1C3A5C',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#2F6AA8',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 8,
-  },
-  estop: { backgroundColor: '#5A1D1D', borderColor: '#C44' },
-  holding: { borderColor: '#3DD68C', borderWidth: 2 },
-  cellText: { color: '#E8EEF4', fontWeight: '700', textAlign: 'center' },
-  empty: { minHeight: 88 },
-  hint: { color: '#8B9AAB', marginTop: 16, fontSize: 12 },
-  section: { color: '#E8EEF4', fontSize: 18, fontWeight: '700', marginTop: 16 },
-  row: { flexDirection: 'row', gap: 8 },
-  camera: { height: 220, borderRadius: 8, marginBottom: 12 },
-  graphic: {
-    minHeight: 180,
-    borderRadius: 12,
-    marginBottom: 12,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  graphicPhoto: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-  },
-  overlay: { position: 'absolute' },
-});
+export function ScreenScroll({ children }: { children: ReactNode }) {
+  return (
+    <View className="flex-1">
+      <View className="gap-1 pb-12">{children}</View>
+    </View>
+  );
+}
+
+export function Title({ children }: { children: ReactNode }) {
+  return (
+    <Text className="mb-2 mt-6 text-3xl font-bold text-foreground">
+      {children}
+    </Text>
+  );
+}
+
+export function TitleSmall({ children }: { children: ReactNode }) {
+  return (
+    <Text className="text-xl font-bold text-foreground">{children}</Text>
+  );
+}
+
+export function Subtitle({ children }: { children: ReactNode }) {
+  return <Text className="mb-4 text-muted-foreground">{children}</Text>;
+}
+
+export function Section({ children }: { children: ReactNode }) {
+  return (
+    <Text className="mt-4 text-lg font-bold text-foreground">{children}</Text>
+  );
+}
+
+export function Hint({ children }: { children: ReactNode }) {
+  return <Text className="mt-1 text-xs text-muted-foreground">{children}</Text>;
+}
+
+export function ErrorText({ children }: { children: ReactNode }) {
+  return <Text className="my-2 text-destructive">{children}</Text>;
+}
+
+export function OkText({ children }: { children: ReactNode }) {
+  return <Text className="my-2 text-success">{children}</Text>;
+}
+
+export function Banner({ children }: { children: ReactNode }) {
+  return (
+    <Text className="mb-3 rounded-lg border border-border bg-card p-2.5 text-muted-foreground">
+      {children}
+    </Text>
+  );
+}
+
+export function LinkText({
+  children,
+  onPress,
+}: {
+  children: ReactNode;
+  onPress?: () => void;
+}) {
+  return (
+    <Text className="text-primary" onPress={onPress}>
+      {children}
+    </Text>
+  );
+}
+
+export function Btn({
+  children,
+  onPress,
+  className = '',
+  disabled,
+  ...rest
+}: PressableProps & { children: ReactNode; className?: string }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      className={`mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80 disabled:opacity-50 ${className}`}
+      {...rest}
+    >
+      {typeof children === 'string' ? (
+        <Text className="font-bold text-primary-foreground">{children}</Text>
+      ) : (
+        children
+      )}
+    </Pressable>
+  );
+}
+
+export function BtnText({ children }: { children: ReactNode }) {
+  return (
+    <Text className="font-bold text-primary-foreground">{children}</Text>
+  );
+}
 
 export function Field({
   label,
   value,
   onChangeText,
   secure,
+  multiline,
+  numberOfLines,
+  ...rest
 }: {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
   secure?: boolean;
-}) {
+  multiline?: boolean;
+  numberOfLines?: number;
+} & Omit<TextInputProps, 'value' | 'onChangeText'>) {
   return (
-    <View>
-      <Text style={styles.label}>{label}</Text>
+    <View className="mb-1">
+      <Text className="mb-1 mt-2 text-muted-foreground">{label}</Text>
       <TextInput
-        style={styles.input}
+        className={`rounded-lg border border-border bg-input px-3 py-3 text-foreground ${
+          multiline ? 'min-h-[96px]' : ''
+        }`}
         value={value}
         onChangeText={onChangeText}
         secureTextEntry={secure}
         autoCapitalize="none"
         placeholder={label}
         placeholderTextColor="#5C6B7A"
+        multiline={multiline}
+        numberOfLines={numberOfLines}
+        textAlignVertical={multiline ? 'top' : 'center'}
+        {...rest}
       />
     </View>
   );
+}
+
+export function Card({ children }: { children: ReactNode }) {
+  return (
+    <View className="mb-3 rounded-xl border border-border bg-card p-3">
+      {children}
+    </View>
+  );
+}
+
+export function Row({ children }: { children: ReactNode }) {
+  return <View className="flex-row flex-wrap gap-2">{children}</View>;
 }

@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { ArrowDown, ArrowUp, Mic, QrCode, Scan } from 'lucide-react-native';
 import { apiPost } from '../api';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import { Field, styles } from '../ui';
+import { Btn, BtnText, Field, Hint, OkText, Row, Section } from '../ui';
 
 export function MediaScreen({ token }: { token: string }) {
   const { t } = useLocale();
@@ -88,21 +89,25 @@ export function MediaScreen({ token }: { token: string }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.scroll}>
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="p-4 pb-12"
+    >
       <HelpTip id="tour.media.qr">
         <>
-          <Text style={styles.section}>{t('qrTitle')}</Text>
+          <Section>{t('qrTitle')}</Section>
           <Field label="Code" value={code} onChangeText={setCode} />
-          <Pressable style={styles.btn} onPress={() => void resolve(code)}>
-            <Text style={styles.btnText}>Resolve</Text>
-          </Pressable>
+          <Btn onPress={() => void resolve(code)}>
+            <QrCode size={16} color="#041018" />
+            <BtnText>Resolve</BtnText>
+          </Btn>
         </>
       </HelpTip>
       <HelpTip id="tour.media.camera">
         <>
           {scanning && permission?.granted ? (
             <CameraView
-              style={styles.camera}
+              className="mb-3 h-[220px] rounded-lg"
               facing="back"
               barcodeScannerSettings={{
                 barcodeTypes: ['qr', 'code128', 'ean13'],
@@ -115,40 +120,43 @@ export function MediaScreen({ token }: { token: string }) {
               }}
             />
           ) : null}
-          <Pressable
-            style={styles.btn}
+          <Btn
             onPress={() => {
               if (!permission?.granted) void requestPermission();
               setScanning((on) => !on);
             }}
           >
-            <Text style={styles.btnText}>
+            <Scan size={16} color="#041018" />
+            <BtnText>
               {scanning ? t('stopCamera') : t('scanCamera')}
-            </Text>
-          </Pressable>
+            </BtnText>
+          </Btn>
         </>
       </HelpTip>
-      {result ? <Text style={styles.ok}>{result}</Text> : null}
+      {result ? <OkText>{result}</OkText> : null}
       <HelpTip id="tour.media.voice">
         <>
-          <Text style={styles.section}>{t('voice')}</Text>
-          <Text style={styles.hint}>{t('phoneVoiceHint')}</Text>
-          <Pressable style={styles.btn} onPress={() => void listen()}>
-            <Text style={styles.btnText}>{t('listen')}</Text>
-          </Pressable>
+          <Section>{t('voice')}</Section>
+          <Hint>{t('phoneVoiceHint')}</Hint>
+          <Btn onPress={() => void listen()}>
+            <Mic size={16} color="#041018" />
+            <BtnText>{t('listen')}</BtnText>
+          </Btn>
         </>
       </HelpTip>
       <HelpTip id="tour.media.upDown">
-        <View style={styles.row}>
-          <Pressable style={styles.btn} onPress={() => void command('up')}>
-            <Text style={styles.btnText}>{t('up')}</Text>
-          </Pressable>
-          <Pressable style={styles.btn} onPress={() => void command('down')}>
-            <Text style={styles.btnText}>{t('down')}</Text>
-          </Pressable>
-        </View>
+        <Row>
+          <Btn className="flex-1" onPress={() => void command('up')}>
+            <ArrowUp size={16} color="#041018" />
+            <BtnText>{t('up')}</BtnText>
+          </Btn>
+          <Btn className="flex-1" onPress={() => void command('down')}>
+            <ArrowDown size={16} color="#041018" />
+            <BtnText>{t('down')}</BtnText>
+          </Btn>
+        </Row>
       </HelpTip>
-      {voice ? <Text style={styles.ok}>{voice}</Text> : null}
+      {voice ? <OkText>{voice}</OkText> : null}
     </ScrollView>
   );
 }

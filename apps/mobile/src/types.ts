@@ -57,4 +57,10 @@ export type PlcConnection = {
 };
 
 export type ScreenName =
-  'operator' | 'media' | 'face' | 'ops' | 'config' | 'audit';
+  | 'operator'
+  | 'media'
+  | 'face'
+  | 'ops'
+  | 'config'
+  | 'audit'
+  | 'assistant';

@@ -11,7 +11,7 @@ import type {
 } from '../types';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import { Field, styles } from '../ui';
+import { Field } from '../ui';
 
 function noteOf(err: unknown): string {
   return err instanceof Error ? err.message : 'Save failed';
@@ -41,13 +41,13 @@ export function ConfigScreen({ token }: { token: string }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.scroll}>
-      <Text style={styles.hint}>
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="p-4 pb-12">
+      <Text className="mt-1 text-xs text-muted-foreground">
         These fields are saved in SQLite. Turn on Use this PLC and press Save to
         connect. Each register address is the Modbus number the buttons use.
       </Text>
       <HelpTip id="tour.config.plc">
-        <Text style={styles.section}>{t('plcConnections')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">{t('plcConnections')}</Text>
       </HelpTip>
       {(connections.data ?? []).map((row) => (
         <PlcForm
@@ -68,7 +68,7 @@ export function ConfigScreen({ token }: { token: string }) {
           }}
         />
       ))}
-      <Text style={styles.label}>Add a PLC</Text>
+      <Text className="mb-1 mt-2 text-muted-foreground">Add a PLC</Text>
       <PlcForm
         note={notes.new}
         onSave={async (value) => {
@@ -82,7 +82,7 @@ export function ConfigScreen({ token }: { token: string }) {
         }}
       />
       <HelpTip id="tour.config.registers">
-        <Text style={styles.section}>{t('registerMaps')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">{t('registerMaps')}</Text>
       </HelpTip>
       {registers.map((row) => (
         <RegisterForm
@@ -101,7 +101,7 @@ export function ConfigScreen({ token }: { token: string }) {
         />
       ))}
       <HelpTip id="tour.config.cells">
-        <Text style={styles.section}>{t('cellsTitle')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">{t('cellsTitle')}</Text>
       </HelpTip>
       {(layout?.cells ?? []).map((cell) => (
         <CellForm
@@ -129,7 +129,7 @@ export function ConfigScreen({ token }: { token: string }) {
           }}
         />
       ))}
-      <Text style={styles.label}>Add a cell</Text>
+      <Text className="mb-1 mt-2 text-muted-foreground">Add a cell</Text>
       <CellForm
         note={notes['new-cell']}
         saveLabel="Add cell"
@@ -145,7 +145,7 @@ export function ConfigScreen({ token }: { token: string }) {
         }}
       />
       <HelpTip id="tour.config.labels">
-        <Text style={styles.section}>{t('liveLabels')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">{t('liveLabels')}</Text>
       </HelpTip>
       {(layout?.overlays ?? []).map((overlay) => (
         <OverlayForm
@@ -173,7 +173,7 @@ export function ConfigScreen({ token }: { token: string }) {
           }}
         />
       ))}
-      <Text style={styles.label}>Add a label</Text>
+      <Text className="mb-1 mt-2 text-muted-foreground">Add a label</Text>
       <OverlayForm
         note={notes['new-label']}
         saveLabel="Add label"
@@ -188,7 +188,7 @@ export function ConfigScreen({ token }: { token: string }) {
         }}
       />
       <HelpTip id="tour.config.background">
-        <Text style={styles.section}>{t('background')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">{t('background')}</Text>
       </HelpTip>
       {layout?.background ? (
         <BackgroundForm
@@ -207,7 +207,7 @@ export function ConfigScreen({ token }: { token: string }) {
           }}
         />
       ) : (
-        <Text style={styles.hint}>No active background</Text>
+        <Text className="mt-1 text-xs text-muted-foreground">No active background</Text>
       )}
       <AlarmBlock token={token} registers={registers} />
       <SafetyBlock token={token} registers={registers} />
@@ -246,7 +246,7 @@ function PlcForm({
       <Field label="Port" value={port} onChangeText={setPort} />
       <Field label="Unit" value={unitId} onChangeText={setUnitId} />
       <Pressable onPress={() => setEnabled((on) => !on)}>
-        <Text style={styles.link}>Use this PLC: {enabled ? 'yes' : 'no'}</Text>
+        <Text className="text-primary">Use this PLC: {enabled ? 'yes' : 'no'}</Text>
       </Pressable>
       <Pressable
         onPress={() =>
@@ -255,10 +255,10 @@ function PlcForm({
           )
         }
       >
-        <Text style={styles.link}>Protocol: {protocol}</Text>
+        <Text className="text-primary">Protocol: {protocol}</Text>
       </Pressable>
       <Pressable
-        style={styles.btn}
+        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
         onPress={() =>
           void onSave({
             label,
@@ -270,11 +270,11 @@ function PlcForm({
           })
         }
       >
-        <Text style={styles.btnText}>
+        <Text className="font-bold text-primary-foreground">
           {row ? `Save ${row.label}` : 'Add PLC'}
         </Text>
       </Pressable>
-      {note ? <Text style={styles.ok}>{note}</Text> : null}
+      {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
   );
 }
@@ -297,16 +297,16 @@ function RegisterForm({
   const [nodeId, setNodeId] = useState(row.nodeId ?? '');
   return (
     <>
-      <Text style={styles.label}>
+      <Text className="mb-1 mt-2 text-muted-foreground">
         {row.name} ({row.kind})
       </Text>
       <Field label="Address" value={address} onChangeText={setAddress} />
       <Field label="OPC UA node id" value={nodeId} onChangeText={setNodeId} />
       <Pressable onPress={() => setTrended((on) => !on)}>
-        <Text style={styles.link}>Trend: {trended ? 'yes' : 'no'}</Text>
+        <Text className="text-primary">Trend: {trended ? 'yes' : 'no'}</Text>
       </Pressable>
       <Pressable
-        style={styles.btn}
+        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
         onPress={() =>
           void onSave({
             address: Number(address),
@@ -315,9 +315,9 @@ function RegisterForm({
           })
         }
       >
-        <Text style={styles.btnText}>Save {row.name}</Text>
+        <Text className="font-bold text-primary-foreground">Save {row.name}</Text>
       </Pressable>
-      {note ? <Text style={styles.ok}>{note}</Text> : null}
+      {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
   );
 }
@@ -386,15 +386,15 @@ function CellForm({
         onChangeText={setStatus}
       />
       <Pressable onPress={() => setIsMotion((on) => !on)}>
-        <Text style={styles.link}>Motion: {isMotion ? 'yes' : 'no'}</Text>
+        <Text className="text-primary">Motion: {isMotion ? 'yes' : 'no'}</Text>
       </Pressable>
       <Pressable onPress={() => setRequiresSafeAction((on) => !on)}>
-        <Text style={styles.link}>
+        <Text className="text-primary">
           Safe action: {requiresSafeAction ? 'yes' : 'no'}
         </Text>
       </Pressable>
       <Pressable
-        style={styles.btn}
+        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
         onPress={() =>
           void onSave({
             row: Number(row),
@@ -409,14 +409,14 @@ function CellForm({
           })
         }
       >
-        <Text style={styles.btnText}>{saveLabel}</Text>
+        <Text className="font-bold text-primary-foreground">{saveLabel}</Text>
       </Pressable>
       {onDelete ? (
-        <Pressable style={styles.btn} onPress={() => void onDelete()}>
-          <Text style={styles.btnText}>Delete {label || 'cell'}</Text>
+        <Pressable className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80" onPress={() => void onDelete()}>
+          <Text className="font-bold text-primary-foreground">Delete {label || 'cell'}</Text>
         </Pressable>
       ) : null}
-      {note ? <Text style={styles.ok}>{note}</Text> : null}
+      {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
   );
 }
@@ -457,7 +457,7 @@ function OverlayForm({
         onChangeText={setRegisterId}
       />
       <Pressable
-        style={styles.btn}
+        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
         onPress={() =>
           void onSave({
             label,
@@ -468,14 +468,14 @@ function OverlayForm({
           })
         }
       >
-        <Text style={styles.btnText}>{saveLabel}</Text>
+        <Text className="font-bold text-primary-foreground">{saveLabel}</Text>
       </Pressable>
       {onDelete ? (
-        <Pressable style={styles.btn} onPress={() => void onDelete()}>
-          <Text style={styles.btnText}>Delete {label || 'label'}</Text>
+        <Pressable className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80" onPress={() => void onDelete()}>
+          <Text className="font-bold text-primary-foreground">Delete {label || 'label'}</Text>
         </Pressable>
       ) : null}
-      {note ? <Text style={styles.ok}>{note}</Text> : null}
+      {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
   );
 }
@@ -510,12 +510,12 @@ function BackgroundForm({
       />
       <Field label="Image URL" value={imageUrl} onChangeText={setImage} />
       <Pressable
-        style={styles.btn}
+        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
         onPress={() => void onSave({ name, cssBackground, imageUrl })}
       >
-        <Text style={styles.btnText}>Save background</Text>
+        <Text className="font-bold text-primary-foreground">Save background</Text>
       </Pressable>
-      {note ? <Text style={styles.ok}>{note}</Text> : null}
+      {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
   );
 }
@@ -550,10 +550,10 @@ function AlarmBlock({
   return (
     <>
       <HelpTip id="tour.config.alarms">
-        <Text style={styles.section}>{t('alarmDefinitions')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">{t('alarmDefinitions')}</Text>
       </HelpTip>
       {(defs.data ?? []).length === 0 ? (
-        <Text style={styles.hint}>{t('noAlarmDefs')}</Text>
+        <Text className="mt-1 text-xs text-muted-foreground">{t('noAlarmDefs')}</Text>
       ) : null}
       {(defs.data ?? []).map((row) => (
         <Pressable
@@ -566,7 +566,7 @@ function AlarmBlock({
             )
           }
         >
-          <Text style={styles.link}>
+          <Text className="text-primary">
             Delete {row.name} ({row.compareOp} {row.threshold})
           </Text>
         </Pressable>
@@ -579,7 +579,7 @@ function AlarmBlock({
       />
       <Field label="Threshold" value={threshold} onChangeText={setThreshold} />
       <Pressable
-        style={styles.btn}
+        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
         onPress={() =>
           void apiPost(
             '/alarms/definitions',
@@ -602,9 +602,9 @@ function AlarmBlock({
             .catch((err: unknown) => setNote(noteOf(err)))
         }
       >
-        <Text style={styles.btnText}>Save alarm</Text>
+        <Text className="font-bold text-primary-foreground">Save alarm</Text>
       </Pressable>
-      {note ? <Text style={styles.ok}>{note}</Text> : null}
+      {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
   );
 }
@@ -636,9 +636,9 @@ function SafetyBlock({
   return (
     <>
       <HelpTip id="tour.config.safety">
-        <Text style={styles.section}>{t('safetyRoles')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">{t('safetyRoles')}</Text>
       </HelpTip>
-      <Text style={styles.hint}>
+      <Text className="mt-1 text-xs text-muted-foreground">
         Saved e-stop {current?.eStopRegisterId ?? 'unset'}
       </Text>
       <Field
@@ -661,9 +661,9 @@ function SafetyBlock({
         value={safeState || current?.safeStateRegisterId || ''}
         onChangeText={setSafe}
       />
-      <Text style={styles.hint}>{registers.length} registers available</Text>
+      <Text className="mt-1 text-xs text-muted-foreground">{registers.length} registers available</Text>
       <Pressable
-        style={styles.btn}
+        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
         onPress={() =>
           void apiPut(
             '/safety/roles',
@@ -681,9 +681,9 @@ function SafetyBlock({
             .catch((err: unknown) => setNote(noteOf(err)))
         }
       >
-        <Text style={styles.btnText}>Save safety roles</Text>
+        <Text className="font-bold text-primary-foreground">Save safety roles</Text>
       </Pressable>
-      {note ? <Text style={styles.ok}>{note}</Text> : null}
+      {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
   );
 }
