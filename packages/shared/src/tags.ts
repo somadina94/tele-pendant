@@ -13,6 +13,18 @@ export function formatOverlay(
   return format.replace('{value}', String(value));
 }
 
+/** Registers already shown in the Operator cluster readout. */
+export function isClusterMetricRegister(
+  registerName?: string | null,
+): boolean {
+  if (!registerName) return false;
+  return (
+    registerName.includes('hoistHeight') ||
+    registerName.includes('loadKg') ||
+    registerName.includes('motorRunning')
+  );
+}
+
 export function tagValueForRegister(
   tags: TagSnapshot | null,
   registerName?: string | null,

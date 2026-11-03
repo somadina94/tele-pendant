@@ -9,6 +9,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import {
   formatOverlay,
+  isClusterMetricRegister,
   tagValueForRegister,
   type TagSnapshot,
 } from '@tele-pendant/shared';
@@ -240,35 +241,37 @@ export function OperatorScreen({ token }: { token: string }) {
               </Text>
             </View>
           </View>
-          <View className="relative z-10 min-h-[96px] flex-1">
-            {(layoutQuery.data?.overlays ?? []).map((overlay) => (
-              <View
-                key={overlay.id}
-                className="absolute min-w-[72px] items-center rounded-lg border border-white/20 bg-black/50 px-2.5 py-1.5"
-                style={{
-                  left: `${overlay.xPct}%` as DimensionValue,
-                  top: `${overlay.yPct}%` as DimensionValue,
-                  transform: [{ translateX: -36 }, { translateY: -18 }],
-                }}
-              >
-                <Text
-                  className="text-[9px] font-medium uppercase text-white/55"
-                  style={{ letterSpacing: 1.8 }}
+          <View className="relative z-10 min-h-[96px] flex-1 overflow-hidden">
+            {(layoutQuery.data?.overlays ?? [])
+              .filter((overlay) => !isClusterMetricRegister(overlay.register?.name))
+              .map((overlay) => (
+                <View
+                  key={overlay.id}
+                  className="absolute min-w-[72px] items-center rounded-lg border border-white/20 bg-black/70 px-2.5 py-1.5"
+                  style={{
+                    left: `${overlay.xPct}%` as DimensionValue,
+                    top: `${overlay.yPct}%` as DimensionValue,
+                    transform: [{ translateX: -36 }, { translateY: -18 }],
+                  }}
                 >
-                  {overlay.label}
-                </Text>
-                <Text className="font-mono text-sm font-semibold text-white">
-                  {String(
-                    formatOverlay(
-                      overlay.format,
-                      tagValueForRegister(tags, overlay.register?.name),
-                    ),
-                  )}
-                </Text>
-              </View>
-            ))}
+                  <Text
+                    className="text-[9px] font-medium uppercase text-white/55"
+                    style={{ letterSpacing: 1.8 }}
+                  >
+                    {overlay.label}
+                  </Text>
+                  <Text className="font-mono text-sm font-semibold text-white">
+                    {String(
+                      formatOverlay(
+                        overlay.format,
+                        tagValueForRegister(tags, overlay.register?.name),
+                      ),
+                    )}
+                  </Text>
+                </View>
+              ))}
           </View>
-          <View className="z-10 flex-row border-t border-white/10 bg-black/40 px-1 pb-2.5 pt-2">
+          <View className="z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-2.5 pt-2">
             {(
               [
                 {

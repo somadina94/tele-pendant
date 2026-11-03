@@ -20,7 +20,11 @@ export {
   translateError,
 } from './i18n';
 export type { Locale } from './i18n';
-export { formatOverlay, tagValueForRegister } from './tags';
+export {
+  formatOverlay,
+  isClusterMetricRegister,
+  tagValueForRegister,
+} from './tags';
 export type { TagSnapshot } from './tags';
 export { tourStepsFor } from './tour';
 export type { TourScreen } from './tour';

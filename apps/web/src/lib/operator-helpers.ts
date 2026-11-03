@@ -1,1 +1,5 @@
-export { formatOverlay, tagValueForRegister } from '@tele-pendant/shared';
+export {
+  formatOverlay,
+  isClusterMetricRegister,
+  tagValueForRegister,
+} from '@tele-pendant/shared';

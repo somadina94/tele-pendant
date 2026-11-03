@@ -3,7 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert } from 'lucide-react';
 import { apiGet, apiPost, CellDto, HmiLayout, LiveTags } from '../lib/api';
 import { useT } from '../lib/i18n';
-import { formatOverlay, tagValueForRegister } from '../lib/operator-helpers';
+import {
+  formatOverlay,
+  isClusterMetricRegister,
+  tagValueForRegister,
+} from '../lib/operator-helpers';
 import { getRealtimeSocket } from '../lib/realtime';
 import { HelpTip } from '../lib/tour';
 import { PageSpinner } from '@/components/page-spinner';
@@ -185,21 +189,25 @@ export function OperatorPage() {
               {mode}
             </div>
           </div>
-          {(layout?.overlays ?? []).map((o) => (
-            <div
-              key={o.id}
-              className="plant-overlay"
-              style={{ left: `${o.xPct}%`, top: `${o.yPct}%` }}
-            >
-              <span className="plant-overlay-label">{o.label}</span>
-              <strong className="plant-overlay-value">
-                {formatOverlay(
-                  o.format,
-                  tagValueForRegister(tags, o.register?.name),
-                )}
-              </strong>
-            </div>
-          ))}
+          <div className="plant-overlay-stage">
+            {(layout?.overlays ?? [])
+              .filter((o) => !isClusterMetricRegister(o.register?.name))
+              .map((o) => (
+                <div
+                  key={o.id}
+                  className="plant-overlay"
+                  style={{ left: `${o.xPct}%`, top: `${o.yPct}%` }}
+                >
+                  <span className="plant-overlay-label">{o.label}</span>
+                  <strong className="plant-overlay-value">
+                    {formatOverlay(
+                      o.format,
+                      tagValueForRegister(tags, o.register?.name),
+                    )}
+                  </strong>
+                </div>
+              ))}
+          </div>
           <div className="plant-readout">
             <div className="plant-metric">
               <span className="plant-metric-label">Height</span>

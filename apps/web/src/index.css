@@ -189,8 +189,11 @@
   @apply bg-rose-400;
   box-shadow: 0 0 8px rgba(251, 113, 133, 0.75);
 }
+.plant-overlay-stage {
+  @apply absolute inset-x-0 bottom-[5.75rem] top-11 z-[10] overflow-hidden md:bottom-[6.25rem] md:top-12;
+}
 .plant-overlay {
-  @apply absolute z-10 flex min-w-[4.5rem] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-white/18 bg-black/45 px-2.5 py-1.5 text-center shadow-[0_8px_20px_rgba(0,0,0,0.35)] backdrop-blur-md;
+  @apply absolute z-10 flex min-w-[4.5rem] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-white/18 bg-black/70 px-2.5 py-1.5 text-center shadow-[0_8px_20px_rgba(0,0,0,0.35)];
 }
 .plant-overlay-label {
   @apply text-[9px] font-medium uppercase tracking-[0.22em] text-white/55;
@@ -199,7 +202,7 @@
   @apply font-mono text-sm font-semibold tabular-nums tracking-wide text-white md:text-base;
 }
 .plant-readout {
-  @apply absolute inset-x-0 bottom-0 z-20 grid grid-cols-3 gap-px border-t border-white/10 bg-black/35 px-1 pb-2.5 pt-2 backdrop-blur-md md:px-2 md:pb-3 md:pt-2.5;
+  @apply absolute inset-x-0 bottom-0 z-20 grid grid-cols-3 gap-px border-t border-white/10 bg-[#07090c]/95 px-1 pb-2.5 pt-2 md:px-2 md:pb-3 md:pt-2.5;
 }
 .plant-metric {
   @apply flex flex-col items-center justify-center gap-0.5 px-1 py-1;
