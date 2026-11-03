@@ -34,7 +34,8 @@ async function apiSend<T>(
     try {
       const parsed = JSON.parse(text) as { message?: string | string[] };
       if (typeof parsed.message === 'string') message = parsed.message;
-      else if (Array.isArray(parsed.message)) message = parsed.message.join(', ');
+      else if (Array.isArray(parsed.message))
+        message = parsed.message.join(', ');
     } catch {
       message = text;
     }

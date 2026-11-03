@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Agent, CursorAgentError } from '@cursor/sdk';
 import Database from 'better-sqlite3';
 import { mkdirSync, readFileSync, readdirSync, existsSync, statSync } from 'fs';
-import { isAbsolute, join, resolve } from 'path';
+import { basename, isAbsolute, join, resolve } from 'path';
 
 export interface AssistantHit {
   title: string;
@@ -128,22 +128,19 @@ export class AssistantService implements OnModuleInit {
     ];
 
     const docsRoot = this.resolveDocsRoot();
+    const markdownFiles = this.listMarkdownDocs(docsRoot);
 
     const tx = this.db.transaction(() => {
-      for (const s of seedSnippets) {
-        insert.run(s.title, s.body, s.path);
-        indexed += 1;
-      }
-      if (
-        docsRoot &&
-        existsSync(docsRoot) &&
-        statSync(docsRoot).isDirectory()
-      ) {
-        for (const file of readdirSync(docsRoot)) {
-          if (!file.endsWith('.md')) continue;
-          const full = join(docsRoot, file);
+      // Prefer real manuals when present; seed snippets only as offline fallback.
+      if (markdownFiles.length === 0) {
+        for (const s of seedSnippets) {
+          insert.run(s.title, s.body, s.path);
+          indexed += 1;
+        }
+      } else {
+        for (const full of markdownFiles) {
           const body = readFileSync(full, 'utf8');
-          insert.run(file, body, full);
+          insert.run(basename(full), body, full);
           indexed += 1;
         }
       }
@@ -153,6 +150,20 @@ export class AssistantService implements OnModuleInit {
       `Assistant FTS indexed ${indexed} documents from ${docsRoot || '(missing docs root)'}`,
     );
     return { indexed };
+  }
+
+  private listMarkdownDocs(docsRoot: string | null): string[] {
+    if (
+      !docsRoot ||
+      !existsSync(docsRoot) ||
+      !statSync(docsRoot).isDirectory()
+    ) {
+      return [];
+    }
+    return readdirSync(docsRoot)
+      .filter((file) => file.endsWith('.md'))
+      .map((file) => join(docsRoot, file))
+      .filter((full) => statSync(full).isFile());
   }
 
   search(query: string, limit = 5): AssistantHit[] {
@@ -336,15 +347,26 @@ export class AssistantService implements OnModuleInit {
     const cwd = process.cwd();
     const candidates = [
       join(cwd, configured),
+      join(cwd, '..', configured),
       join(cwd, '..', '..', configured),
       join(cwd, 'src', '..', '..', '..', configured),
+      // Docker / monorepo layouts: /app/apps/api → /app/docs
+      join(cwd, '..', '..', '..', configured),
+      '/app/docs',
     ];
+    // Prefer the candidate with the most markdown manuals (avoid sparse
+    // apps/api/docs stubs winning over the repo docs/ folder).
+    let best: string | null = null;
+    let bestCount = -1;
     for (const root of candidates) {
-      if (existsSync(root) && statSync(root).isDirectory()) {
-        return root;
+      if (!existsSync(root) || !statSync(root).isDirectory()) continue;
+      const count = this.listMarkdownDocs(root).length;
+      if (count > bestCount) {
+        best = root;
+        bestCount = count;
       }
     }
-    return null;
+    return best;
   }
 
   private agentCwd(): string {

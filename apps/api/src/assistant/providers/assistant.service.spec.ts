@@ -90,6 +90,23 @@ describe('AssistantService', () => {
     expect(indexed).toBeGreaterThan(0);
   });
 
+  it('prefers the docs folder with more markdown when several exist', () => {
+    const nested = join(dir, 'rich-first');
+    mkdirSync(join(nested, 'docs'), { recursive: true });
+    writeFileSync(join(nested, 'docs', 'a.md'), 'a');
+    writeFileSync(join(nested, 'docs', 'b.md'), 'b');
+    writeFileSync(join(nested, 'docs', 'c.md'), 'c');
+    // cwd/docs (3) is chosen first; ../docs (2) is skipped via count > bestCount.
+    process.chdir(nested);
+    service.updateSettings({ docsRoot: 'docs' });
+    const { indexed } = service.reindex();
+    expect(indexed).toBe(3);
+    process.chdir(dir);
+    rmSync(nested, { recursive: true, force: true });
+    // Restore FTS from the primary docs folder for later tests.
+    expect(service.reindex().indexed).toBe(2);
+  });
+
   it('skips reindex on subsequent init when docs exist', () => {
     service.onModuleInit();
     expect(service.search('deadman').length).toBeGreaterThan(0);

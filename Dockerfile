@@ -24,6 +24,7 @@ COPY packages ./packages
 COPY apps/api ./apps/api
 COPY apps/modbus-sim ./apps/modbus-sim
 COPY apps/web ./apps/web
+COPY docs ./docs
 
 RUN pnpm --filter @tele-pendant/shared build \
   && pnpm --filter @tele-pendant/modbus-core build \
@@ -61,6 +62,7 @@ COPY --from=builder /app/packages/modbus-core/dist ./packages/modbus-core/dist
 COPY --from=builder /app/packages/plc-driver/dist ./packages/plc-driver/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/assets ./apps/api/assets
+COPY --from=builder /app/docs ./docs
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/
 COPY --from=builder /app/packages/modbus-core/package.json ./packages/modbus-core/
 COPY --from=builder /app/packages/plc-driver/package.json ./packages/plc-driver/
@@ -71,6 +73,7 @@ RUN mkdir -p /app/data \
   && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 WORKDIR /app/apps/api
+ENV CURSOR_AGENT_CWD=/app
 EXPOSE 3010
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \

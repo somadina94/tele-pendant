@@ -52,6 +52,9 @@ services:
           path: ./apps/api/src
           target: /app/apps/api/src
         - action: sync
+          path: ./docs
+          target: /app/docs
+        - action: sync
           path: ./apps/api/ota
           target: /app/apps/api/ota
           ignore:
