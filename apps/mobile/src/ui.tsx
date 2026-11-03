@@ -25,9 +25,7 @@ export function Title({ children }: { children: ReactNode }) {
 }
 
 export function TitleSmall({ children }: { children: ReactNode }) {
-  return (
-    <Text className="text-xl font-bold text-foreground">{children}</Text>
-  );
+  return <Text className="text-xl font-bold text-foreground">{children}</Text>;
 }
 
 export function Subtitle({ children }: { children: ReactNode }) {
@@ -98,9 +96,7 @@ export function Btn({
 }
 
 export function BtnText({ children }: { children: ReactNode }) {
-  return (
-    <Text className="font-bold text-primary-foreground">{children}</Text>
-  );
+  return <Text className="font-bold text-primary-foreground">{children}</Text>;
 }
 
 export function Field({

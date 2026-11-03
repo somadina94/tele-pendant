@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DarkTheme,
+  DefaultTheme,
+} from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LogIn } from 'lucide-react-native';
@@ -15,11 +19,7 @@ import { Btn, BtnText, ErrorText, Field, Subtitle, Title } from './src/ui';
 
 const queryClient = new QueryClient();
 
-function LoginScreen({
-  onLoggedIn,
-}: {
-  onLoggedIn: (token: string) => void;
-}) {
+function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
   const { t, setLocale, locale } = useLocale();
   const [email, setEmail] = useState('admin@example.com');
   const [password, setPassword] = useState('change-me-admin-password');
@@ -129,7 +129,11 @@ function Pendant() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      <AppShell token={token} onLogout={() => void logout()} onToken={setToken} />
+      <AppShell
+        token={token}
+        onLogout={() => void logout()}
+        onToken={setToken}
+      />
     </NavigationContainer>
   );
 }

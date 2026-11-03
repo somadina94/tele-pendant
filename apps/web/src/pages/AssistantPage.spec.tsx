@@ -41,10 +41,9 @@ describe('AssistantPage', () => {
     vi.spyOn(api, 'apiPost').mockRejectedValueOnce(new Error('down'));
     renderWithProviders(<AssistantPage />);
     await expandDocsSettings();
-    expect(await screen.findByRole('link', { name: /Open docs/i })).toHaveAttribute(
-      'href',
-      'https://example.com/docs',
-    );
+    expect(
+      await screen.findByRole('link', { name: /Open docs/i }),
+    ).toHaveAttribute('href', 'https://example.com/docs');
     fireEvent.change(screen.getByLabelText('Question'), {
       target: { value: 'x' },
     });
@@ -154,9 +153,7 @@ describe('AssistantPage', () => {
       mode: 'local-fts',
     });
     renderWithProviders(<AssistantPage />);
-    expect(
-      await screen.findByText('Suggested questions'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Suggested questions')).toBeInTheDocument();
     // safety group is open by default
     fireEvent.click(
       screen.getByRole('button', { name: 'How does deadman hold work?' }),
@@ -194,10 +191,7 @@ describe('AssistantPage', () => {
       indexed: 2,
       cursorConfigured: false,
     });
-    let resolveAsk!: (value: {
-      answer: string;
-      note: string;
-    }) => void;
+    let resolveAsk!: (value: { answer: string; note: string }) => void;
     const post = vi.spyOn(api, 'apiPost').mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -216,5 +210,3 @@ describe('AssistantPage', () => {
     expect(await screen.findByText(/ok/)).toBeInTheDocument();
   });
 });
-
-

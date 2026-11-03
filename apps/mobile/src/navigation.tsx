@@ -125,9 +125,9 @@ function DrawerItems({
                       ) => void
                     )('MainTabs', { screen: item.id });
                   } else {
-                    (
-                      props.navigation.navigate as (name: string) => void
-                    )(item.id);
+                    (props.navigation.navigate as (name: string) => void)(
+                      item.id,
+                    );
                   }
                 }}
               >

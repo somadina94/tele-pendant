@@ -127,9 +127,7 @@ export function MediaScreen({ token }: { token: string }) {
             }}
           >
             <Scan size={16} color="#041018" />
-            <BtnText>
-              {scanning ? t('stopCamera') : t('scanCamera')}
-            </BtnText>
+            <BtnText>{scanning ? t('stopCamera') : t('scanCamera')}</BtnText>
           </Btn>
         </>
       </HelpTip>

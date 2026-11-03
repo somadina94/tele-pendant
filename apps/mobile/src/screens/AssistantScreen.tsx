@@ -1,11 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import {
-  Linking,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import {
   BookOpen,
   ChevronDown,
@@ -186,9 +180,7 @@ export function AssistantScreen({ token }: { token: string }) {
           open={docsOpen}
           onToggle={() => setDocsOpen((v) => !v)}
         >
-          <Hint>
-            Admins can change the docs folder and public docs link.
-          </Hint>
+          <Hint>Admins can change the docs folder and public docs link.</Hint>
           <Field
             label="Docs root path"
             value={docsRoot}

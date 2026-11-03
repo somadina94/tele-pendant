@@ -5,14 +5,7 @@ import { Check, Pause, RefreshCw } from 'lucide-react-native';
 import { apiGet, apiPost } from '../api';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import {
-  Btn,
-  BtnText,
-  ErrorText,
-  Hint,
-  LinkText,
-  Section,
-} from '../ui';
+import { Btn, BtnText, ErrorText, Hint, LinkText, Section } from '../ui';
 
 type Alarm = {
   id: string;
@@ -75,9 +68,7 @@ export function OpsScreen({ token }: { token: string }) {
       <HelpTip id="tour.ops.alarms">
         <Section>{t('alarms')}</Section>
       </HelpTip>
-      {(alarms.data ?? []).length === 0 ? (
-        <Hint>{t('noAlarms')}</Hint>
-      ) : null}
+      {(alarms.data ?? []).length === 0 ? <Hint>{t('noAlarms')}</Hint> : null}
       {(alarms.data ?? []).map((alarm) => (
         <HelpTip key={alarm.id} id="tour.ops.ack">
           <View className="mb-2">

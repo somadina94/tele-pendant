@@ -41,13 +41,18 @@ export function ConfigScreen({ token }: { token: string }) {
   }
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="p-4 pb-12">
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="p-4 pb-12"
+    >
       <Text className="mt-1 text-xs text-muted-foreground">
         These fields are saved in SQLite. Turn on Use this PLC and press Save to
         connect. Each register address is the Modbus number the buttons use.
       </Text>
       <HelpTip id="tour.config.plc">
-        <Text className="mt-4 text-lg font-bold text-foreground">{t('plcConnections')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">
+          {t('plcConnections')}
+        </Text>
       </HelpTip>
       {(connections.data ?? []).map((row) => (
         <PlcForm
@@ -82,7 +87,9 @@ export function ConfigScreen({ token }: { token: string }) {
         }}
       />
       <HelpTip id="tour.config.registers">
-        <Text className="mt-4 text-lg font-bold text-foreground">{t('registerMaps')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">
+          {t('registerMaps')}
+        </Text>
       </HelpTip>
       {registers.map((row) => (
         <RegisterForm
@@ -101,7 +108,9 @@ export function ConfigScreen({ token }: { token: string }) {
         />
       ))}
       <HelpTip id="tour.config.cells">
-        <Text className="mt-4 text-lg font-bold text-foreground">{t('cellsTitle')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">
+          {t('cellsTitle')}
+        </Text>
       </HelpTip>
       {(layout?.cells ?? []).map((cell) => (
         <CellForm
@@ -145,7 +154,9 @@ export function ConfigScreen({ token }: { token: string }) {
         }}
       />
       <HelpTip id="tour.config.labels">
-        <Text className="mt-4 text-lg font-bold text-foreground">{t('liveLabels')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">
+          {t('liveLabels')}
+        </Text>
       </HelpTip>
       {(layout?.overlays ?? []).map((overlay) => (
         <OverlayForm
@@ -188,7 +199,9 @@ export function ConfigScreen({ token }: { token: string }) {
         }}
       />
       <HelpTip id="tour.config.background">
-        <Text className="mt-4 text-lg font-bold text-foreground">{t('background')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">
+          {t('background')}
+        </Text>
       </HelpTip>
       {layout?.background ? (
         <BackgroundForm
@@ -207,7 +220,9 @@ export function ConfigScreen({ token }: { token: string }) {
           }}
         />
       ) : (
-        <Text className="mt-1 text-xs text-muted-foreground">No active background</Text>
+        <Text className="mt-1 text-xs text-muted-foreground">
+          No active background
+        </Text>
       )}
       <AlarmBlock token={token} registers={registers} />
       <SafetyBlock token={token} registers={registers} />
@@ -246,7 +261,9 @@ function PlcForm({
       <Field label="Port" value={port} onChangeText={setPort} />
       <Field label="Unit" value={unitId} onChangeText={setUnitId} />
       <Pressable onPress={() => setEnabled((on) => !on)}>
-        <Text className="text-primary">Use this PLC: {enabled ? 'yes' : 'no'}</Text>
+        <Text className="text-primary">
+          Use this PLC: {enabled ? 'yes' : 'no'}
+        </Text>
       </Pressable>
       <Pressable
         onPress={() =>
@@ -315,7 +332,9 @@ function RegisterForm({
           })
         }
       >
-        <Text className="font-bold text-primary-foreground">Save {row.name}</Text>
+        <Text className="font-bold text-primary-foreground">
+          Save {row.name}
+        </Text>
       </Pressable>
       {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
@@ -412,8 +431,13 @@ function CellForm({
         <Text className="font-bold text-primary-foreground">{saveLabel}</Text>
       </Pressable>
       {onDelete ? (
-        <Pressable className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80" onPress={() => void onDelete()}>
-          <Text className="font-bold text-primary-foreground">Delete {label || 'cell'}</Text>
+        <Pressable
+          className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
+          onPress={() => void onDelete()}
+        >
+          <Text className="font-bold text-primary-foreground">
+            Delete {label || 'cell'}
+          </Text>
         </Pressable>
       ) : null}
       {note ? <Text className="my-2 text-success">{note}</Text> : null}
@@ -471,8 +495,13 @@ function OverlayForm({
         <Text className="font-bold text-primary-foreground">{saveLabel}</Text>
       </Pressable>
       {onDelete ? (
-        <Pressable className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80" onPress={() => void onDelete()}>
-          <Text className="font-bold text-primary-foreground">Delete {label || 'label'}</Text>
+        <Pressable
+          className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
+          onPress={() => void onDelete()}
+        >
+          <Text className="font-bold text-primary-foreground">
+            Delete {label || 'label'}
+          </Text>
         </Pressable>
       ) : null}
       {note ? <Text className="my-2 text-success">{note}</Text> : null}
@@ -513,7 +542,9 @@ function BackgroundForm({
         className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
         onPress={() => void onSave({ name, cssBackground, imageUrl })}
       >
-        <Text className="font-bold text-primary-foreground">Save background</Text>
+        <Text className="font-bold text-primary-foreground">
+          Save background
+        </Text>
       </Pressable>
       {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
@@ -550,10 +581,14 @@ function AlarmBlock({
   return (
     <>
       <HelpTip id="tour.config.alarms">
-        <Text className="mt-4 text-lg font-bold text-foreground">{t('alarmDefinitions')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">
+          {t('alarmDefinitions')}
+        </Text>
       </HelpTip>
       {(defs.data ?? []).length === 0 ? (
-        <Text className="mt-1 text-xs text-muted-foreground">{t('noAlarmDefs')}</Text>
+        <Text className="mt-1 text-xs text-muted-foreground">
+          {t('noAlarmDefs')}
+        </Text>
       ) : null}
       {(defs.data ?? []).map((row) => (
         <Pressable
@@ -636,7 +671,9 @@ function SafetyBlock({
   return (
     <>
       <HelpTip id="tour.config.safety">
-        <Text className="mt-4 text-lg font-bold text-foreground">{t('safetyRoles')}</Text>
+        <Text className="mt-4 text-lg font-bold text-foreground">
+          {t('safetyRoles')}
+        </Text>
       </HelpTip>
       <Text className="mt-1 text-xs text-muted-foreground">
         Saved e-stop {current?.eStopRegisterId ?? 'unset'}
@@ -661,7 +698,9 @@ function SafetyBlock({
         value={safeState || current?.safeStateRegisterId || ''}
         onChangeText={setSafe}
       />
-      <Text className="mt-1 text-xs text-muted-foreground">{registers.length} registers available</Text>
+      <Text className="mt-1 text-xs text-muted-foreground">
+        {registers.length} registers available
+      </Text>
       <Pressable
         className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
         onPress={() =>
@@ -681,7 +720,9 @@ function SafetyBlock({
             .catch((err: unknown) => setNote(noteOf(err)))
         }
       >
-        <Text className="font-bold text-primary-foreground">Save safety roles</Text>
+        <Text className="font-bold text-primary-foreground">
+          Save safety roles
+        </Text>
       </Pressable>
       {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>

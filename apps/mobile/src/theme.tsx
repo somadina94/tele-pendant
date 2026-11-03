@@ -66,7 +66,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <ThemeContext.Provider value={value}>
-      <View className={`flex-1 bg-background ${theme === 'dark' ? 'dark' : ''}`}>
+      <View
+        className={`flex-1 bg-background ${theme === 'dark' ? 'dark' : ''}`}
+      >
         {children}
         <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
       </View>

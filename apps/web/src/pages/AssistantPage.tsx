@@ -222,7 +222,11 @@ export function AssistantPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Accordion type="multiple" className="w-full" defaultValue={['safety']}>
+          <Accordion
+            type="multiple"
+            className="w-full"
+            defaultValue={['safety']}
+          >
             {ASSISTANT_SUGGESTION_GROUPS.map((group) => (
               <AccordionItem key={group.id} value={group.id}>
                 <AccordionTrigger>{group.title}</AccordionTrigger>
