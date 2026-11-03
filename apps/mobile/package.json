@@ -17,7 +17,9 @@
     "test:cov": "jest --watchman=false --coverage --passWithNoTests"
   },
   "dependencies": {
-    "@babel/runtime": "^8.0.10",
+    "@babel/core": "^7.26.0",
+    "@babel/runtime": "^7.26.0",
+    "@babel/plugin-transform-react-jsx": "^7.26.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/bottom-tabs": "^7.21.0",
     "@react-navigation/drawer": "^7.14.4",

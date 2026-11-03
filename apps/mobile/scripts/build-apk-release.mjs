@@ -104,6 +104,13 @@ try {
   }
 
   run('chmod +x gradlew', { cwd: androidDir });
+
+  // Fail fast with a readable Metro/Babel error before the long native compile.
+  // Gradle's :app:createBundleReleaseJsAndAssets runs the same export:embed path.
+  run(
+    'npx expo export:embed --platform android --entry-file index.js --bundle-output /tmp/tele-pendant-release.bundle --assets-dest /tmp/tele-pendant-release-assets --dev false --minify true',
+  );
+
   // One ABI keeps native compile smaller (disk + time). Override with
   // REACT_NATIVE_ARCHITECTURES=armeabi-v7a,arm64-v8a,x86_64 if needed.
   const abis =
@@ -111,6 +118,13 @@ try {
   console.log(`Building native ABIs: ${abis}`);
   run(`./gradlew assembleRelease -PreactNativeArchitectures=${abis}`, {
     cwd: androidDir,
+    env: {
+      ...process.env,
+      // Keep Metro workers from resolving Babel plugins outside the app tree.
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, '--no-warnings']
+        .filter(Boolean)
+        .join(' '),
+    },
   });
 
   const apkCandidates = [

@@ -14,9 +14,7 @@ export function formatOverlay(
 }
 
 /** Registers already shown in the Operator cluster readout. */
-export function isClusterMetricRegister(
-  registerName?: string | null,
-): boolean {
+export function isClusterMetricRegister(registerName?: string | null): boolean {
   if (!registerName) return false;
   return (
     registerName.includes('hoistHeight') ||

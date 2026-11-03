@@ -17,3 +17,6 @@ apps/mobile/dist
 apps/web/dist
 *.apk
 *.log
+
+.pnpm-store/
+.pnpm-home/

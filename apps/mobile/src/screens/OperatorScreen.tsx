@@ -243,7 +243,9 @@ export function OperatorScreen({ token }: { token: string }) {
           </View>
           <View className="relative z-10 min-h-[96px] flex-1 overflow-hidden">
             {(layoutQuery.data?.overlays ?? [])
-              .filter((overlay) => !isClusterMetricRegister(overlay.register?.name))
+              .filter(
+                (overlay) => !isClusterMetricRegister(overlay.register?.name),
+              )
               .map((overlay) => (
                 <View
                   key={overlay.id}
