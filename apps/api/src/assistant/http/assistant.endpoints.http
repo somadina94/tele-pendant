@@ -2,6 +2,20 @@
 @apiVersion = v1
 @accessToken =
 
+### Get assistant settings
+GET {{baseUrl}}/api/{{apiVersion}}/assistant/settings
+Authorization: Bearer {{accessToken}}
+
+### Update assistant settings (admin)
+PUT {{baseUrl}}/api/{{apiVersion}}/assistant/settings
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "docsRoot": "docs",
+  "docsLink": "https://example.com/USER_MANUAL.md"
+}
+
 ### Ask assistant
 POST {{baseUrl}}/api/{{apiVersion}}/assistant/ask
 Authorization: Bearer {{accessToken}}
@@ -10,3 +24,7 @@ Content-Type: application/json
 {
   "question": "What happens on lost Modbus communications?"
 }
+
+### Reindex docs (admin)
+POST {{baseUrl}}/api/{{apiVersion}}/assistant/reindex
+Authorization: Bearer {{accessToken}}

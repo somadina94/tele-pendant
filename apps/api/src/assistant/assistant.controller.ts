@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ import { JwtAuthGuard } from '../auth/providers/jwt-auth.guard';
 import { RolesGuard } from '../auth/providers/roles.guard';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AskDto } from './dtos/ask.dto';
+import { UpdateAssistantSettingsDto } from './dtos/update-assistant-settings.dto';
 import { AssistantService } from './providers/assistant.service';
 
 @ApiTags('assistant')
@@ -32,16 +34,37 @@ export class AssistantController {
     return this.assistant.search(q);
   }
 
+  @Get('settings')
+  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Assistant docs root / link settings' })
+  settings() {
+    return this.assistant.getSettings();
+  }
+
+  @Put('settings')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update docs root / docs link (admin)' })
+  updateSettings(@Body() dto: UpdateAssistantSettingsDto) {
+    return this.assistant.updateSettings({
+      docsRoot: dto.docsRoot,
+      docsLink: dto.docsLink,
+    });
+  }
+
   @Post('ask')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Local troubleshooting Q&A (no cloud LLM)' })
+  @ApiOperation({
+    summary: 'Ask assistant (Cursor Agent when configured, else FTS)',
+  })
   ask(@Body() dto: AskDto) {
     return this.assistant.ask(dto.question);
   }
 
   @Post('reindex')
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Rebuild local FTS index from docs/' })
+  @ApiOperation({
+    summary: 'Rebuild local FTS index from configured docs root',
+  })
   reindex() {
     return this.assistant.reindex();
   }

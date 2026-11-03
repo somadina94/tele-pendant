@@ -226,23 +226,26 @@ From Operator, click **Audit** (http://localhost:8080/audit).
 
 **Success:** heading **Audit**, link **Operator**, and a list of rows. Each row shows email, action, resource, result, and time. After the Config saves above, you see a `register.update` or `cell.update` row. An operator account can open the page and sees the authorization error from the API.
 
-## 9. Local assistant
+## 9. Assistant
 
-From Operator, click **Assistant** (http://localhost:8080/assistant).
+From Operator, open **Assistant** (http://localhost:8080/assistant).
 
 **Success, before you ask:**
 
-- Heading **Local assistant**, link **Operator**.
-- Text: **Document search over shipped manuals — no cloud LLM, no API keys.**
-- **Question** field prefilled with **What happens on lost Modbus?**
-- Button **Ask**.
+- Heading **Assistant**.
+- **Docs settings**: **Docs root path** (default `docs`), **Docs link (URL)**, **Save settings**, **Reindex**. Indexed count is shown.
+- Optional **Open docs** when a docs link is saved (admin).
+- **Question** prefilled with **What happens on lost Modbus?** and button **Ask**.
 
-1. Click **Ask**. The button briefly says **Searching…**.
-2. **Success:** a block of bullet lines. One of them is **Lost communications** and mentions **comms_lost**, clearing motion coils, and a safe-state register. The note at the bottom is **No cloud LLM — retrieval over shipped manuals / seed tips only.**
+**Server config (optional Cursor Agent):** set `CURSOR_API_KEY` in the API `.env` (never commit the key). Optional `CURSOR_AGENT_CWD` (repo root) and `CURSOR_MODEL` (default `auto` — Cursor picks the model; override e.g. `composer-2.5` if needed). Without a key, answers use local document search only.
 
-Optional second question: replace the text with **deadman** and click **Ask**. **Success:** a bullet **Deadman hold** about holding the control and releasing to stop motion.
+1. Click **Ask**.
+2. **Success (FTS-only):** bullet lines including **Lost communications** / `comms_lost`. Note mentions FTS or that `CURSOR_API_KEY` is unset.
+3. **Success (with Cursor key):** a short prose answer; note says Cursor Agent. The assistant is **advisory only** — it must not issue PLC or safety commands.
 
-A question with no matching words shows **No local documents matched. Try words like deadman, e-stop, Modbus, alarm, or PLC wiring.**
+Admin: change **Docs root path**, save (reindexes when the path changes), or click **Reindex**. Set **Docs link** to a public manual URL for **Open docs**.
+
+Optional: ask **deadman** — expect deadman hold guidance. Nonsense tokens → **No local documents matched…**
 
 ## 10. Face (basic)
 

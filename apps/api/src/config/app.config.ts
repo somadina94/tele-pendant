@@ -22,4 +22,9 @@ export default registerAs('appConfig', () => ({
     port: parseInt(process.env.MODBUS_PORT ?? '1502', 10),
     unitId: parseInt(process.env.MODBUS_UNIT_ID ?? '1', 10),
   },
+  cursor: {
+    apiKey: process.env.CURSOR_API_KEY?.trim() || '',
+    agentCwd: process.env.CURSOR_AGENT_CWD?.trim() || '',
+    model: process.env.CURSOR_MODEL?.trim() || 'auto',
+  },
 }));

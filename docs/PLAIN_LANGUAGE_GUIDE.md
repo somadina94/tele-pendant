@@ -77,7 +77,7 @@ After sign-in, the top menu on the **Operator** page links to:
 | ---- | ------- |
 | **Operator** | Main control: picture, live numbers, button matrix. |
 | **Media** | Camera, QR/barcode, voice shortcuts. |
-| **Assistant** | Search built-in manuals on the server (no ChatGPT, no cloud). |
+| **Assistant** | Ask questions about manuals and how the pendant works (local search; optional Cursor Agent if `CURSOR_API_KEY` is set). |
 | **Face** | Optional face login (convenience only — see [FACE_LIMITATIONS.md](./FACE_LIMITATIONS.md)). |
 | **Ops** | Alarms, trends, connection diagnostics. |
 | **Config** | Admin: PLC connection, registers, buttons, labels, alarms, safety bindings. |
@@ -179,9 +179,10 @@ Ops refreshes every couple of seconds automatically.
 
 ## Assistant screen
 
-- Ask questions in plain language about **deadman**, **Modbus**, **alarms**, **wiring**, etc.
-- Answers come from **documents stored on your server** (search index), not from the public internet.
-- No API keys, no cloud AI bill.
+- Ask questions in plain language about **deadman**, **Modbus**, **alarms**, **wiring**, HMI features, etc.
+- Docs settings: set the **docs folder path** and an optional **docs link** (admins), then **Save** / **Reindex**.
+- Default answers use the **local search index** on your server.
+- If the server has `CURSOR_API_KEY`, answers can be synthesized by the **Cursor Agent** using those manuals plus a feature handbook. Still **advisory only** — it does not move the crane or change PLC bits.
 
 ---
 

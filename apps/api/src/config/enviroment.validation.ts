@@ -26,4 +26,8 @@ export default Joi.object({
   MODBUS_HOST: Joi.string().default('127.0.0.1'),
   MODBUS_PORT: Joi.number().port().default(1502),
   MODBUS_UNIT_ID: Joi.number().integer().min(0).default(1),
+
+  CURSOR_API_KEY: Joi.string().allow('').optional(),
+  CURSOR_AGENT_CWD: Joi.string().allow('').optional(),
+  CURSOR_MODEL: Joi.string().default('auto'),
 });

@@ -1,8 +1,9 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Agent, CursorAgentError } from '@cursor/sdk';
 import Database from 'better-sqlite3';
-import { mkdirSync, readFileSync, readdirSync, existsSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, readFileSync, readdirSync, existsSync, statSync } from 'fs';
+import { isAbsolute, join, resolve } from 'path';
 
 export interface AssistantHit {
   title: string;
@@ -11,8 +12,18 @@ export interface AssistantHit {
   score: number;
 }
 
+export interface AssistantSettings {
+  docsRoot: string;
+  docsLink: string;
+  indexed: number;
+  cursorConfigured: boolean;
+}
+
+const DEFAULT_DOCS_ROOT = 'docs';
+const FALLBACK_HANDBOOK = `Tele-Pendant advisory handbook: NxM cells with PLC registers; deadman for motion; safe-action PIN for e-stop; Modbus loss clears motion and writes safe-state; alarms/trends/diagnostics on Ops; camera/QR/voice on Media; face login is convenience only; Config for PLC/registers/cells; Audit logs actions; OTA for mobile JS. Never issue PLC or safety commands.`;
+
 /**
- * Local document assistant using SQLite FTS5 — no cloud LLM / no API keys.
+ * Document assistant: SQLite FTS5 retrieval + optional Cursor Agent synthesis.
  */
 @Injectable()
 export class AssistantService implements OnModuleInit {
@@ -39,15 +50,46 @@ export class AssistantService implements OnModuleInit {
         path,
         tokenize = 'porter'
       );
+      CREATE TABLE IF NOT EXISTS assistant_settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+      );
     `);
-    const count = (
-      this.db.prepare('SELECT count(*) AS c FROM docs_fts').get() as {
-        c: number;
-      }
-    ).c;
+    if (!this.readSetting('docsRoot')) {
+      this.writeSetting('docsRoot', DEFAULT_DOCS_ROOT);
+    }
+    if (this.readSetting('docsLink') === null) {
+      this.writeSetting('docsLink', '');
+    }
+    const count = this.indexedCount();
     if (count === 0) {
       this.reindex();
     }
+  }
+
+  getSettings(): AssistantSettings {
+    return {
+      docsRoot: this.readSetting('docsRoot') || DEFAULT_DOCS_ROOT,
+      docsLink: this.readSetting('docsLink') || '',
+      indexed: this.indexedCount(),
+      cursorConfigured: Boolean(this.cursorApiKey()),
+    };
+  }
+
+  updateSettings(input: {
+    docsRoot: string;
+    docsLink?: string;
+  }): AssistantSettings {
+    const nextRoot = input.docsRoot.trim() || DEFAULT_DOCS_ROOT;
+    const prevRoot = this.readSetting('docsRoot') || DEFAULT_DOCS_ROOT;
+    this.writeSetting('docsRoot', nextRoot);
+    if (input.docsLink !== undefined) {
+      this.writeSetting('docsLink', input.docsLink.trim());
+    }
+    if (nextRoot !== prevRoot) {
+      this.reindex();
+    }
+    return this.getSettings();
   }
 
   reindex(): { indexed: number } {
@@ -56,12 +98,6 @@ export class AssistantService implements OnModuleInit {
       'INSERT INTO docs_fts (title, body, path) VALUES (?, ?, ?)',
     );
     let indexed = 0;
-
-    const roots = [
-      join(process.cwd(), 'docs'),
-      join(process.cwd(), '..', '..', 'docs'),
-      join(process.cwd(), 'src', '..', '..', '..', 'docs'),
-    ];
 
     const seedSnippets: Array<{ title: string; body: string; path: string }> = [
       {
@@ -91,16 +127,21 @@ export class AssistantService implements OnModuleInit {
       },
     ];
 
+    const docsRoot = this.resolveDocsRoot();
+
     const tx = this.db.transaction(() => {
       for (const s of seedSnippets) {
         insert.run(s.title, s.body, s.path);
         indexed += 1;
       }
-      for (const root of roots) {
-        if (!existsSync(root)) continue;
-        for (const file of readdirSync(root)) {
+      if (
+        docsRoot &&
+        existsSync(docsRoot) &&
+        statSync(docsRoot).isDirectory()
+      ) {
+        for (const file of readdirSync(docsRoot)) {
           if (!file.endsWith('.md')) continue;
-          const full = join(root, file);
+          const full = join(docsRoot, file);
           const body = readFileSync(full, 'utf8');
           insert.run(file, body, full);
           indexed += 1;
@@ -108,7 +149,9 @@ export class AssistantService implements OnModuleInit {
       }
     });
     tx();
-    this.logger.log(`Assistant FTS indexed ${indexed} documents`);
+    this.logger.log(
+      `Assistant FTS indexed ${indexed} documents from ${docsRoot || '(missing docs root)'}`,
+    );
     return { indexed };
   }
 
@@ -117,7 +160,6 @@ export class AssistantService implements OnModuleInit {
     if (!q) return [];
     const safe = q.replace(/[^a-zA-Z0-9\s-]/g, ' ').trim();
     if (!safe) return [];
-    // Natural questions → OR of meaningful tokens (AND would miss seed tips).
     const stop = new Set([
       'how',
       'does',
@@ -178,17 +220,169 @@ export class AssistantService implements OnModuleInit {
     }
   }
 
-  ask(question: string) {
+  async ask(question: string) {
     const hits = this.search(question, 5);
-    return {
+    const ftsAnswer =
+      hits.length === 0
+        ? 'No local documents matched. Try words like deadman, e-stop, Modbus, alarm, or PLC wiring.'
+        : hits.map((h) => `• ${h.title}: ${h.snippet}`).join('\n');
+    const ftsPayload = {
       question,
-      answer:
-        hits.length === 0
-          ? 'No local documents matched. Try words like deadman, e-stop, Modbus, alarm, or PLC wiring.'
-          : hits.map((h) => `• ${h.title}: ${h.snippet}`).join('\n'),
+      answer: ftsAnswer,
       hits,
       mode: 'local-fts' as const,
-      note: 'No cloud LLM — retrieval over shipped manuals / seed tips only.',
+      note: 'FTS retrieval only — set CURSOR_API_KEY for Cursor Agent answers.',
     };
+
+    const apiKey = this.cursorApiKey();
+    if (!apiKey) {
+      return ftsPayload;
+    }
+
+    try {
+      const prompt = this.buildPrompt(question, hits);
+      const cwd = this.agentCwd();
+      const model =
+        this.configService.get<string>('appConfig.cursor.model') || 'auto';
+      const result = await Agent.prompt(prompt, {
+        apiKey,
+        model: { id: model },
+        local: { cwd },
+      });
+      if (result.status === 'error' || !result.result?.trim()) {
+        this.logger.warn(`Cursor ask failed status=${result.status}`);
+        return {
+          ...ftsPayload,
+          note: 'Cursor Agent run failed — showing local FTS answer.',
+        };
+      }
+      return {
+        question,
+        answer: result.result.trim(),
+        hits,
+        mode: 'cursor' as const,
+        note: 'Answered by Cursor Agent with local manuals + feature handbook.',
+      };
+    } catch (err) {
+      const message =
+        err instanceof CursorAgentError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'unknown';
+      this.logger.warn(`Cursor ask error: ${message}`);
+      return {
+        ...ftsPayload,
+        note: `Cursor unavailable (${message}) — showing local FTS answer.`,
+      };
+    }
+  }
+
+  private buildPrompt(question: string, hits: AssistantHit[]): string {
+    const handbook = this.loadHandbook();
+    const docsBlock =
+      hits.length === 0
+        ? '(no FTS hits)'
+        : hits
+            .map(
+              (h) => `### ${h.title}\npath: ${h.path}\nsnippet: ${h.snippet}`,
+            )
+            .join('\n\n');
+    return [
+      'You are the Tele-Pendant operator assistant.',
+      'Answer using the feature handbook and retrieved manual snippets.',
+      'Be concise. Advisory only — never tell the operator to bypass safety or invent PLC addresses.',
+      'If unsure, say what to check in Config/Ops/manuals.',
+      '',
+      '## Feature handbook',
+      handbook,
+      '',
+      '## Retrieved documents',
+      docsBlock,
+      '',
+      '## Operator question',
+      question,
+    ].join('\n');
+  }
+
+  private loadHandbook(): string {
+    const roots = [this.agentCwd(), this.resolveDocsRoot()].filter(
+      (value): value is string => Boolean(value),
+    );
+    for (const root of roots) {
+      for (const path of [
+        join(root, 'ASSISTANT_CONTEXT.md'),
+        join(root, 'docs', 'ASSISTANT_CONTEXT.md'),
+      ]) {
+        if (existsSync(path)) {
+          return readFileSync(path, 'utf8');
+        }
+      }
+    }
+    return FALLBACK_HANDBOOK;
+  }
+
+  private resolveDocsRoot(): string | null {
+    const configured = this.readSetting('docsRoot') || DEFAULT_DOCS_ROOT;
+    if (isAbsolute(configured)) {
+      return existsSync(configured) ? configured : null;
+    }
+    const cwd = process.cwd();
+    const candidates = [
+      join(cwd, configured),
+      join(cwd, '..', '..', configured),
+      join(cwd, 'src', '..', '..', '..', configured),
+    ];
+    for (const root of candidates) {
+      if (existsSync(root) && statSync(root).isDirectory()) {
+        return root;
+      }
+    }
+    return null;
+  }
+
+  private agentCwd(): string {
+    const configured =
+      this.configService.get<string>('appConfig.cursor.agentCwd') || '';
+    if (configured && existsSync(configured)) {
+      return resolve(configured);
+    }
+    const docsRoot = this.resolveDocsRoot();
+    if (docsRoot) {
+      return resolve(docsRoot, '..');
+    }
+    return process.cwd();
+  }
+
+  private cursorApiKey(): string {
+    return (
+      this.configService.get<string>('appConfig.cursor.apiKey') ||
+      process.env.CURSOR_API_KEY?.trim() ||
+      ''
+    );
+  }
+
+  private indexedCount(): number {
+    return (
+      this.db.prepare('SELECT count(*) AS c FROM docs_fts').get() as {
+        c: number;
+      }
+    ).c;
+  }
+
+  private readSetting(key: string): string | null {
+    const row = this.db
+      .prepare('SELECT value FROM assistant_settings WHERE key = ?')
+      .get(key) as { value: string } | undefined;
+    return row ? row.value : null;
+  }
+
+  private writeSetting(key: string, value: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO assistant_settings (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run(key, value);
   }
 }
