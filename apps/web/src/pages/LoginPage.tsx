@@ -27,8 +27,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [locale, setLocale] = useState<Locale>(readLocale);
   const t = (key: string) => translate(locale, key);
-  const [email, setEmail] = useState('admin@example.com');
-  const [password, setPassword] = useState('change-me-admin-password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(() =>
@@ -103,15 +103,17 @@ export function LoginPage() {
           <HelpTip id="tour.login.language">
             <LanguageSelect onLocale={setLocale} />
           </HelpTip>
-          <form className="grid gap-4" onSubmit={onSubmit}>
+          <form className="grid gap-4" onSubmit={onSubmit} autoComplete="off">
             <HelpTip id="tour.login.email">
               <div className="grid gap-2">
                 <Label htmlFor="email">{t('email')}</Label>
                 <Input
                   id="email"
+                  name="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   type="email"
+                  autoComplete="off"
                   required
                 />
               </div>
@@ -121,9 +123,11 @@ export function LoginPage() {
                 <Label htmlFor="password">{t('password')}</Label>
                 <Input
                   id="password"
+                  name="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   type="password"
+                  autoComplete="off"
                   required
                   minLength={8}
                 />

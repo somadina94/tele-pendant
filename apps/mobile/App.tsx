@@ -36,8 +36,8 @@ const SPLASH_MIN_MS = 1600;
 
 function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
   const { t, setLocale, locale } = useLocale();
-  const [email, setEmail] = useState('admin@example.com');
-  const [password, setPassword] = useState('change-me-admin-password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'password' | 'face'>('password');
 
@@ -107,7 +107,15 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
               />
             </HelpTip>
             <HelpTip id="tour.login.email">
-              <Field label={t('email')} value={email} onChangeText={setEmail} />
+              <Field
+                label={t('email')}
+                value={email}
+                onChangeText={setEmail}
+                autoComplete="off"
+                textContentType="none"
+                importantForAutofill="no"
+                keyboardType="email-address"
+              />
             </HelpTip>
             <HelpTip id="tour.login.password">
               <Field
@@ -115,6 +123,9 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
                 value={password}
                 onChangeText={setPassword}
                 secure
+                autoComplete="off"
+                textContentType="oneTimeCode"
+                importantForAutofill="no"
               />
             </HelpTip>
             {error ? <ErrorText>{error}</ErrorText> : null}

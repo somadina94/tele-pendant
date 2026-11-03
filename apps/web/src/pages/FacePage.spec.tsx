@@ -65,6 +65,13 @@ describe('FacePage', () => {
       .mockResolvedValueOnce({ ok: true, limitation: 'basic only' })
       .mockResolvedValueOnce({
         accessToken: 'face',
+        user: {
+          id: '1',
+          email: 'a@b.com',
+          role: 'admin',
+          displayName: 'Admin',
+          locale: 'en',
+        },
         limitation: 'matched',
       });
     renderWithProviders(<FacePage />);
@@ -75,7 +82,9 @@ describe('FacePage', () => {
     await captureAllPoses();
     await waitFor(() =>
       expect(
-        screen.getByText(/Face enrolled|Rostro registrado|Visage enregistré|Gesicht gespeichert/i),
+        screen.getByText(
+          /Face enrolled|Rostro registrado|Visage enregistré|Gesicht gespeichert/i,
+        ),
       ).toBeInTheDocument(),
     );
     expect(post).toHaveBeenCalledWith(
@@ -86,6 +95,25 @@ describe('FacePage', () => {
     await captureAllPoses();
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     expect(localStorage.getItem('accessToken')).toBe('face');
+    expect(JSON.parse(localStorage.getItem('user') ?? '{}')).toMatchObject({
+      email: 'a@b.com',
+    });
+  });
+
+  it('rejects face login when accessToken is missing', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    vi.spyOn(api, 'apiPost').mockResolvedValueOnce({
+      limitation: 'no token',
+    });
+    renderWithProviders(<FacePage skipCamera />);
+    fireEvent.change(screen.getByLabelText(/Email hint/), {
+      target: { value: 'a@b.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
+    await captureAllPoses();
+    expect(
+      await screen.findByText('Face match failed — use password login'),
+    ).toBeInTheDocument();
   });
 
   it('completes a skip-camera challenge with placeholder frames', async () => {
@@ -98,7 +126,9 @@ describe('FacePage', () => {
     await captureAllPoses();
     await waitFor(() =>
       expect(
-        screen.getByText(/Face enrolled|Rostro registrado|Visage enregistré|Gesicht gespeichert/i),
+        screen.getByText(
+          /Face enrolled|Rostro registrado|Visage enregistré|Gesicht gespeichert/i,
+        ),
       ).toBeInTheDocument(),
     );
     expect(post).toHaveBeenCalledWith(

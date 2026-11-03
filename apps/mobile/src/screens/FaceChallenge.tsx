@@ -6,15 +6,7 @@ import { Camera, ScanFace, UserPlus } from 'lucide-react-native';
 import { apiPost } from '../api';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import {
-  Btn,
-  BtnText,
-  ErrorText,
-  Field,
-  Hint,
-  OkText,
-  Section,
-} from '../ui';
+import { Btn, BtnText, ErrorText, Field, Hint, OkText, Section } from '../ui';
 
 export const CHALLENGE_PROMPTS = [
   'Center your face in the frame',
@@ -66,7 +58,7 @@ export function FaceChallenge({
 }) {
   const { t, terror } = useLocale();
   const camera = useRef<CameraView>(null);
-  const [email, setEmail] = useState('admin@example.com');
+  const [email, setEmail] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -147,10 +139,7 @@ export function FaceChallenge({
         showError('No camera snapshot');
         return;
       }
-      const nextFrames = [
-        ...frames,
-        `data:image/jpeg;base64,${photo.base64}`,
-      ];
+      const nextFrames = [...frames, `data:image/jpeg;base64,${photo.base64}`];
       if (nextFrames.length < CHALLENGE_PROMPTS.length) {
         setFrames(nextFrames);
         setStep(nextFrames.length);
@@ -217,6 +206,10 @@ export function FaceChallenge({
       label="Email hint (login)"
       value={email}
       onChangeText={setEmail}
+      autoComplete="off"
+      textContentType="none"
+      importantForAutofill="no"
+      keyboardType="email-address"
     />
   );
 
@@ -312,9 +305,7 @@ export function FaceChallenge({
             ) : (
               <Btn disabled={busy} onPress={() => startChallenge('enroll')}>
                 <UserPlus size={16} color="#041018" />
-                <BtnText>
-                  Enroll (3-step challenge · requires session)
-                </BtnText>
+                <BtnText>Enroll (3-step challenge · requires session)</BtnText>
               </Btn>
             )
           ) : null}

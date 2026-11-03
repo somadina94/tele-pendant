@@ -17,6 +17,12 @@ describe('LoginPage', () => {
       },
     });
     renderWithProviders(<LoginPage />);
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'change-me-admin-password' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     await waitFor(() => expect(post).toHaveBeenCalled());
     expect(localStorage.getItem('accessToken')).toBe('tok');
@@ -25,6 +31,12 @@ describe('LoginPage', () => {
   it('shows error message on failure', async () => {
     vi.spyOn(api, 'apiPost').mockRejectedValue(new Error('bad creds'));
     renderWithProviders(<LoginPage />);
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'change-me-admin-password' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByText('bad creds')).toBeInTheDocument();
   });
@@ -32,6 +44,12 @@ describe('LoginPage', () => {
   it('shows generic error for non-Error throws', async () => {
     vi.spyOn(api, 'apiPost').mockRejectedValue('nope');
     renderWithProviders(<LoginPage />);
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'change-me-admin-password' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByText('Login failed')).toBeInTheDocument();
   });

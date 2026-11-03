@@ -39,7 +39,7 @@ export function FacePage({
   const [mode, setMode] = useState<ChallengeMode>(null);
   const [step, setStep] = useState(0);
   const [frames, setFrames] = useState<string[]>([]);
-  const [email, setEmail] = useState('admin@example.com');
+  const [email, setEmail] = useState('');
   const token = localStorage.getItem('accessToken');
 
   useEffect(() => {
@@ -211,8 +211,11 @@ export function FacePage({
                 <Label htmlFor="face-email">Email hint (login)</Label>
                 <Input
                   id="face-email"
+                  name="face-email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  autoComplete="off"
                   disabled={busy}
                 />
               </div>

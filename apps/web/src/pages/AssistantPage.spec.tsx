@@ -86,7 +86,9 @@ describe('AssistantPage', () => {
       }),
     );
     expect(await screen.findByText(/Indexed documents: 9/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Reindex' }));
+    const reindexBtn = screen.getByRole('button', { name: 'Reindex' });
+    await waitFor(() => expect(reindexBtn).not.toBeDisabled());
+    fireEvent.click(reindexBtn);
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith('/assistant/reindex'),
     );
@@ -104,13 +106,17 @@ describe('AssistantPage', () => {
       .mockRejectedValueOnce(new Error('reindex boom'));
     renderWithProviders(<AssistantPage />);
     await expandDocsSettings();
+    const reindexBtn = () => screen.getByRole('button', { name: 'Reindex' });
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole('button', { name: 'Reindex' }));
+    await waitFor(() => expect(reindexBtn()).not.toBeDisabled());
+    fireEvent.click(reindexBtn());
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(reindexBtn()).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
     await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
-    fireEvent.click(screen.getByRole('button', { name: 'Reindex' }));
+    await waitFor(() => expect(reindexBtn()).not.toBeDisabled());
+    fireEvent.click(reindexBtn());
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
   });
 
