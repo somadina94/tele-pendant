@@ -8,6 +8,9 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
+import { loadMobileEnv } from './load-env.mjs';
+
+loadMobileEnv();
 
 const mobileRoot = resolve(import.meta.dirname, '..');
 const exportDir = join(mobileRoot, 'dist-ota');
@@ -18,6 +21,7 @@ rmSync(exportDir, { recursive: true, force: true });
 execSync(`npx expo export --output-dir ${exportDir} --platform android`, {
   cwd: mobileRoot,
   stdio: 'inherit',
+  env: process.env,
 });
 
 const metadata = JSON.parse(
@@ -34,7 +38,8 @@ const bundleName = basename(bundleRel);
 const bundleBytes = readFileSync(join(exportDir, bundleRel));
 cpSync(join(exportDir, bundleRel), join(assetDir, bundleName));
 const hash = createHash('sha256').update(bundleBytes).digest('hex');
-const base = process.env.OTA_PUBLIC_URL ?? 'http://localhost:3010';
+const base =
+  process.env.OTA_PUBLIC_URL ?? 'https://api.tele-pendant.jahbyte.com';
 
 const manifest = {
   id: crypto.randomUUID(),

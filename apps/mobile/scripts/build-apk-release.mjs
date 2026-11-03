@@ -23,6 +23,9 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadMobileEnv } from './load-env.mjs';
+
+loadMobileEnv();
 
 const mobileRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const appJsonPath = join(mobileRoot, 'app.json');
@@ -31,6 +34,11 @@ const outDir = join(mobileRoot, 'dist');
 const defaultOta = 'https://api.tele-pendant.jahbyte.com';
 const otaBase = (process.env.OTA_PUBLIC_URL ?? defaultOta).replace(/\/$/, '');
 const updatesUrl = `${otaBase}/ota/manifest`;
+const apiUrl =
+  process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '') ??
+  `${defaultOta}/api/v1`;
+console.log(`EXPO_PUBLIC_API_URL=${apiUrl}`);
+process.env.EXPO_PUBLIC_API_URL = apiUrl;
 
 function run(command, opts = {}) {
   console.log(`\n$ ${command}`);

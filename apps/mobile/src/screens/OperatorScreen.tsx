@@ -40,24 +40,22 @@ export function OperatorScreen({ token }: { token: string }) {
   useEffect(() => {
     let socket: Socket | null = null;
     let closed = false;
-    void (async () => {
-      const base = await getApiBase();
-      if (closed) return;
-      const origin = base.replace(/\/api\/v1$/, '');
-      socket = io(`${origin}/realtime`, {
-        transports: ['websocket'],
-        path: '/socket.io',
-      });
-      socketRef.current = socket;
-      socket.on('safety.state', (s: { mode: string }) => setSafetyMode(s.mode));
-      socket.on(
-        'tags.update',
-        (payload: TagSnapshot & { hoistHeightMm: number }) => {
-          setHeight(payload.hoistHeightMm);
-          setTags(payload);
-        },
-      );
-    })();
+    const base = getApiBase();
+    if (closed) return;
+    const origin = base.replace(/\/api\/v1$/, '');
+    socket = io(`${origin}/realtime`, {
+      transports: ['websocket'],
+      path: '/socket.io',
+    });
+    socketRef.current = socket;
+    socket.on('safety.state', (s: { mode: string }) => setSafetyMode(s.mode));
+    socket.on(
+      'tags.update',
+      (payload: TagSnapshot & { hoistHeightMm: number }) => {
+        setHeight(payload.hoistHeightMm);
+        setTags(payload);
+      },
+    );
     return () => {
       closed = true;
       socket?.disconnect();

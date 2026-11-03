@@ -1,9 +1,16 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-const DEFAULT_API = 'http://127.0.0.1:3010/api/v1';
+const LIVE_API = 'https://api.tele-pendant.jahbyte.com/api/v1';
 
-export async function getApiBase(): Promise<string> {
-  return (await AsyncStorage.getItem('apiBase')) || DEFAULT_API;
+/** API base from env (`EXPO_PUBLIC_API_URL` or `APP_URL` + `/api/v1`), else live. */
+export function getApiBase(): string {
+  const fromExtra = Constants.expoConfig?.extra?.apiUrl;
+  if (typeof fromExtra === 'string' && fromExtra.trim()) {
+    return fromExtra.trim().replace(/\/$/, '');
+  }
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  return LIVE_API;
 }
 
 async function apiSend<T>(
@@ -12,7 +19,7 @@ async function apiSend<T>(
   body?: unknown,
   token?: string | null,
 ): Promise<T> {
-  const base = await getApiBase();
+  const base = getApiBase();
   const res = await fetch(`${base}${path}`, {
     method,
     headers: {
@@ -25,9 +32,9 @@ async function apiSend<T>(
     const text = await res.text();
     let message = text;
     try {
-      const body = JSON.parse(text) as { message?: string | string[] };
-      if (typeof body.message === 'string') message = body.message;
-      else if (Array.isArray(body.message)) message = body.message.join(', ');
+      const parsed = JSON.parse(text) as { message?: string | string[] };
+      if (typeof parsed.message === 'string') message = parsed.message;
+      else if (Array.isArray(parsed.message)) message = parsed.message.join(', ');
     } catch {
       message = text;
     }

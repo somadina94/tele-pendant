@@ -1,4 +1,6 @@
+import { useState, type ReactNode } from 'react';
 import {
+  Modal,
   Pressable,
   Text,
   TextInput,
@@ -6,7 +8,8 @@ import {
   type PressableProps,
   type TextInputProps,
 } from 'react-native';
-import type { ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react-native';
+import { useTheme } from './theme';
 
 export function ScreenScroll({ children }: { children: ReactNode }) {
   return (
@@ -147,4 +150,77 @@ export function Card({ children }: { children: ReactNode }) {
 
 export function Row({ children }: { children: ReactNode }) {
   return <View className="flex-row flex-wrap gap-2">{children}</View>;
+}
+
+export function SelectField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
+  const { theme } = useTheme();
+  const [open, setOpen] = useState(false);
+  const selected =
+    options.find((option) => option.value === value)?.label ?? value;
+  const iconColor = theme === 'dark' ? '#8B9AAB' : '#5C6B7A';
+
+  return (
+    <View className="mb-1">
+      <Text className="mb-1 mt-2 text-muted-foreground">{label}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        className="flex-row items-center justify-between rounded-lg border border-border bg-input px-3 py-3"
+        onPress={() => setOpen(true)}
+      >
+        <Text className="text-foreground">{selected}</Text>
+        <ChevronDown size={16} color={iconColor} />
+      </Pressable>
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable
+          className="flex-1 justify-center bg-black/50 p-6"
+          onPress={() => setOpen(false)}
+        >
+          <View className="overflow-hidden rounded-xl border border-border bg-card">
+            <Text className="border-b border-border px-4 py-3 font-semibold text-foreground">
+              {label}
+            </Text>
+            {options.map((option) => {
+              const active = option.value === value;
+              return (
+                <Pressable
+                  key={option.value}
+                  className={`px-4 py-3 ${active ? 'bg-muted' : ''}`}
+                  onPress={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  <Text
+                    className={
+                      active
+                        ? 'font-semibold text-foreground'
+                        : 'text-muted-foreground'
+                    }
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
+    </View>
+  );
 }

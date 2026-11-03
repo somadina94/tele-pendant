@@ -10,12 +10,21 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LogIn } from 'lucide-react-native';
-import { apiPost, getApiBase } from './src/api';
+import type { Locale } from '@tele-pendant/shared';
+import { apiPost } from './src/api';
 import { LocaleProvider, useLocale } from './src/locale';
 import { AppShell } from './src/navigation';
 import { HelpTip, TourBar, TourProvider } from './src/tour';
 import { ThemeProvider, ThemeToggle, useTheme } from './src/theme';
-import { Btn, BtnText, ErrorText, Field, Subtitle, Title } from './src/ui';
+import {
+  Btn,
+  BtnText,
+  ErrorText,
+  Field,
+  SelectField,
+  Subtitle,
+  Title,
+} from './src/ui';
 
 const queryClient = new QueryClient();
 
@@ -23,17 +32,11 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
   const { t, setLocale, locale } = useLocale();
   const [email, setEmail] = useState('admin@example.com');
   const [password, setPassword] = useState('change-me-admin-password');
-  const [apiBase, setApiBase] = useState('http://127.0.0.1:3010/api/v1');
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    void getApiBase().then(setApiBase);
-  }, []);
 
   const login = async () => {
     setError(null);
     try {
-      await AsyncStorage.setItem('apiBase', apiBase);
       const data = await apiPost<{ accessToken: string }>('/auth/login', {
         email,
         password,
@@ -51,16 +54,19 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
         <Title>Tele-Pendant</Title>
         <ThemeToggle />
       </View>
-      <Subtitle>Expo handheld · set API base for device/LAN</Subtitle>
+      <Subtitle>Expo handheld · sign in to the configured API</Subtitle>
       <TourBar screen="login" />
       <HelpTip id="tour.login.language">
-        <Field
+        <SelectField<Locale>
           label={t('language')}
           value={locale}
-          onChangeText={(value) => setLocale(value === 'es' ? 'es' : 'en')}
+          options={[
+            { value: 'en', label: 'English' },
+            { value: 'es', label: 'Español' },
+          ]}
+          onChange={setLocale}
         />
       </HelpTip>
-      <Field label="API base" value={apiBase} onChangeText={setApiBase} />
       <HelpTip id="tour.login.email">
         <Field label={t('email')} value={email} onChangeText={setEmail} />
       </HelpTip>
