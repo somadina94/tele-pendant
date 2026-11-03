@@ -159,14 +159,7 @@ export function OperatorPage() {
       ) : null}
 
       <HelpTip id="tour.operator.graphic">
-        <div
-          className="plant-graphic"
-          style={{
-            background:
-              layout?.background?.cssBackground ??
-              'linear-gradient(160deg, #1a2332, #0f1419)',
-          }}
-        >
+        <div className="plant-graphic">
           {imageUrl && photoOk ? (
             <img
               alt="Plant background"
@@ -174,14 +167,32 @@ export function OperatorPage() {
               onError={() => setPhotoOk(false)}
             />
           ) : null}
+          <div className="plant-cluster-chrome">
+            <h2 className="plant-cluster-title">
+              {layout?.background?.name ?? t('plantGraphic')}
+            </h2>
+            <div className="plant-cluster-status">
+              <span
+                className={cn(
+                  'plant-cluster-status-dot',
+                  (safety?.eStopActive || mode === 'safe_state') && 'danger',
+                  !safety?.eStopActive &&
+                    mode !== 'normal' &&
+                    mode !== 'safe_state' &&
+                    'warn',
+                )}
+              />
+              {mode}
+            </div>
+          </div>
           {(layout?.overlays ?? []).map((o) => (
             <div
               key={o.id}
               className="plant-overlay"
               style={{ left: `${o.xPct}%`, top: `${o.yPct}%` }}
             >
-              <span className="text-muted-foreground">{o.label}</span>{' '}
-              <strong>
+              <span className="plant-overlay-label">{o.label}</span>
+              <strong className="plant-overlay-value">
                 {formatOverlay(
                   o.format,
                   tagValueForRegister(tags, o.register?.name),
@@ -190,13 +201,24 @@ export function OperatorPage() {
             </div>
           ))}
           <div className="plant-readout">
-            <h2 className="text-sm font-semibold text-white drop-shadow md:text-base">
-              {layout?.background?.name ?? t('plantGraphic')}
-            </h2>
-            <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/90 md:text-sm">
-              <span>H {tags?.hoistHeightMm ?? '—'} mm</span>
-              <span>Load {tags?.loadKg ?? '—'} kg</span>
-              <span>{tags?.motorRunning ? 'RUN' : 'IDLE'}</span>
+            <div className="plant-metric">
+              <span className="plant-metric-label">Height</span>
+              <span className="plant-metric-value">
+                {tags?.hoistHeightMm ?? '—'}
+              </span>
+              <span className="plant-metric-unit">mm</span>
+            </div>
+            <div className="plant-metric">
+              <span className="plant-metric-label">Load</span>
+              <span className="plant-metric-value">{tags?.loadKg ?? '—'}</span>
+              <span className="plant-metric-unit">kg</span>
+            </div>
+            <div className="plant-metric">
+              <span className="plant-metric-label">Drive</span>
+              <span className="plant-metric-value">
+                {tags?.motorRunning ? 'RUN' : 'IDLE'}
+              </span>
+              <span className="plant-metric-unit">status</span>
             </div>
           </div>
         </div>
@@ -218,7 +240,6 @@ export function OperatorPage() {
                 placeholder="SAFE_ACTION_PIN"
                 autoComplete="off"
               />
-              <p className="text-xs text-muted-foreground">{t('pinHint')}</p>
             </div>
           </HelpTip>
           <HelpTip id="tour.operator.matrix">

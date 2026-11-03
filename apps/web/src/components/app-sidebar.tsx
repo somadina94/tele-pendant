@@ -22,6 +22,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { BrandLockup } from '@/components/brand-mark';
 import { HelpTip } from '@/lib/tour';
 
 const NAV = [
@@ -42,16 +43,8 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="h-14 border-b border-sidebar-border p-0">
-        <div className="flex h-14 items-center gap-2 px-3">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground">
-            TP
-          </div>
-          <div className="grid min-w-0 flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-            <span className="truncate font-semibold">Tele-Pendant</span>
-            <span className="truncate text-xs text-sidebar-foreground/70">
-              HMI
-            </span>
-          </div>
+        <div className="flex h-14 items-center px-3">
+          <BrandLockup />
         </div>
       </SidebarHeader>
       <SidebarContent>

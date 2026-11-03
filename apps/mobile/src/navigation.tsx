@@ -21,6 +21,7 @@ import { HelpTip, TourBar } from './tour';
 import { ThemeToggle, useTheme } from './theme';
 import { OperatorScreen } from './screens/OperatorScreen';
 import { OpsScreen } from './screens/OpsScreen';
+import { BrandLockup } from './brand';
 import { MediaScreen } from './screens/MediaScreen';
 import { AssistantScreen } from './screens/AssistantScreen';
 import { FaceScreen } from './screens/FaceScreen';
@@ -93,14 +94,8 @@ function DrawerItems({
       contentContainerStyle={{ flexGrow: 1 }}
       className="bg-background"
     >
-      <View className="mb-4 flex-row items-center gap-2 border-b border-border px-3 pb-4 pt-2">
-        <View className="h-8 w-8 items-center justify-center rounded-md bg-primary">
-          <Text className="text-xs font-bold text-primary-foreground">TP</Text>
-        </View>
-        <View>
-          <Text className="font-semibold text-foreground">Tele-Pendant</Text>
-          <Text className="text-xs text-muted-foreground">HMI</Text>
-        </View>
+      <View className="mb-4 border-b border-border px-3 pb-4 pt-2">
+        <BrandLockup />
       </View>
       <HelpTip id="tour.operator.nav">
         <View className="gap-1 px-2">

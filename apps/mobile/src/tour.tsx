@@ -184,12 +184,22 @@ export function TourBar({
 }
 
 export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
-  const { enabled, currentStepId } = useTour();
+  const {
+    enabled,
+    currentStepId,
+    walkthroughActive,
+    nextStep,
+    stopWalkthrough,
+  } = useTour();
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const highlighted = currentStepId === id;
 
   if (!enabled) return <>{children}</>;
+
+  // During an active walkthrough, only highlight — never stack a second Modal
+  // on top of WalkthroughModal (Done would only clear local `open` and stay stuck).
+  const showHelpModal = open && !walkthroughActive;
 
   return (
     <View
@@ -200,13 +210,19 @@ export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
       {children}
       <Pressable
         className="absolute right-0 top-0 z-10 h-[22px] w-[22px] items-center justify-center rounded-full bg-primary"
-        onPress={() => setOpen(true)}
+        onPress={() => {
+          if (walkthroughActive && highlighted) {
+            nextStep();
+            return;
+          }
+          setOpen(true);
+        }}
         accessibilityLabel={`Help: ${id}`}
       >
         <Text className="text-xs font-bold text-primary-foreground">?</Text>
       </Pressable>
       <Modal
-        visible={open || highlighted}
+        visible={showHelpModal}
         transparent
         animationType="fade"
         onRequestClose={() => setOpen(false)}
@@ -217,7 +233,12 @@ export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
         >
           <View className="gap-3 rounded-xl border border-border bg-card p-4">
             <Hint>{t(id)}</Hint>
-            <Btn onPress={() => setOpen(false)}>
+            <Btn
+              onPress={() => {
+                setOpen(false);
+                if (walkthroughActive) stopWalkthrough();
+              }}
+            >
               <BtnText>{t('tour.done')}</BtnText>
             </Btn>
           </View>
@@ -255,8 +276,16 @@ function WalkthroughModal({ screen }: { screen: TourScreen }) {
     .replace('{total}', String(stepIds.length));
 
   return (
-    <Modal visible transparent animationType="fade">
-      <View className="flex-1 justify-end bg-black/55 p-4">
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      onRequestClose={stopWalkthrough}
+    >
+      <View
+        className="flex-1 justify-end bg-black/55 p-4"
+        pointerEvents="box-none"
+      >
         <View className="gap-2.5 rounded-xl border border-border bg-card p-4">
           <Hint>{stepLabel}</Hint>
           <Text className="leading-5 text-foreground">{t(currentStepId)}</Text>

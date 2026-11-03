@@ -19,9 +19,12 @@ import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
 import { Banner, ErrorText, Field, Hint } from '../ui';
 
-function panelColor(css?: string | null): string {
-  const value = css?.trim() ?? '';
-  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value) ? value : '#1a2332';
+function statusTone(mode: string): 'ok' | 'warn' | 'danger' {
+  if (mode === 'safe_state' || mode === 'estop' || mode === 'e_stop') {
+    return 'danger';
+  }
+  if (mode !== 'normal' && mode !== 'unknown') return 'warn';
+  return 'ok';
 }
 
 export function OperatorScreen({ token }: { token: string }) {
@@ -157,6 +160,7 @@ export function OperatorScreen({ token }: { token: string }) {
   };
 
   const imageUrl = layoutQuery.data?.background?.imageUrl ?? '';
+  const tone = statusTone(safetyMode);
   useEffect(() => {
     setPhotoOk(true);
   }, [imageUrl]);
@@ -187,55 +191,127 @@ export function OperatorScreen({ token }: { token: string }) {
       </HelpTip>
       {error ? <ErrorText>{error}</ErrorText> : null}
       <HelpTip id="tour.operator.safePin">
-        <>
-          <Field
-            label={t('safePin')}
-            value={pin}
-            onChangeText={setPin}
-            secure
-          />
-          <Hint>{t('pinHint')}</Hint>
-        </>
+        <Field label={t('safePin')} value={pin} onChangeText={setPin} secure />
       </HelpTip>
       <HelpTip id="tour.operator.graphic">
         <View
-          className="relative mb-3 min-h-[180px] overflow-hidden rounded-xl"
-          style={{
-            backgroundColor: panelColor(
-              layoutQuery.data?.background?.cssBackground,
-            ),
-          }}
+          className="relative mb-3 min-h-[220px] overflow-hidden rounded-2xl border border-white/10"
+          style={{ backgroundColor: '#07090c' }}
         >
           {imageUrl && photoOk ? (
             <Image
               source={{ uri: imageUrl }}
               className="absolute inset-0 h-full w-full"
+              style={{ opacity: 0.32 }}
               onError={() => setPhotoOk(false)}
             />
           ) : null}
-          <Text className="p-2 text-center font-bold text-foreground">
-            {layoutQuery.data?.background?.name ?? t('plantGraphic')}
-          </Text>
-          {(layoutQuery.data?.overlays ?? []).map((overlay) => (
-            <View
-              key={overlay.id}
-              className="absolute"
-              style={{
-                left: `${overlay.xPct}%` as DimensionValue,
-                top: `${overlay.yPct}%` as DimensionValue,
-              }}
+          <View
+            className="absolute inset-0"
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.35)',
+            }}
+          />
+          <View className="z-10 flex-row items-center justify-between px-3.5 pb-2 pt-3">
+            <Text
+              className="flex-1 text-[10px] font-medium uppercase text-white/70"
+              style={{ letterSpacing: 2.8 }}
+              numberOfLines={1}
             >
-              <Hint>{overlay.label}</Hint>
-              <Text className="font-bold text-foreground">
-                {String(
-                  formatOverlay(
-                    overlay.format,
-                    tagValueForRegister(tags, overlay.register?.name),
-                  ),
-                )}
+              {layoutQuery.data?.background?.name ?? t('plantGraphic')}
+            </Text>
+            <View className="ml-2 flex-row items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5">
+              <View
+                className="h-1.5 w-1.5 rounded-full"
+                style={{
+                  backgroundColor:
+                    tone === 'danger'
+                      ? '#fb7185'
+                      : tone === 'warn'
+                        ? '#fcd34d'
+                        : '#8fd0c0',
+                }}
+              />
+              <Text
+                className="text-[10px] font-medium uppercase text-white/85"
+                style={{ letterSpacing: 1.6 }}
+              >
+                {safetyMode}
               </Text>
             </View>
-          ))}
+          </View>
+          <View className="relative z-10 min-h-[96px] flex-1">
+            {(layoutQuery.data?.overlays ?? []).map((overlay) => (
+              <View
+                key={overlay.id}
+                className="absolute min-w-[72px] items-center rounded-lg border border-white/20 bg-black/50 px-2.5 py-1.5"
+                style={{
+                  left: `${overlay.xPct}%` as DimensionValue,
+                  top: `${overlay.yPct}%` as DimensionValue,
+                  transform: [{ translateX: -36 }, { translateY: -18 }],
+                }}
+              >
+                <Text
+                  className="text-[9px] font-medium uppercase text-white/55"
+                  style={{ letterSpacing: 1.8 }}
+                >
+                  {overlay.label}
+                </Text>
+                <Text className="font-mono text-sm font-semibold text-white">
+                  {String(
+                    formatOverlay(
+                      overlay.format,
+                      tagValueForRegister(tags, overlay.register?.name),
+                    ),
+                  )}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <View className="z-10 flex-row border-t border-white/10 bg-black/40 px-1 pb-2.5 pt-2">
+            {(
+              [
+                {
+                  label: 'Height',
+                  value: String(height ?? tags?.hoistHeightMm ?? '—'),
+                  unit: 'mm',
+                },
+                {
+                  label: 'Load',
+                  value: String(tags?.loadKg ?? '—'),
+                  unit: 'kg',
+                },
+                {
+                  label: 'Drive',
+                  value: tags?.motorRunning ? 'RUN' : 'IDLE',
+                  unit: 'status',
+                },
+              ] as const
+            ).map((metric, index) => (
+              <View
+                key={metric.label}
+                className={`flex-1 items-center gap-0.5 px-1 py-1 ${
+                  index > 0 ? 'border-l border-white/10' : ''
+                }`}
+              >
+                <Text
+                  className="text-[9px] font-medium uppercase text-white/45"
+                  style={{ letterSpacing: 2 }}
+                >
+                  {metric.label}
+                </Text>
+                <Text className="font-mono text-xl font-semibold text-white">
+                  {metric.value}
+                </Text>
+                <Text
+                  className="text-[10px] uppercase text-white/40"
+                  style={{ letterSpacing: 1.2 }}
+                >
+                  {metric.unit}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
       </HelpTip>
       <HelpTip id="tour.operator.matrix">

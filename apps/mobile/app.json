@@ -6,15 +6,27 @@
     "orientation": "portrait",
     "scheme": "telependant",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#07090c"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.telependant.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0F1419"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#07090c"
       },
       "package": "com.telependant.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "backgroundColor": "#07090c",
+      "themeColor": "#07090c"
     },
     "plugins": [
       "expo-camera",

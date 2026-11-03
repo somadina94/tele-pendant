@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 128" role="img" aria-label="Tele-Pendant">
+  <rect width="480" height="128" rx="24" fill="#07090c"/>
+  <g transform="translate(24 16)">
+    <g fill="none" stroke="#E8EEF4" stroke-width="3.25" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="18" y="14" width="44" height="44" rx="10"/>
+      <line x1="40" y1="58" x2="40" y2="76"/>
+      <path d="M40 76c0 0-9 9-9 14.5a9 9 0 0 0 18 0C49 85 40 76 40 76z"/>
+    </g>
+    <circle cx="40" cy="26" r="5" fill="#8fd0c0"/>
+  </g>
+  <text
+    x="132"
+    y="74"
+    fill="#E8EEF4"
+    font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    font-size="28"
+    font-weight="600"
+    letter-spacing="0.28em"
+  >TELE-PENDANT</text>
+</svg>

@@ -6,6 +6,7 @@ import { apiPost, PublicUser } from '../lib/api';
 import { LanguageSelect } from '../lib/LanguageSelect';
 import { readLocale } from '../lib/i18n';
 import { HelpTip, PageTourBar } from '../lib/tour';
+import { BrandMark } from '@/components/brand-mark';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import {
@@ -54,9 +55,12 @@ export function LoginPage() {
   return (
     <main className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-4 p-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tele-Pendant</h1>
-          <p className="text-muted-foreground">{t('loginLede')}</p>
+        <div className="flex items-start gap-3">
+          <BrandMark className="size-12 rounded-xl shadow-sm" />
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Tele-Pendant</h1>
+            <p className="text-muted-foreground">{t('loginLede')}</p>
+          </div>
         </div>
         <ThemeToggle />
       </div>

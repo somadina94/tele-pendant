@@ -12,8 +12,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LogIn } from 'lucide-react-native';
 import type { Locale } from '@tele-pendant/shared';
 import { apiPost } from './src/api';
+import { BrandMark } from './src/brand';
 import { LocaleProvider, useLocale } from './src/locale';
 import { AppShell } from './src/navigation';
+import { BootSplash } from './src/splash';
 import { HelpTip, TourBar, TourProvider } from './src/tour';
 import { ThemeProvider, ThemeToggle, useTheme } from './src/theme';
 import {
@@ -27,6 +29,7 @@ import {
 } from './src/ui';
 
 const queryClient = new QueryClient();
+const SPLASH_MIN_MS = 1600;
 
 function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
   const { t, setLocale, locale } = useLocale();
@@ -51,7 +54,10 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
   return (
     <SafeAreaView className="flex-1 bg-background px-4">
       <View className="mb-2 mt-2 flex-row items-center justify-between">
-        <Title>Tele-Pendant</Title>
+        <View className="flex-row items-center gap-3">
+          <BrandMark size={44} />
+          <Title>Tele-Pendant</Title>
+        </View>
         <ThemeToggle />
       </View>
       <Subtitle>Expo handheld · sign in to the configured API</Subtitle>
@@ -92,11 +98,24 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
 function Pendant() {
   const { theme } = useTheme();
   const [token, setToken] = useState<string | null>(null);
+  const [booting, setBooting] = useState(true);
 
   useEffect(() => {
-    void AsyncStorage.getItem('accessToken').then((saved) => {
-      if (saved) setToken(saved);
-    });
+    let cancelled = false;
+    const started = Date.now();
+    void (async () => {
+      try {
+        const saved = await AsyncStorage.getItem('accessToken');
+        if (!cancelled && saved) setToken(saved);
+      } finally {
+        const wait = Math.max(0, SPLASH_MIN_MS - (Date.now() - started));
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        if (!cancelled) setBooting(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const logout = async () => {
@@ -128,6 +147,10 @@ function Pendant() {
             border: '#C5D0DC',
           },
         };
+
+  if (booting) {
+    return <BootSplash />;
+  }
 
   if (!token) {
     return <LoginScreen onLoggedIn={setToken} />;
