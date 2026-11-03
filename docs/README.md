@@ -20,6 +20,7 @@ COOKIE_SECURE=true
 
 ## Manuals
 
+- [PLAIN_LANGUAGE_GUIDE.md](./PLAIN_LANGUAGE_GUIDE.md) — features, buzzwords, controls, and Config for non-technical readers
 - [USER_MANUAL.md](./USER_MANUAL.md)
 - [INSTALLATION.md](./INSTALLATION.md)
 - [MAINTENANCE.md](./MAINTENANCE.md)
