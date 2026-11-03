@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -48,18 +49,19 @@ export function OperatorScreen({ token }: { token: string }) {
     if (closed) return;
     const origin = base.replace(/\/api\/v1$/, '');
     socket = io(`${origin}/realtime`, {
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       path: '/socket.io',
+      reconnection: true,
+      reconnectionAttempts: Infinity,
     });
     socketRef.current = socket;
     socket.on('safety.state', (s: { mode: string }) => setSafetyMode(s.mode));
-    socket.on(
-      'tags.update',
-      (payload: TagSnapshot & { hoistHeightMm: number }) => {
+    socket.on('tags.update', (payload: TagSnapshot) => {
+      if (typeof payload.hoistHeightMm === 'number') {
         setHeight(payload.hoistHeightMm);
-        setTags(payload);
-      },
-    );
+      }
+      setTags(payload);
+    });
     return () => {
       closed = true;
       socket?.disconnect();
@@ -97,9 +99,9 @@ export function OperatorScreen({ token }: { token: string }) {
   const pressCell = async (cell: Cell) => {
     setError(null);
     heldId.current = cell.id;
+    if (cell.isMotion) setHoldingId(cell.id);
     try {
       if (cell.isMotion) {
-        setHoldingId(cell.id);
         await pulseDeadman();
         if (heldId.current !== cell.id) {
           await dropDeadman();
@@ -183,6 +185,8 @@ export function OperatorScreen({ token }: { token: string }) {
     <ScrollView
       className="flex-1 bg-background"
       contentContainerClassName="p-4 pb-12"
+      scrollEnabled={!holdingId}
+      keyboardShouldPersistTaps="handled"
     >
       <HelpTip id="tour.operator.banner">
         <Banner>
@@ -328,30 +332,27 @@ export function OperatorScreen({ token }: { token: string }) {
                   ? (`${Math.floor(100 / grid.cols) - 2}%` as DimensionValue)
                   : '31%';
               return cell ? (
-                <View
+                <Pressable
                   key={cell.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={cell.label}
                   className={`min-h-[88px] items-center justify-center rounded-[10px] border p-2 ${
                     cell.style === 'estop'
                       ? 'border-estop-border bg-estop'
                       : 'border-cell-border bg-cell'
                   } ${holdingId === cell.id ? 'border-2 border-success' : ''}`}
                   style={{ width: cellWidth }}
-                  onStartShouldSetResponder={() => true}
-                  onResponderTerminationRequest={() => false}
-                  onResponderGrant={() => {
+                  onPressIn={() => {
                     void pressCell(cell);
                   }}
-                  onResponderRelease={() => {
-                    void releaseCell(cell);
-                  }}
-                  onResponderTerminate={() => {
+                  onPressOut={() => {
                     void releaseCell(cell);
                   }}
                 >
                   <Text className="text-center font-bold text-foreground">
                     {cell.label}
                   </Text>
-                </View>
+                </Pressable>
               ) : (
                 <View
                   key={`e-${idx}`}
