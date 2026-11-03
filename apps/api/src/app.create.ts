@@ -71,15 +71,23 @@ export function appCreate(app: INestApplication): void {
     }),
   );
 
+  const liveSwaggerUrl =
+    process.env.SWAGGER_LIVE_URL ?? 'https://api.tele-pendant.jahbyte.com';
+  const localSwaggerUrl =
+    process.env.APP_URL && /localhost|127\.0\.0\.1/.test(process.env.APP_URL)
+      ? process.env.APP_URL
+      : `http://localhost:${process.env.PORT ?? 3010}`;
+
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Tele-Pendant API')
     .setDescription(
-      'Industrial tele-pendant HMI API. Modbus TCP, cell matrix, safety supervision, alarms, trends, local assistant.',
+      'Industrial tele-pendant HMI API. Modbus TCP, cell matrix, safety supervision, alarms, trends, local assistant. Use the Servers dropdown to target Localhost or Live.',
     )
     .setVersion('1.0')
     .addCookieAuth('access_token')
     .addBearerAuth()
-    .addServer('http://localhost:3010', 'Local development')
+    .addServer(localSwaggerUrl, 'Localhost')
+    .addServer(liveSwaggerUrl, 'Live')
     .addTag('health', 'Service health')
     .addTag('auth', 'Authentication')
     .addTag('audit', 'Security audit logs')

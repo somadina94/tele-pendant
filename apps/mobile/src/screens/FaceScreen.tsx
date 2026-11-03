@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { apiPost } from '../api';
 import { useLocale } from '../locale';
+import { HelpTip } from '../tour';
 import { Field, styles } from '../ui';
 
 export function FaceScreen({
@@ -77,21 +78,31 @@ export function FaceScreen({
 
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
-      <Text style={styles.section}>{t('faceTitle')}</Text>
-      <Text style={styles.hint}>
-        Convenience match only — not certified biometrics. Fail closed to
-        password.
-      </Text>
+      <HelpTip id="tour.face.title">
+        <>
+          <Text style={styles.section}>{t('faceTitle')}</Text>
+          <Text style={styles.hint}>
+            Convenience match only — not certified biometrics. Fail closed to
+            password.
+          </Text>
+        </>
+      </HelpTip>
       {open && permission?.granted ? (
         <CameraView ref={camera} style={styles.camera} facing="front" />
       ) : null}
       <Field label="Email hint (login)" value={email} onChangeText={setEmail} />
-      <Pressable style={styles.btn} onPress={() => void enroll()}>
-        <Text style={styles.btnText}>Enroll (requires logged-in session)</Text>
-      </Pressable>
-      <Pressable style={styles.btn} onPress={() => void faceLogin()}>
-        <Text style={styles.btnText}>Face login</Text>
-      </Pressable>
+      <HelpTip id="tour.face.enroll">
+        <Pressable style={styles.btn} onPress={() => void enroll()}>
+          <Text style={styles.btnText}>
+            Enroll (requires logged-in session)
+          </Text>
+        </Pressable>
+      </HelpTip>
+      <HelpTip id="tour.face.login">
+        <Pressable style={styles.btn} onPress={() => void faceLogin()}>
+          <Text style={styles.btnText}>Face login</Text>
+        </Pressable>
+      </HelpTip>
       {msg ? <Text style={styles.ok}>{msg}</Text> : null}
     </ScrollView>
   );

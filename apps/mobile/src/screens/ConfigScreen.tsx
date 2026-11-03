@@ -10,6 +10,7 @@ import type {
   RegisterRef,
 } from '../types';
 import { useLocale } from '../locale';
+import { HelpTip } from '../tour';
 import { Field, styles } from '../ui';
 
 function noteOf(err: unknown): string {
@@ -45,7 +46,9 @@ export function ConfigScreen({ token }: { token: string }) {
         These fields are saved in SQLite. Turn on Use this PLC and press Save to
         connect. Each register address is the Modbus number the buttons use.
       </Text>
-      <Text style={styles.section}>{t('plcConnections')}</Text>
+      <HelpTip id="tour.config.plc">
+        <Text style={styles.section}>{t('plcConnections')}</Text>
+      </HelpTip>
       {(connections.data ?? []).map((row) => (
         <PlcForm
           key={row.id}
@@ -78,7 +81,9 @@ export function ConfigScreen({ token }: { token: string }) {
           }
         }}
       />
-      <Text style={styles.section}>{t('registerMaps')}</Text>
+      <HelpTip id="tour.config.registers">
+        <Text style={styles.section}>{t('registerMaps')}</Text>
+      </HelpTip>
       {registers.map((row) => (
         <RegisterForm
           key={row.id}
@@ -95,7 +100,9 @@ export function ConfigScreen({ token }: { token: string }) {
           }}
         />
       ))}
-      <Text style={styles.section}>{t('cellsTitle')}</Text>
+      <HelpTip id="tour.config.cells">
+        <Text style={styles.section}>{t('cellsTitle')}</Text>
+      </HelpTip>
       {(layout?.cells ?? []).map((cell) => (
         <CellForm
           key={cell.id}
@@ -137,7 +144,9 @@ export function ConfigScreen({ token }: { token: string }) {
           }
         }}
       />
-      <Text style={styles.section}>{t('liveLabels')}</Text>
+      <HelpTip id="tour.config.labels">
+        <Text style={styles.section}>{t('liveLabels')}</Text>
+      </HelpTip>
       {(layout?.overlays ?? []).map((overlay) => (
         <OverlayForm
           key={overlay.id}
@@ -178,7 +187,9 @@ export function ConfigScreen({ token }: { token: string }) {
           }
         }}
       />
-      <Text style={styles.section}>{t('background')}</Text>
+      <HelpTip id="tour.config.background">
+        <Text style={styles.section}>{t('background')}</Text>
+      </HelpTip>
       {layout?.background ? (
         <BackgroundForm
           name={layout.background.name}
@@ -538,7 +549,9 @@ function AlarmBlock({
   const [note, setNote] = useState('');
   return (
     <>
-      <Text style={styles.section}>{t('alarmDefinitions')}</Text>
+      <HelpTip id="tour.config.alarms">
+        <Text style={styles.section}>{t('alarmDefinitions')}</Text>
+      </HelpTip>
       {(defs.data ?? []).length === 0 ? (
         <Text style={styles.hint}>{t('noAlarmDefs')}</Text>
       ) : null}
@@ -622,7 +635,9 @@ function SafetyBlock({
   const current = roles.data;
   return (
     <>
-      <Text style={styles.section}>{t('safetyRoles')}</Text>
+      <HelpTip id="tour.config.safety">
+        <Text style={styles.section}>{t('safetyRoles')}</Text>
+      </HelpTip>
       <Text style={styles.hint}>
         Saved e-stop {current?.eStopRegisterId ?? 'unset'}
       </Text>

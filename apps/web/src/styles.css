@@ -348,3 +348,105 @@ button:disabled {
   color: var(--accent);
   font-size: 0.9rem;
 }
+
+.tour-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.tour-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.help-tip {
+  position: relative;
+  display: block;
+}
+
+.help-tip-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 0.45rem;
+  z-index: 2;
+}
+
+.help-tip-body {
+  min-width: 0;
+}
+
+.help-chip {
+  position: absolute;
+  top: -0.35rem;
+  right: -0.35rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  z-index: 3;
+}
+
+.help-popover {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 4;
+  max-width: 22rem;
+  background: #101820;
+  border: 1px solid #2a3a4d;
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  color: var(--fg);
+  font-size: 0.85rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.walkthrough-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 10, 16, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 1.25rem;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.walkthrough-panel {
+  pointer-events: auto;
+  width: min(28rem, 100%);
+  background: var(--panel);
+  border: 1px solid #2a3a4d;
+  border-radius: 0.75rem;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.walkthrough-meta {
+  margin: 0 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.walkthrough-text {
+  margin: 0 0 0.85rem;
+  line-height: 1.4;
+}
+
+.walkthrough-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}

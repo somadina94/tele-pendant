@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 const webRoot = fileURLToPath(new URL('.', import.meta.url));
 
@@ -9,9 +10,10 @@ const apiProxyTarget =
   process.env.VITE_DEV_API_PROXY ?? 'http://127.0.0.1:3010';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
+      '@': path.resolve(webRoot, './src'),
       '@tele-pendant/shared': path.resolve(
         webRoot,
         '../../packages/shared/src/index.ts',

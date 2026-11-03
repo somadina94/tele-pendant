@@ -1,10 +1,24 @@
 import { FormEvent, useState } from 'react';
-import { motion } from 'framer-motion';
+import { LogIn, ScanFace } from 'lucide-react';
 import { translate, type Locale } from '@tele-pendant/shared';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiPost, PublicUser } from '../lib/api';
 import { LanguageSelect } from '../lib/LanguageSelect';
 import { readLocale } from '../lib/i18n';
+import { HelpTip, PageTourBar } from '../lib/tour';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { toastOk, toastErr } from '@/lib/toast';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -26,47 +40,84 @@ export function LoginPage() {
       );
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('user', JSON.stringify(data.user));
+      toastOk(t('signIn'));
       navigate('/operator');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('loginFailed'));
+      const message = err instanceof Error ? err.message : t('loginFailed');
+      setError(message);
+      toastErr(message);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <main className="shell">
-      <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-        Tele-Pendant
-      </motion.h1>
-      <p className="lede">{t('loginLede')}</p>
-      <LanguageSelect onLocale={setLocale} />
-      <form className="login-form" onSubmit={onSubmit}>
-        <label>
-          {t('email')}
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            type="email"
-            required
-          />
-        </label>
-        <label>
-          {t('password')}
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-            required
-            minLength={8}
-          />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={busy}>
-          {busy ? t('signingIn') : t('signIn')}
-        </button>
-        <Link to="/face">{t('faceLogin')}</Link>
-      </form>
+    <main className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-4 p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Tele-Pendant</h1>
+          <p className="text-muted-foreground">{t('loginLede')}</p>
+        </div>
+        <ThemeToggle />
+      </div>
+      <PageTourBar screen="login" />
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('signIn')}</CardTitle>
+          <CardDescription>{t('loginLede')}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <HelpTip id="tour.login.language">
+            <LanguageSelect onLocale={setLocale} />
+          </HelpTip>
+          <form className="grid gap-4" onSubmit={onSubmit}>
+            <HelpTip id="tour.login.email">
+              <div className="grid gap-2">
+                <Label htmlFor="email">{t('email')}</Label>
+                <Input
+                  id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  required
+                />
+              </div>
+            </HelpTip>
+            <HelpTip id="tour.login.password">
+              <div className="grid gap-2">
+                <Label htmlFor="password">{t('password')}</Label>
+                <Input
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type="password"
+                  required
+                  minLength={8}
+                />
+              </div>
+            </HelpTip>
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+            <HelpTip id="tour.login.signIn">
+              <Button type="submit" disabled={busy} className="w-full">
+                <LogIn />
+                {busy ? t('signingIn') : t('signIn')}
+              </Button>
+            </HelpTip>
+            <HelpTip id="tour.login.face">
+              <Button variant="link" asChild className="px-0">
+                <Link to="/face">
+                  <ScanFace />
+                  {t('faceLogin')}
+                </Link>
+              </Button>
+            </HelpTip>
+          </form>
+        </CardContent>
+      </Card>
     </main>
   );
 }

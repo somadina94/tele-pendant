@@ -1,7 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Activity, CheckCheck, Pause } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 import { useT } from '../lib/i18n';
+import { HelpTip } from '../lib/tour';
+import { PageSpinner } from '@/components/page-spinner';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { toastErr, toastOk } from '@/lib/toast';
 
 interface AlarmEvent {
   id: string;
@@ -46,81 +60,140 @@ export function OpsPage() {
     refetchInterval: 2000,
   });
 
+  if (diagnostics.isLoading && alarms.isLoading) {
+    return <PageSpinner label={t('alarmsTitle')} />;
+  }
+
   return (
-    <main className="shell admin">
-      <header className="op-header">
-        <h1>{t('alarmsTitle')}</h1>
-        <Link to="/operator">{t('operator')}</Link>
-      </header>
+    <div className="space-y-4">
+      <h2 className="text-lg font-semibold">{t('alarmsTitle')}</h2>
 
-      <section>
-        <h2>{t('diagnostics')}</h2>
-        <ul className="list">
-          <li>
-            PLC connected: {String(diagnostics.data?.plc.connected ?? '—')} (
-            {diagnostics.data?.plc.label ?? 'n/a'})
-          </li>
-          <li>Safety mode: {diagnostics.data?.safety.mode ?? '—'}</li>
-          <li>
-            Watchdog OK: {String(diagnostics.data?.safety.watchdogOk ?? '—')}
-          </li>
-          <li>Uptime: {diagnostics.data?.uptimeSec ?? '—'} s</li>
-          {diagnostics.data?.plc.lastError && (
-            <li className="error">
-              Last error: {diagnostics.data.plc.lastError}
-            </li>
-          )}
-        </ul>
-      </section>
+      <HelpTip id="tour.ops.diagnostics">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="size-4" /> {t('diagnostics')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2 text-sm">
+            <p>
+              PLC connected: {String(diagnostics.data?.plc.connected ?? '—')} (
+              {diagnostics.data?.plc.label ?? 'n/a'})
+            </p>
+            <p>Safety mode: {diagnostics.data?.safety.mode ?? '—'}</p>
+            <p>
+              Watchdog OK: {String(diagnostics.data?.safety.watchdogOk ?? '—')}
+            </p>
+            <p>Uptime: {diagnostics.data?.uptimeSec ?? '—'} s</p>
+            {diagnostics.data?.plc.lastError ? (
+              <p className="text-destructive">
+                Last error: {diagnostics.data.plc.lastError}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      </HelpTip>
 
-      <section>
-        <h2>{t('alarms')}</h2>
-        <ul className="list">
-          {(alarms.data ?? []).length === 0 && <li>{t('noAlarms')}</li>}
-          {(alarms.data ?? []).map((a) => (
-            <li key={a.id}>
-              <strong>[{a.definition.severity}]</strong> {a.definition.name} —{' '}
-              {a.state} (value {a.value})
-              {a.state === 'active' && (
-                <>
-                  {' '}
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() =>
-                      void apiPost(`/alarms/${a.id}/ack`).then(() =>
-                        alarms.refetch(),
-                      )
-                    }
-                  >
-                    {t('ack')}
-                  </button>{' '}
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() =>
-                      void apiPost(`/alarms/${a.id}/shelve`).then(() =>
-                        alarms.refetch(),
-                      )
-                    }
-                  >
-                    {t('shelve')}
-                  </button>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
+      <HelpTip id="tour.ops.alarms">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('alarms')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Severity</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {!alarms.data?.length ? (
+                  <TableRow>
+                    <TableCell colSpan={5}>{t('noAlarms')}</TableCell>
+                  </TableRow>
+                ) : null}
+                {(alarms.data ?? []).map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          a.definition.severity === 'critical'
+                            ? 'destructive'
+                            : 'secondary'
+                        }
+                      >
+                        {a.definition.severity}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{a.definition.name}</TableCell>
+                    <TableCell>{a.state}</TableCell>
+                    <TableCell>{a.value}</TableCell>
+                    <TableCell>
+                      {a.state === 'active' ? (
+                        <HelpTip id="tour.ops.ack">
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                void apiPost(`/alarms/${a.id}/ack`)
+                                  .then(() => {
+                                    toastOk(t('ack'));
+                                    return alarms.refetch();
+                                  })
+                                  .catch((err: Error) => toastErr(err.message))
+                              }
+                            >
+                              <CheckCheck /> {t('ack')}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                void apiPost(`/alarms/${a.id}/shelve`)
+                                  .then(() => {
+                                    toastOk(t('shelve'));
+                                    return alarms.refetch();
+                                  })
+                                  .catch((err: Error) => toastErr(err.message))
+                              }
+                            >
+                              <Pause /> {t('shelve')}
+                            </Button>
+                          </div>
+                        </HelpTip>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </HelpTip>
 
-      <section>
-        <h2>{t('trends')}</h2>
-        {(trendKeys.data ?? []).length === 0 ? <p>{t('noSamples')}</p> : null}
-        {(trendKeys.data ?? []).map((key) => (
-          <TrendChart key={key} seriesKey={key} />
-        ))}
-      </section>
-    </main>
+      <HelpTip id="tour.ops.trends">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('trends')}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!trendKeys.data?.length ? (
+              <p className="text-sm text-muted-foreground">{t('noSamples')}</p>
+            ) : null}
+            {(trendKeys.data ?? []).map((key) => (
+              <TrendChart key={key} seriesKey={key} />
+            ))}
+          </CardContent>
+        </Card>
+      </HelpTip>
+    </div>
   );
 }
 
@@ -154,7 +227,7 @@ function TrendChart({ seriesKey }: { seriesKey: string }) {
   const unit = seriesKey.toLowerCase().includes('mm') ? ' mm' : '';
   return (
     <figure>
-      <figcaption>
+      <figcaption className="mb-1 text-sm">
         {seriesKey}: {last}
         {unit}
       </figcaption>
@@ -166,7 +239,8 @@ function TrendChart({ seriesKey }: { seriesKey: string }) {
       >
         <polyline
           fill="none"
-          stroke="#7dcea0"
+          stroke="currentColor"
+          className="text-emerald-500"
           strokeWidth="2"
           points={coords}
         />

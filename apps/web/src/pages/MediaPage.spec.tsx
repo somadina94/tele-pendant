@@ -282,25 +282,39 @@ describe('MediaPage', () => {
 
   it('runs hoist from the UP and DOWN buttons', async () => {
     vi.spyOn(api, 'apiPost')
-      .mockResolvedValueOnce({ ok: true, label: 'Hoist Up' })
-      .mockResolvedValueOnce({ ok: false, reason: 'command_not_allowlisted' })
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: false })
       .mockRejectedValueOnce('nope');
     renderWithProviders(<MediaPage />);
     await screen.findByText(/Device camera notes/);
     fireEvent.click(screen.getByRole('button', { name: 'UP' }));
     expect(
-      await screen.findByText('Heard: up. Executed: Hoist Up'),
+      await screen.findByText('Heard: up. Executed: undefined'),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'DOWN' }));
     expect(
-      await screen.findByText(
-        'Heard: down. Not executed: command_not_allowlisted',
-      ),
+      await screen.findByText('Heard: down. Not executed: unknown'),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'UP' }));
     expect(
       await screen.findByText('Heard: up. Not executed: failed'),
     ).toBeInTheDocument();
+  });
+
+  it('renders without scan codes when the list request fails', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/media/camera') {
+        return {
+          deviceCameraEnabled: true,
+          rtspUrl: null,
+          notes: 'notes only',
+        };
+      }
+      throw new Error('codes down');
+    });
+    renderWithProviders(<MediaPage />);
+    expect(await screen.findByText('notes only')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resolve' })).toBeInTheDocument();
   });
 
   it('reports empty barcode frame', async () => {

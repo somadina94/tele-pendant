@@ -16,6 +16,7 @@ import { io, Socket } from 'socket.io-client';
 import { apiGet, apiPost, getApiBase } from '../api';
 import type { Cell, Layout } from '../types';
 import { useLocale } from '../locale';
+import { HelpTip } from '../tour';
 import { Field, styles } from '../ui';
 
 function panelColor(css?: string | null): string {
@@ -177,92 +178,109 @@ export function OperatorScreen({ token }: { token: string }) {
 
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
-      <Text style={styles.banner}>
-        {t('safety')}: {safetyMode} · H {height ?? '—'} mm
-        {holdingId ? ` · ${t('deadmanHold')}` : ''}
-      </Text>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Field label={t('safePin')} value={pin} onChangeText={setPin} secure />
-      <Text style={styles.hint}>{t('pinHint')}</Text>
-      <View
-        style={[
-          styles.graphic,
-          {
-            backgroundColor: panelColor(
-              layoutQuery.data?.background?.cssBackground,
-            ),
-          },
-        ]}
-      >
-        {imageUrl && photoOk ? (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.graphicPhoto}
-            onError={() => setPhotoOk(false)}
-          />
-        ) : null}
-        <Text style={styles.cellText}>
-          {layoutQuery.data?.background?.name ?? t('plantGraphic')}
+      <HelpTip id="tour.operator.banner">
+        <Text style={styles.banner}>
+          {t('safety')}: {safetyMode} · H {height ?? '—'} mm
+          {holdingId ? ` · ${t('deadmanHold')}` : ''}
         </Text>
-        {(layoutQuery.data?.overlays ?? []).map((overlay) => (
-          <View
-            key={overlay.id}
-            style={[
-              styles.overlay,
-              { left: `${overlay.xPct}%`, top: `${overlay.yPct}%` },
-            ]}
-          >
-            <Text style={styles.hint}>{overlay.label}</Text>
-            <Text style={styles.cellText}>
-              {String(
-                formatOverlay(
-                  overlay.format,
-                  tagValueForRegister(tags, overlay.register?.name),
-                ),
-              )}
-            </Text>
-          </View>
-        ))}
-      </View>
-      <View style={styles.matrix}>
-        {grid &&
-          grid.cells.map((cell, idx) => {
-            const cellWidth: DimensionValue =
-              grid.cols > 0
-                ? (`${Math.floor(100 / grid.cols) - 2}%` as DimensionValue)
-                : '31%';
-            return cell ? (
-              <View
-                key={cell.id}
-                style={[
-                  styles.cell,
-                  { width: cellWidth },
-                  cell.style === 'estop' && styles.estop,
-                  holdingId === cell.id && styles.holding,
-                ]}
-                onStartShouldSetResponder={() => true}
-                onResponderTerminationRequest={() => false}
-                onResponderGrant={() => {
-                  void pressCell(cell);
-                }}
-                onResponderRelease={() => {
-                  void releaseCell(cell);
-                }}
-                onResponderTerminate={() => {
-                  void releaseCell(cell);
-                }}
-              >
-                <Text style={styles.cellText}>{cell.label}</Text>
-              </View>
-            ) : (
-              <View
-                key={`e-${idx}`}
-                style={[styles.empty, { width: cellWidth }]}
-              />
-            );
-          })}
-      </View>
-      <Text style={styles.hint}>{t('holdHint')}</Text>
+      </HelpTip>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <HelpTip id="tour.operator.safePin">
+        <>
+          <Field
+            label={t('safePin')}
+            value={pin}
+            onChangeText={setPin}
+            secure
+          />
+          <Text style={styles.hint}>{t('pinHint')}</Text>
+        </>
+      </HelpTip>
+      <HelpTip id="tour.operator.graphic">
+        <View
+          style={[
+            styles.graphic,
+            {
+              backgroundColor: panelColor(
+                layoutQuery.data?.background?.cssBackground,
+              ),
+            },
+          ]}
+        >
+          {imageUrl && photoOk ? (
+            <Image
+              source={{ uri: imageUrl }}
+              style={styles.graphicPhoto}
+              onError={() => setPhotoOk(false)}
+            />
+          ) : null}
+          <Text style={styles.cellText}>
+            {layoutQuery.data?.background?.name ?? t('plantGraphic')}
+          </Text>
+          {(layoutQuery.data?.overlays ?? []).map((overlay) => (
+            <View
+              key={overlay.id}
+              style={[
+                styles.overlay,
+                { left: `${overlay.xPct}%`, top: `${overlay.yPct}%` },
+              ]}
+            >
+              <Text style={styles.hint}>{overlay.label}</Text>
+              <Text style={styles.cellText}>
+                {String(
+                  formatOverlay(
+                    overlay.format,
+                    tagValueForRegister(tags, overlay.register?.name),
+                  ),
+                )}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </HelpTip>
+      <HelpTip id="tour.operator.matrix">
+        <View style={styles.matrix}>
+          {grid &&
+            grid.cells.map((cell, idx) => {
+              const cellWidth: DimensionValue =
+                grid.cols > 0
+                  ? (`${Math.floor(100 / grid.cols) - 2}%` as DimensionValue)
+                  : '31%';
+              return cell ? (
+                <View
+                  key={cell.id}
+                  style={[
+                    styles.cell,
+                    { width: cellWidth },
+                    cell.style === 'estop' && styles.estop,
+                    holdingId === cell.id && styles.holding,
+                  ]}
+                  onStartShouldSetResponder={() => true}
+                  onResponderTerminationRequest={() => false}
+                  onResponderGrant={() => {
+                    void pressCell(cell);
+                  }}
+                  onResponderRelease={() => {
+                    void releaseCell(cell);
+                  }}
+                  onResponderTerminate={() => {
+                    void releaseCell(cell);
+                  }}
+                >
+                  <Text style={styles.cellText}>{cell.label}</Text>
+                </View>
+              ) : (
+                <View
+                  key={`e-${idx}`}
+                  style={[styles.empty, { width: cellWidth }]}
+                />
+              );
+            })}
+        </View>
+      </HelpTip>
+      <HelpTip id="tour.operator.holdHint">
+        <Text style={styles.hint}>{t('holdHint')}</Text>
+      </HelpTip>
     </ScrollView>
   );
 }

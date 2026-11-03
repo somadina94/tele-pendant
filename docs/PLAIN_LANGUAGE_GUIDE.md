@@ -88,6 +88,8 @@ On the **phone app**, the same areas appear as tabs/buttons in the header after 
 
 **Language:** On the login page you can pick **English** or **Español**. That choice is saved on your user profile and overrides the browser language.
 
+**Tour help (optional):** Off by default on web and phone. Turn on **Tour help** to show a small **?** on each annotated control — tap or click it for a plain-language tip. While Tour help is on, **Start tour** runs a short Next / Back / Done walkthrough for the **current screen** only. Turning Tour help off again hides tips and ends any walkthrough. The preference stays on this device (`tourEnabled` in browser storage or phone AsyncStorage); it is not stored on the server.
+
 ---
 
 ## Operator screen — controls in detail
@@ -358,6 +360,8 @@ Always follow your site’s real safety program. Software STOP is not a substitu
 | Change button text | Config | Edit cell label → Save |
 | Point at real PLC | Config | New connection → **Use this PLC** → Save |
 | Change language | Login | Language menu → English / Español |
+| Explain every control | Any | Turn on **Tour help**, tap **?** |
+| Guided walkthrough | Any (tour on) | **Start tour** → Next / Back / Done |
 
 ---
 

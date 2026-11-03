@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { apiPost } from '../api';
 import { useLocale } from '../locale';
+import { HelpTip } from '../tour';
 import { Field, styles } from '../ui';
 
 export function MediaScreen({ token }: { token: string }) {
@@ -88,49 +89,65 @@ export function MediaScreen({ token }: { token: string }) {
 
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
-      <Text style={styles.section}>{t('qrTitle')}</Text>
-      <Field label="Code" value={code} onChangeText={setCode} />
-      <Pressable style={styles.btn} onPress={() => void resolve(code)}>
-        <Text style={styles.btnText}>Resolve</Text>
-      </Pressable>
-      {scanning && permission?.granted ? (
-        <CameraView
-          style={styles.camera}
-          facing="back"
-          barcodeScannerSettings={{ barcodeTypes: ['qr', 'code128', 'ean13'] }}
-          onBarcodeScanned={({ data }) => {
-            if (data === lastCode.current) return;
-            lastCode.current = data;
-            setCode(data);
-            void resolve(data);
-          }}
-        />
-      ) : null}
-      <Pressable
-        style={styles.btn}
-        onPress={() => {
-          if (!permission?.granted) void requestPermission();
-          setScanning((on) => !on);
-        }}
-      >
-        <Text style={styles.btnText}>
-          {scanning ? t('stopCamera') : t('scanCamera')}
-        </Text>
-      </Pressable>
+      <HelpTip id="tour.media.qr">
+        <>
+          <Text style={styles.section}>{t('qrTitle')}</Text>
+          <Field label="Code" value={code} onChangeText={setCode} />
+          <Pressable style={styles.btn} onPress={() => void resolve(code)}>
+            <Text style={styles.btnText}>Resolve</Text>
+          </Pressable>
+        </>
+      </HelpTip>
+      <HelpTip id="tour.media.camera">
+        <>
+          {scanning && permission?.granted ? (
+            <CameraView
+              style={styles.camera}
+              facing="back"
+              barcodeScannerSettings={{
+                barcodeTypes: ['qr', 'code128', 'ean13'],
+              }}
+              onBarcodeScanned={({ data }) => {
+                if (data === lastCode.current) return;
+                lastCode.current = data;
+                setCode(data);
+                void resolve(data);
+              }}
+            />
+          ) : null}
+          <Pressable
+            style={styles.btn}
+            onPress={() => {
+              if (!permission?.granted) void requestPermission();
+              setScanning((on) => !on);
+            }}
+          >
+            <Text style={styles.btnText}>
+              {scanning ? t('stopCamera') : t('scanCamera')}
+            </Text>
+          </Pressable>
+        </>
+      </HelpTip>
       {result ? <Text style={styles.ok}>{result}</Text> : null}
-      <Text style={styles.section}>{t('voice')}</Text>
-      <Text style={styles.hint}>{t('phoneVoiceHint')}</Text>
-      <Pressable style={styles.btn} onPress={() => void listen()}>
-        <Text style={styles.btnText}>{t('listen')}</Text>
-      </Pressable>
-      <View style={styles.row}>
-        <Pressable style={styles.btn} onPress={() => void command('up')}>
-          <Text style={styles.btnText}>{t('up')}</Text>
-        </Pressable>
-        <Pressable style={styles.btn} onPress={() => void command('down')}>
-          <Text style={styles.btnText}>{t('down')}</Text>
-        </Pressable>
-      </View>
+      <HelpTip id="tour.media.voice">
+        <>
+          <Text style={styles.section}>{t('voice')}</Text>
+          <Text style={styles.hint}>{t('phoneVoiceHint')}</Text>
+          <Pressable style={styles.btn} onPress={() => void listen()}>
+            <Text style={styles.btnText}>{t('listen')}</Text>
+          </Pressable>
+        </>
+      </HelpTip>
+      <HelpTip id="tour.media.upDown">
+        <View style={styles.row}>
+          <Pressable style={styles.btn} onPress={() => void command('up')}>
+            <Text style={styles.btnText}>{t('up')}</Text>
+          </Pressable>
+          <Pressable style={styles.btn} onPress={() => void command('down')}>
+            <Text style={styles.btnText}>{t('down')}</Text>
+          </Pressable>
+        </View>
+      </HelpTip>
       {voice ? <Text style={styles.ok}>{voice}</Text> : null}
     </ScrollView>
   );

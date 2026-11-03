@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { ShieldAlert } from 'lucide-react';
 import { apiGet, apiPost, CellDto, HmiLayout, LiveTags } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { formatOverlay, tagValueForRegister } from '../lib/operator-helpers';
 import { getRealtimeSocket } from '../lib/realtime';
+import { HelpTip } from '../lib/tour';
+import { PageSpinner } from '@/components/page-spinner';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 export function OperatorPage() {
   const queryClient = useQueryClient();
@@ -123,44 +131,36 @@ export function OperatorPage() {
     setPhotoOk(true);
   }, [imageUrl]);
 
+  if (layoutQuery.isLoading) {
+    return <PageSpinner label={t('operator')} />;
+  }
+
   return (
-    <div className="operator">
-      <header className="op-header">
-        <div>
-          <h1>Tele-Pendant</h1>
-          <p className="lede">{t('operatorLede')}</p>
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col gap-2 md:gap-3">
+      <HelpTip id="tour.operator.banner">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-1.5">
+          <ShieldAlert className="size-4 text-muted-foreground" />
+          <span className="text-sm">
+            {t('safety')}: <strong>{mode}</strong>
+          </span>
+          {safety?.deadmanActive || holdingCellId ? (
+            <Badge variant="secondary">{t('deadmanHold')}</Badge>
+          ) : null}
+          {safety?.eStopActive ? (
+            <Badge variant="destructive">{t('estop')}</Badge>
+          ) : null}
         </div>
-        <nav className="op-nav">
-          <Link to="/media">{t('media')}</Link>
-          <Link to="/assistant">{t('assistant')}</Link>
-          <Link to="/face">{t('face')}</Link>
-          <Link to="/ops">{t('ops')}</Link>
-          <Link to="/admin">{t('config')}</Link>
-          <Link to="/audit">{t('audit')}</Link>
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => {
-              localStorage.removeItem('accessToken');
-              window.location.href = '/';
-            }}
-          >
-            {t('logout')}
-          </button>
-        </nav>
-      </header>
+      </HelpTip>
 
-      <div className={`banner mode-${mode}`}>
-        {t('safety')}: <strong>{mode}</strong>
-        {safety?.deadmanActive || holdingCellId ? ` · ${t('deadmanHold')}` : ''}
-        {safety?.eStopActive ? ` · ${t('estop')}` : ''}
-      </div>
+      {message ? (
+        <Alert variant="destructive">
+          <AlertDescription>{terror(message)}</AlertDescription>
+        </Alert>
+      ) : null}
 
-      {message && <p className="error">{terror(message)}</p>}
-
-      <div className="op-grid">
-        <section
-          className="graphic"
+      <HelpTip id="tour.operator.graphic">
+        <div
+          className="plant-graphic"
           style={{
             background:
               layout?.background?.cssBackground ??
@@ -169,66 +169,78 @@ export function OperatorPage() {
         >
           {imageUrl && photoOk ? (
             <img
-              className="graphic-photo"
               alt="Plant background"
               src={imageUrl}
               onError={() => setPhotoOk(false)}
             />
           ) : null}
-          <h2>{layout?.background?.name ?? t('plantGraphic')}</h2>
           {(layout?.overlays ?? []).map((o) => (
-            <motion.div
+            <div
               key={o.id}
-              className="overlay"
+              className="plant-overlay"
               style={{ left: `${o.xPct}%`, top: `${o.yPct}%` }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
             >
-              <span className="overlay-label">{o.label}</span>
+              <span className="text-muted-foreground">{o.label}</span>{' '}
               <strong>
                 {formatOverlay(
                   o.format,
                   tagValueForRegister(tags, o.register?.name),
                 )}
               </strong>
-            </motion.div>
+            </div>
           ))}
-          <div className="tag-strip">
-            <span>H {tags?.hoistHeightMm ?? '—'} mm</span>
-            <span>Load {tags?.loadKg ?? '—'} kg</span>
-            <span>{tags?.motorRunning ? 'RUN' : 'IDLE'}</span>
+          <div className="plant-readout">
+            <h2 className="text-sm font-semibold text-white drop-shadow md:text-base">
+              {layout?.background?.name ?? t('plantGraphic')}
+            </h2>
+            <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/90 md:text-sm">
+              <span>H {tags?.hoistHeightMm ?? '—'} mm</span>
+              <span>Load {tags?.loadKg ?? '—'} kg</span>
+              <span>{tags?.motorRunning ? 'RUN' : 'IDLE'}</span>
+            </div>
           </div>
-        </section>
+        </div>
+      </HelpTip>
 
-        <section className="matrix-panel">
-          <h2>{t('controlMatrix')}</h2>
-          <label className="pin">
-            {t('safePin')}
-            <input
-              value={safePin}
-              onChange={(e) => setSafePin(e.target.value)}
-              type="password"
-              placeholder="SAFE_ACTION_PIN"
-              autoComplete="off"
-            />
-          </label>
-          <p className="hint">{t('pinHint')}</p>
-          {grid && (
+      <Card className="min-h-0 flex-1 overflow-auto">
+        <CardHeader className="space-y-1 px-4 py-3">
+          <CardTitle className="text-base">{t('controlMatrix')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 px-4 pb-4 pt-0">
+          <HelpTip id="tour.operator.safePin">
+            <div className="grid max-w-xs gap-1.5">
+              <Label htmlFor="safe-pin">{t('safePin')}</Label>
+              <Input
+                id="safe-pin"
+                value={safePin}
+                onChange={(e) => setSafePin(e.target.value)}
+                type="password"
+                placeholder="SAFE_ACTION_PIN"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">{t('pinHint')}</p>
+            </div>
+          </HelpTip>
+          <HelpTip id="tour.operator.matrix">
             <div
-              className="matrix"
+              className="matrix-grid"
               style={{
-                gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
+                gridTemplateColumns: `repeat(${grid?.cols ?? 1}, minmax(0, 1fr))`,
               }}
             >
-              {grid.cells.map((cell, idx) =>
+              {(grid?.cells ?? []).map((cell, idx) =>
                 cell ? (
-                  <motion.button
+                  <Button
                     key={cell.id}
                     type="button"
-                    className={`cell style-${cell.style} ${
-                      holdingCellId === cell.id ? 'holding' : ''
-                    }`}
-                    whileTap={{ scale: 0.96 }}
+                    variant={
+                      cell.style === 'estop' ? 'destructive' : 'secondary'
+                    }
+                    className={cn(
+                      'matrix-cell h-auto whitespace-normal',
+                      holdingCellId === cell.id && 'holding',
+                      cell.style === 'estop' && 'estop',
+                    )}
                     onPointerDown={(e) => {
                       e.preventDefault();
                       void pressCell(cell);
@@ -243,16 +255,18 @@ export function OperatorPage() {
                     aria-label={cell.label}
                   >
                     {cell.label}
-                  </motion.button>
+                  </Button>
                 ) : (
-                  <div key={`empty-${idx}`} className="cell empty" />
+                  <div key={`empty-${idx}`} className="min-h-14 md:min-h-16" />
                 ),
               )}
             </div>
-          )}
-          <p className="hint">{t('holdHint')}</p>
-        </section>
-      </div>
+          </HelpTip>
+          <HelpTip id="tour.operator.holdHint">
+            <p className="text-xs text-muted-foreground">{t('holdHint')}</p>
+          </HelpTip>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -215,13 +215,14 @@ describe('OperatorPage', () => {
       expect(socket.emit).toHaveBeenCalledWith('deadman.release'),
     );
 
-    localStorage.setItem('accessToken', 'x');
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { href: '' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
     expect(localStorage.getItem('accessToken')).toBeNull();
+  });
+
+  it('renders matrix placeholders when layout request fails', async () => {
+    vi.spyOn(api, 'apiGet').mockRejectedValue(new Error('offline'));
+    renderWithProviders(<OperatorPage />);
+    expect(await screen.findByText('Plant graphic')).toBeInTheDocument();
+    expect(screen.getByText(/safety/i)).toBeInTheDocument();
   });
 
   it('renders empty cell slots when matrix has gaps', async () => {
@@ -242,7 +243,7 @@ describe('OperatorPage', () => {
     expect(await screen.findByText('Plant graphic')).toBeInTheDocument();
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
     await waitFor(() =>
-      expect(container.querySelector('.cell.empty')).toBeTruthy(),
+      expect(container.querySelectorAll('.min-h-14').length).toBeGreaterThan(0),
     );
   });
 });

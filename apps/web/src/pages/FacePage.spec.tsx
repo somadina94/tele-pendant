@@ -83,4 +83,32 @@ describe('FacePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Face login' }));
     expect(post).not.toHaveBeenCalled();
   });
+
+  it('surfaces enroll and login failures', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    vi.spyOn(api, 'apiPost')
+      .mockRejectedValueOnce(new Error('enroll boom'))
+      .mockRejectedValueOnce(new Error('login boom'))
+      .mockRejectedValueOnce('enroll string')
+      .mockRejectedValueOnce('login string');
+    renderWithProviders(<FacePage />);
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Enroll (requires logged-in session)',
+      }),
+    );
+    expect(await screen.findByText('enroll boom')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Face login' }));
+    expect(await screen.findByText('login boom')).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Enroll (requires logged-in session)',
+      }),
+    );
+    expect(await screen.findByText('Enroll failed')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Face login' }));
+    expect(
+      await screen.findByText('Face match failed — use password login'),
+    ).toBeInTheDocument();
+  });
 });

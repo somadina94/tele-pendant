@@ -14,6 +14,7 @@ import { OperatorScreen } from './src/screens/OperatorScreen';
 import { OpsScreen } from './src/screens/OpsScreen';
 import type { ScreenName } from './src/types';
 import { LocaleProvider, useLocale } from './src/locale';
+import { HelpTip, TourBar, TourProvider } from './src/tour';
 import { Field, styles } from './src/ui';
 
 const queryClient = new QueryClient();
@@ -73,23 +74,32 @@ function Pendant() {
         <Text style={styles.sub}>
           Expo handheld · set API base for device/LAN
         </Text>
-        <Field
-          label={t('language')}
-          value={locale}
-          onChangeText={(value) => setLocale(value === 'es' ? 'es' : 'en')}
-        />
+        <TourBar screen="login" />
+        <HelpTip id="tour.login.language">
+          <Field
+            label={t('language')}
+            value={locale}
+            onChangeText={(value) => setLocale(value === 'es' ? 'es' : 'en')}
+          />
+        </HelpTip>
         <Field label="API base" value={apiBase} onChangeText={setApiBase} />
-        <Field label={t('email')} value={email} onChangeText={setEmail} />
-        <Field
-          label={t('password')}
-          value={password}
-          onChangeText={setPassword}
-          secure
-        />
+        <HelpTip id="tour.login.email">
+          <Field label={t('email')} value={email} onChangeText={setEmail} />
+        </HelpTip>
+        <HelpTip id="tour.login.password">
+          <Field
+            label={t('password')}
+            value={password}
+            onChangeText={setPassword}
+            secure
+          />
+        </HelpTip>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Pressable style={styles.btn} onPress={() => void login()}>
-          <Text style={styles.btnText}>{t('signIn')}</Text>
-        </Pressable>
+        <HelpTip id="tour.login.signIn">
+          <Pressable style={styles.btn} onPress={() => void login()}>
+            <Text style={styles.btnText}>{t('signIn')}</Text>
+          </Pressable>
+        </HelpTip>
         <StatusBar style="light" />
       </SafeAreaView>
     );
@@ -103,13 +113,16 @@ function Pendant() {
           <Text style={styles.link}>{t('logout')}</Text>
         </Pressable>
       </View>
-      <ScrollView horizontal contentContainerStyle={styles.nav}>
-        {NAV.map((item) => (
-          <Pressable key={item.id} onPress={() => setScreen(item.id)}>
-            <Text style={styles.link}>{t(item.id)}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <HelpTip id="tour.operator.nav">
+        <ScrollView horizontal contentContainerStyle={styles.nav}>
+          {NAV.map((item) => (
+            <Pressable key={item.id} onPress={() => setScreen(item.id)}>
+              <Text style={styles.link}>{t(item.id)}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </HelpTip>
+      <TourBar screen={screen} />
       {screen === 'operator' ? <OperatorScreen token={token} /> : null}
       {screen === 'media' ? <MediaScreen token={token} /> : null}
       {screen === 'face' ? (
@@ -129,7 +142,9 @@ export default function App() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <LocaleProvider>
-            <Pendant />
+            <TourProvider>
+              <Pendant />
+            </TourProvider>
           </LocaleProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>

@@ -1,8 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { ArrowDown, ArrowUp, Mic, QrCode, ScanLine } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 import { useT } from '../lib/i18n';
+import { HelpTip } from '../lib/tour';
+import { PageSpinner } from '@/components/page-spinner';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { toastErr, toastOk } from '@/lib/toast';
 
 type SpeechAlt = { transcript: string };
 type SpeechResult = ArrayLike<SpeechAlt> & { isFinal?: boolean };
@@ -54,28 +69,29 @@ export function MediaPage() {
       ),
   });
 
+  const waiting = camera.isLoading || codes.isLoading;
+
   useEffect(() => {
+    if (waiting) return;
     let stream: MediaStream | null = null;
-    async function startCam() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
-          audio: false,
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (err) {
+    void navigator.mediaDevices
+      .getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false,
+      })
+      .then((next) => {
+        stream = next;
+        if (videoRef.current) videoRef.current.srcObject = next;
+      })
+      .catch((err: unknown) => {
         setCamError(
           err instanceof Error ? err.message : 'Camera permission denied',
         );
-      }
-    }
-    void startCam();
+      });
     return () => {
-      stream?.getTracks().forEach((t) => t.stop());
+      stream?.getTracks().forEach((track) => track.stop());
     };
-  }, []);
+  }, [waiting]);
 
   async function resolveCode(code: string) {
     setScanResult(null);
@@ -86,11 +102,14 @@ export function MediaPage() {
         routeHint?: string | null;
       }>('/media/codes/resolve', { code });
       setScanResult(`${row.label} (${row.code})`);
+      toastOk(row.label);
       if (row.routeHint) {
         navigate(row.routeHint);
       }
     } catch (err) {
-      setScanResult(err instanceof Error ? err.message : 'Resolve failed');
+      const message = err instanceof Error ? err.message : 'Resolve failed';
+      setScanResult(message);
+      toastErr(message);
     }
   }
 
@@ -133,17 +152,16 @@ export function MediaPage() {
         label?: string;
         reason?: string;
       }>('/media/voice', { transcript: direction });
-      setVoiceLog(
-        res.ok
-          ? `Heard: ${heard}. Executed: ${res.label}`
-          : `Heard: ${heard}. Not executed: ${res.reason ?? 'unknown'}`,
-      );
+      const line = res.ok
+        ? `Heard: ${heard}. Executed: ${res.label}`
+        : `Heard: ${heard}. Not executed: ${res.reason ?? 'unknown'}`;
+      setVoiceLog(line);
+      if (res.ok) toastOk(res.label ?? direction);
+      else toastErr(res.reason ?? 'not executed');
     } catch (err) {
-      setVoiceLog(
-        `Heard: ${heard}. Not executed: ${
-          err instanceof Error ? err.message : 'failed'
-        }`,
-      );
+      const message = err instanceof Error ? err.message : 'failed';
+      setVoiceLog(`Heard: ${heard}. Not executed: ${message}`);
+      toastErr(message);
     }
   }
 
@@ -237,82 +255,134 @@ export function MediaPage() {
     }, 8000);
   }
 
+  if (waiting) {
+    return <PageSpinner label={t('mediaTitle')} />;
+  }
+
   return (
-    <main className="shell admin">
-      <header className="op-header">
-        <h1>{t('mediaTitle')}</h1>
-        <nav className="op-nav">
-          <Link to="/operator">Operator</Link>
-          <Link to="/ops">Ops</Link>
-        </nav>
-      </header>
-      <p className="lede">{camera.data?.notes}</p>
-      {camera.data?.rtspUrl && (
-        <p className="hint">Configured RTSP: {camera.data.rtspUrl}</p>
-      )}
-
-      <section className="media-grid">
-        <div className="cam-panel">
-          <h2>Device camera</h2>
-          {camError ? (
-            <p className="error">{camError}</p>
-          ) : (
-            <video ref={videoRef} className="cam" autoPlay playsInline muted />
-          )}
-          <button type="button" onClick={() => void scanWithBarcodeDetector()}>
-            Scan QR / barcode in frame
-          </button>
-        </div>
-
-        <div>
-          <h2>Manual / known codes</h2>
-          <div className="login-form">
-            <label>
-              Code
-              <input
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
-              />
-            </label>
-            <button type="button" onClick={() => void resolveCode(manualCode)}>
-              Resolve
-            </button>
-          </div>
-          {scanResult && <p className="status-line">{scanResult}</p>}
-          <ul className="list">
-            {(codes.data ?? []).map((c) => (
-              <li key={c.code}>
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() => void resolveCode(c.code)}
-                >
-                  {c.code}
-                </button>{' '}
-                — {c.label}
-              </li>
-            ))}
-          </ul>
-
-          <h2>Voice commands</h2>
-          <p className="hint">
-            Press UP or DOWN. Each runs the hoist for about 2 seconds. You can
-            also say those words, or trolley left, trolley right, or stop.
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">{t('mediaTitle')}</h2>
+        <p className="text-sm text-muted-foreground">{camera.data?.notes}</p>
+        {camera.data?.rtspUrl ? (
+          <p className="text-xs text-muted-foreground">
+            Configured RTSP: {camera.data.rtspUrl}
           </p>
-          <div className="row">
-            <button type="button" onClick={() => void commandDirection('up')}>
-              UP
-            </button>
-            <button type="button" onClick={() => void commandDirection('down')}>
-              DOWN
-            </button>
-          </div>
-          <button type="button" onClick={startVoice} disabled={listening}>
-            {listening ? 'Listening…' : 'Listen (8s)'}
-          </button>
-          {voiceLog && <p className="status-line">{voiceLog}</p>}
+        ) : null}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <HelpTip id="tour.media.camera">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ScanLine className="size-4" /> Device camera
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {camError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{camError}</AlertDescription>
+                </Alert>
+              ) : (
+                <video
+                  ref={videoRef}
+                  className="aspect-video w-full rounded-md border bg-black object-cover"
+                  autoPlay
+                  playsInline
+                  muted
+                />
+              )}
+              <Button
+                type="button"
+                onClick={() => void scanWithBarcodeDetector()}
+              >
+                <QrCode /> Scan QR / barcode in frame
+              </Button>
+            </CardContent>
+          </Card>
+        </HelpTip>
+
+        <div className="space-y-4">
+          <HelpTip id="tour.media.qr">
+            <Card>
+              <CardHeader>
+                <CardTitle>Manual / known codes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="code">Code</Label>
+                  <Input
+                    id="code"
+                    value={manualCode}
+                    onChange={(e) => setManualCode(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => void resolveCode(manualCode)}
+                >
+                  Resolve
+                </Button>
+                {scanResult ? (
+                  <p className="text-sm text-primary">{scanResult}</p>
+                ) : null}
+                <ul className="space-y-1 text-sm">
+                  {(codes.data ?? []).map((c) => (
+                    <li key={c.code}>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0"
+                        onClick={() => void resolveCode(c.code)}
+                      >
+                        {c.code}
+                      </Button>{' '}
+                      — {c.label}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          </HelpTip>
+
+          <HelpTip id="tour.media.voice">
+            <Card>
+              <CardHeader>
+                <CardTitle>Voice commands</CardTitle>
+                <CardDescription>
+                  Press UP or DOWN. Each runs the hoist for about 2 seconds. You
+                  can also say those words, or trolley left, trolley right, or
+                  stop.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button type="button" onClick={startVoice} disabled={listening}>
+                  <Mic />
+                  {listening ? 'Listening…' : 'Listen (8s)'}
+                </Button>
+                {voiceLog ? (
+                  <p className="text-sm text-primary">{voiceLog}</p>
+                ) : null}
+              </CardContent>
+            </Card>
+          </HelpTip>
+
+          <HelpTip id="tour.media.upDown">
+            <div className="flex gap-2">
+              <Button type="button" onClick={() => void commandDirection('up')}>
+                <ArrowUp /> UP
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void commandDirection('down')}
+              >
+                <ArrowDown /> DOWN
+              </Button>
+            </div>
+          </HelpTip>
         </div>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }

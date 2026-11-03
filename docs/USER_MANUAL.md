@@ -335,6 +335,13 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 10. Open **Audit**. **Success:** the same list as the web (email, action, resource, result, time).
 11. Last, type `change-me-admin-password` in **SAFE_ACTION_PIN** and press **STOP**. **Success:** the banner shows **e_stop**. This latches the simulator the same way as the web STOP.
 
+## Tour help (web and phone)
+
+- **Tour help** is **off** by default. The UI looks the same until you enable it.
+- Turn **Tour help** on (login page, operator header, or phone header). Every annotated control shows a **?** tip with the same plain-language text as `PLAIN_LANGUAGE_GUIDE.md`.
+- With Tour help on, press **Start tour** for a step-by-step overlay on the **current screen** (Next / Back / Done). Done leaves explain mode on until you toggle Tour help off.
+- Preference is local only: web `localStorage` key `tourEnabled`, phone AsyncStorage key `tourEnabled`.
+
 ## Languages, alarms, trends, safety roles, and OPC UA
 
 - The **Language** menu on the sign-in page follows the browser until you pick English or Español. That choice is saved on your user and then wins over the browser. The phone uses the device language the same way.

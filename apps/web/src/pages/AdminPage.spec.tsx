@@ -446,14 +446,13 @@ describe('AdminPage', () => {
         ],
       };
     });
+    const del = vi.spyOn(api, 'apiDelete').mockResolvedValue({});
     renderWithProviders(<AdminPage />);
     expect(await screen.findByDisplayValue('bay')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Delete cell' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Delete label' }),
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete cell' }));
+    await waitFor(() => expect(del).toHaveBeenCalledWith('/hmi/cells/blank'));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete label' }));
+    await waitFor(() => expect(del).toHaveBeenCalledWith('/hmi/overlays/o9'));
   });
 
   it('saves opc ua, a trend, an alarm, and safety roles', async () => {
@@ -594,5 +593,25 @@ describe('AdminPage', () => {
     put.mockRejectedValueOnce(new Error('roles'));
     fireEvent.click(screen.getByRole('button', { name: 'Save safety roles' }));
     await screen.findByText('roles');
+  });
+
+  it('renders empty sections when layout and plc queries fail', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (
+        path === '/plc/connections' ||
+        path === '/hmi/layout' ||
+        path === '/alarms/definitions' ||
+        path === '/safety/roles'
+      ) {
+        throw new Error('offline');
+      }
+      return [];
+    });
+    renderWithProviders(<AdminPage />);
+    expect(
+      await screen.findByText(/These fields are saved in SQLite/),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Add a PLC')).toBeInTheDocument();
+    expect(screen.getByText('No active background')).toBeInTheDocument();
   });
 });

@@ -22,6 +22,8 @@ export {
 export type { Locale } from './i18n';
 export { formatOverlay, tagValueForRegister } from './tags';
 export type { TagSnapshot } from './tags';
+export { tourStepsFor } from './tour';
+export type { TourScreen } from './tour';
 
 export const WS_EVENTS = {
   TAGS_UPDATE: 'tags.update',
