@@ -74,7 +74,9 @@ describe('FacePage', () => {
     fireEvent.click(screen.getByRole('button', { name: enrollName }));
     await captureAllPoses();
     await waitFor(() =>
-      expect(screen.getByText('basic only')).toBeInTheDocument(),
+      expect(
+        screen.getByText(/Face enrolled|Rostro registrado|Visage enregistré|Gesicht gespeichert/i),
+      ).toBeInTheDocument(),
     );
     expect(post).toHaveBeenCalledWith(
       '/auth/face/enroll',
@@ -95,7 +97,9 @@ describe('FacePage', () => {
     fireEvent.click(screen.getByRole('button', { name: enrollName }));
     await captureAllPoses();
     await waitFor(() =>
-      expect(screen.getByText('skip-ok')).toBeInTheDocument(),
+      expect(
+        screen.getByText(/Face enrolled|Rostro registrado|Visage enregistré|Gesicht gespeichert/i),
+      ).toBeInTheDocument(),
     );
     expect(post).toHaveBeenCalledWith(
       '/auth/face/enroll',

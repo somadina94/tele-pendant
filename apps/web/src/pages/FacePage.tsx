@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Camera, ScanFace, UserPlus } from 'lucide-react';
-import { apiPost } from '../lib/api';
+import { apiPost, type PublicUser } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { captureDataUrl } from '../lib/face-capture';
 import { HelpTip, PageTourBar } from '../lib/tour';
@@ -34,6 +34,7 @@ export function FacePage({
   const { t } = useT();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<ChallengeMode>(null);
   const [step, setStep] = useState(0);
@@ -63,7 +64,9 @@ export function FacePage({
 
   function startChallenge(next: 'enroll' | 'login') {
     setMsg(null);
+    setFailed(false);
     if (next === 'enroll' && !token) {
+      setFailed(true);
       setMsg('Sign in with password first, then enroll');
       return;
     }
@@ -74,6 +77,7 @@ export function FacePage({
 
   async function captureStep(active: 'enroll' | 'login') {
     setBusy(true);
+    setFailed(false);
     try {
       const frame = skipCamera
         ? 'data:image/jpeg;base64,abc'
@@ -89,25 +93,33 @@ export function FacePage({
       }
       setMsg('Submitting challenge…');
       if (active === 'enroll') {
-        const res = await apiPost<{ ok: boolean; limitation: string }>(
+        await apiPost<{ ok: boolean; limitation: string }>(
           '/auth/face/enroll',
           { frames: nextFrames },
         );
-        setMsg(res.limitation);
-        toastOk('Enrolled');
-      } else {
-        const res = await apiPost<{
-          accessToken: string;
-          limitation: string;
-        }>('/auth/face/login', { frames: nextFrames, email });
-        localStorage.setItem('accessToken', res.accessToken);
-        setMsg(res.limitation);
-        toastOk(t('signIn'));
+        const ok = t('faceEnrolled');
+        setMsg(ok);
+        toastOk(ok);
         resetChallenge();
-        navigate('/operator');
         return;
       }
+      const res = await apiPost<{
+        accessToken: string;
+        user?: PublicUser;
+        limitation: string;
+      }>('/auth/face/login', { frames: nextFrames, email });
+      if (!res.accessToken) {
+        throw new Error(t('err.face'));
+      }
+      localStorage.setItem('accessToken', res.accessToken);
+      if (res.user) {
+        localStorage.setItem('user', JSON.stringify(res.user));
+      }
+      const ok = t('faceSignedIn');
+      setMsg(ok);
+      toastOk(ok);
       resetChallenge();
+      navigate('/operator', { replace: true });
     } catch (err) {
       const message =
         err instanceof Error
@@ -115,6 +127,7 @@ export function FacePage({
           : active === 'login'
             ? t('err.face')
             : 'Enroll failed';
+      setFailed(true);
       setMsg(message);
       toastErr(message);
       resetChallenge();
@@ -227,7 +240,7 @@ export function FacePage({
             </>
           )}
           {msg ? (
-            <Alert>
+            <Alert variant={failed ? 'destructive' : 'default'}>
               <AlertDescription>{msg}</AlertDescription>
             </Alert>
           ) : null}

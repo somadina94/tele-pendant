@@ -45,6 +45,8 @@ const errorKeys: Record<string, string> = {
     'err.pin',
   'Face match failed — use password login': 'err.face',
   'No face detected': 'err.noface',
+  'Liveness failed — not enough head motion between frames': 'err.faceLiveness',
+  'Need 3 challenge frames for liveness': 'err.faceFrames',
 };
 
 export function translateError(locale: Locale, message: string): string {

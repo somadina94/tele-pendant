@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -9,12 +9,13 @@ import {
 } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LogIn } from 'lucide-react-native';
+import { LogIn, ScanFace } from 'lucide-react-native';
 import type { Locale } from '@tele-pendant/shared';
 import { apiGet, apiPost } from './src/api';
 import { BrandMark } from './src/brand';
 import { LocaleProvider, useLocale } from './src/locale';
 import { AppShell } from './src/navigation';
+import { FaceChallenge } from './src/screens/FaceChallenge';
 import { onUnauthorized } from './src/session';
 import { BootSplash } from './src/splash';
 import { HelpTip, TourBar, TourProvider } from './src/tour';
@@ -24,6 +25,7 @@ import {
   BtnText,
   ErrorText,
   Field,
+  Hint,
   SelectField,
   Subtitle,
   Title,
@@ -37,6 +39,7 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
   const [email, setEmail] = useState('admin@example.com');
   const [password, setPassword] = useState('change-me-admin-password');
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'password' | 'face'>('password');
 
   const login = async () => {
     setError(null);
@@ -53,47 +56,83 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background px-4">
-      <View className="mb-2 mt-2 flex-row items-center justify-between">
-        <View className="flex-row items-center gap-3">
-          <BrandMark size={44} />
-          <Title>Tele-Pendant</Title>
+    <SafeAreaView className="flex-1 bg-background">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="px-4 pb-12"
+        keyboardShouldPersistTaps="handled"
+      >
+        <View className="mb-2 mt-2 flex-row items-center justify-between">
+          <View className="flex-row items-center gap-3">
+            <BrandMark size={44} />
+            <Title>Tele-Pendant</Title>
+          </View>
+          <ThemeToggle />
         </View>
-        <ThemeToggle />
-      </View>
-      <Subtitle>Expo handheld · sign in to the configured API</Subtitle>
-      <TourBar screen="login" />
-      <HelpTip id="tour.login.language">
-        <SelectField<Locale>
-          label={t('language')}
-          value={locale}
-          options={[
-            { value: 'en', label: 'English' },
-            { value: 'es', label: 'Español' },
-            { value: 'fr', label: 'Français' },
-            { value: 'de', label: 'Deutsch' },
-          ]}
-          onChange={setLocale}
-        />
-      </HelpTip>
-      <HelpTip id="tour.login.email">
-        <Field label={t('email')} value={email} onChangeText={setEmail} />
-      </HelpTip>
-      <HelpTip id="tour.login.password">
-        <Field
-          label={t('password')}
-          value={password}
-          onChangeText={setPassword}
-          secure
-        />
-      </HelpTip>
-      {error ? <ErrorText>{error}</ErrorText> : null}
-      <HelpTip id="tour.login.signIn">
-        <Btn onPress={() => void login()}>
-          <LogIn size={16} color="#041018" />
-          <BtnText>{t('signIn')}</BtnText>
-        </Btn>
-      </HelpTip>
+        <Subtitle>Expo handheld · sign in to the configured API</Subtitle>
+        <TourBar screen="login" />
+
+        {mode === 'face' ? (
+          <>
+            <Hint>
+              Local face login (3 poses). Not ISO-certified. Fail closed to
+              password.
+            </Hint>
+            <FaceChallenge
+              token=""
+              onToken={onLoggedIn}
+              active
+              allowEnroll={false}
+              allowLogin
+              autoStartLogin
+            />
+            <Btn onPress={() => setMode('password')}>
+              <LogIn size={16} color="#041018" />
+              <BtnText>{t('signIn')}</BtnText>
+            </Btn>
+          </>
+        ) : (
+          <>
+            <HelpTip id="tour.login.language">
+              <SelectField<Locale>
+                label={t('language')}
+                value={locale}
+                options={[
+                  { value: 'en', label: 'English' },
+                  { value: 'es', label: 'Español' },
+                  { value: 'fr', label: 'Français' },
+                  { value: 'de', label: 'Deutsch' },
+                ]}
+                onChange={setLocale}
+              />
+            </HelpTip>
+            <HelpTip id="tour.login.email">
+              <Field label={t('email')} value={email} onChangeText={setEmail} />
+            </HelpTip>
+            <HelpTip id="tour.login.password">
+              <Field
+                label={t('password')}
+                value={password}
+                onChangeText={setPassword}
+                secure
+              />
+            </HelpTip>
+            {error ? <ErrorText>{error}</ErrorText> : null}
+            <HelpTip id="tour.login.signIn">
+              <Btn onPress={() => void login()}>
+                <LogIn size={16} color="#041018" />
+                <BtnText>{t('signIn')}</BtnText>
+              </Btn>
+            </HelpTip>
+            <HelpTip id="tour.login.face">
+              <Btn onPress={() => setMode('face')}>
+                <ScanFace size={16} color="#041018" />
+                <BtnText>{t('faceLogin')}</BtnText>
+              </Btn>
+            </HelpTip>
+          </>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
