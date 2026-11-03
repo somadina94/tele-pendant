@@ -48,9 +48,15 @@ describe('LoginPage', () => {
   });
 
   it('switches the chrome to Spanish and saves a pinned locale', async () => {
+    vi.spyOn(api, 'apiGet').mockRejectedValue(new Error('expired'));
     const patch = vi.spyOn(api, 'apiPatch').mockRejectedValue(new Error('no'));
     localStorage.setItem('accessToken', 'tok');
     renderWithProviders(<LoginPage />);
+    expect(
+      await screen.findByRole('button', { name: 'Sign in' }),
+    ).toBeInTheDocument();
+    // Session check cleared the dead token; restore one so locale pin hits the API.
+    localStorage.setItem('accessToken', 'tok');
     fireEvent.change(screen.getByLabelText('Language'), {
       target: { value: 'es' },
     });
@@ -62,5 +68,18 @@ describe('LoginPage', () => {
       target: { value: 'en' },
     });
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+  });
+
+  it('sends a still-valid session from login to operator on refresh', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      id: '1',
+      email: 'admin@example.com',
+      role: 'admin',
+      displayName: 'Admin',
+      locale: 'en',
+    });
+    renderWithProviders(<LoginPage />);
+    await waitFor(() => expect(api.apiGet).toHaveBeenCalledWith('/auth/me'));
   });
 });

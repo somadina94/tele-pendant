@@ -18,7 +18,12 @@ import { PNG } from 'pngjs';
 
 export const FACE_MATCH_THRESHOLD = 0.88;
 /** Min normalized bbox-center shift between challenge frames (fraction of image diagonal). */
-export const FACE_MOTION_MIN = 0.04;
+export const FACE_MOTION_MIN = 0.03;
+/**
+ * Min embedding distance between challenge frames. Head turns often keep the
+ * face box centered, so appearance change counts as liveness too.
+ */
+export const FACE_EMBED_MOTION_MIN = 0.012;
 export const FACE_CHALLENGE_STEPS = [
   'center',
   'turn-left',
@@ -51,14 +56,13 @@ interface Box {
 }
 
 export function descriptorFromImageDataUrl(dataUrl: string): number[] {
-  const image = decodeDataUrl(dataUrl);
+  const image = normalizeRaster(decodeDataUrl(dataUrl));
   const model = loadSkinModel();
-  const boxes = faceBoxes(image, model);
-  if (boxes.length !== 1) throw new Error('No face detected');
-  return embed(image, boxes[0], model);
+  const box = pickFaceBox(faceBoxes(image, model));
+  return embed(image, box, model);
 }
 
-/** Average embedding across challenge frames; requires detectable bbox motion. */
+/** Average embedding across challenge frames; requires detectable pose change. */
 export function descriptorFromChallengeFrames(frames: string[]): number[] {
   if (frames.length < FACE_CHALLENGE_STEPS.length) {
     throw new Error(
@@ -67,22 +71,23 @@ export function descriptorFromChallengeFrames(frames: string[]): number[] {
   }
   const model = loadSkinModel();
   const samples = frames.slice(0, FACE_CHALLENGE_STEPS.length).map((frame) => {
-    const image = decodeDataUrl(frame);
-    const boxes = faceBoxes(image, model);
-    if (boxes.length !== 1) throw new Error('No face detected');
+    const image = normalizeRaster(decodeDataUrl(frame));
+    const box = pickFaceBox(faceBoxes(image, model));
     return {
-      desc: embed(image, boxes[0], model),
-      center: boxCenter(boxes[0], model, image),
+      desc: embed(image, box, model),
+      center: boxCenter(box, model, image),
       diagonal: Math.hypot(image.width, image.height),
     };
   });
   for (let i = 1; i < samples.length; i++) {
     const prev = samples[i - 1];
     const cur = samples[i];
-    const motion =
+    const bboxMotion =
       Math.hypot(cur.center.x - prev.center.x, cur.center.y - prev.center.y) /
       Math.max(prev.diagonal, 1);
-    if (motion < FACE_MOTION_MIN) {
+    const embedMotion = faceDistance(prev.desc, cur.desc);
+    // Pass if the face moved in frame OR the pose appearance changed (head turn).
+    if (bboxMotion < FACE_MOTION_MIN && embedMotion < FACE_EMBED_MOTION_MIN) {
       throw new Error(
         'Liveness failed — not enough head motion between frames',
       );
@@ -213,6 +218,29 @@ function decodeRaster(buf: Buffer): Raster {
   throw new Error('Invalid face image');
 }
 
+/** Phone cameras are often 1080p+; downscale so skin cells stay face-sized. */
+function normalizeRaster(image: Raster, maxSide = 320): Raster {
+  const longest = Math.max(image.width, image.height);
+  if (longest <= maxSide) return image;
+  const scale = maxSide / longest;
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const data = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const sy = Math.min(image.height - 1, Math.floor(y / scale));
+    for (let x = 0; x < width; x++) {
+      const sx = Math.min(image.width - 1, Math.floor(x / scale));
+      const src = (sy * image.width + sx) * 4;
+      const dst = (y * width + x) * 4;
+      data[dst] = image.data[src];
+      data[dst + 1] = image.data[src + 1];
+      data[dst + 2] = image.data[src + 2];
+      data[dst + 3] = image.data[src + 3];
+    }
+  }
+  return { width, height, data };
+}
+
 function isSkin(
   image: Raster,
   x: number,
@@ -223,14 +251,34 @@ function isSkin(
   const r = image.data[i];
   const g = image.data[i + 1];
   const b = image.data[i + 2];
-  return (
+  // YCbCr ranges cover a wider set of real skin tones under phone lighting.
+  const yv = 0.299 * r + 0.587 * g + 0.114 * b;
+  const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+  const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+  const ycbcr = yv > 40 && cb > 77 && cb < 127 && cr > 133 && cr < 173;
+  const rgb =
     r > model.minR &&
     g > model.minG &&
     b > model.minB &&
-    r > g &&
-    r > b &&
-    Math.abs(r - g) > model.minDeltaRG
-  );
+    r >= g &&
+    r >= b &&
+    Math.abs(r - g) > model.minDeltaRG;
+  return ycbcr || rgb;
+}
+
+function boxArea(box: Box): number {
+  return (box.maxX - box.minX + 1) * (box.maxY - box.minY + 1);
+}
+
+/** Prefer a single clear face; reject empty or two similarly large regions. */
+function pickFaceBox(boxes: Box[]): Box {
+  if (boxes.length === 0) throw new Error('No face detected');
+  if (boxes.length === 1) return boxes[0];
+  const ranked = [...boxes].sort((a, b) => boxArea(b) - boxArea(a));
+  if (boxArea(ranked[1]) > boxArea(ranked[0]) * 0.45) {
+    throw new Error('No face detected');
+  }
+  return ranked[0];
 }
 
 function cellSkinFraction(

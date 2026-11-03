@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ScanFace, UserPlus } from 'lucide-react';
+import { Camera, ScanFace, UserPlus } from 'lucide-react';
 import { apiPost } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { captureDataUrl } from '../lib/face-capture';
@@ -21,15 +21,11 @@ import { toastErr, toastOk } from '@/lib/toast';
 
 const CHALLENGE_PROMPTS = [
   'Center your face in the frame',
-  'Turn your head slightly left',
-  'Turn your head slightly right',
+  'Turn your head clearly to the left (chin past center)',
+  'Turn your head clearly to the right (chin past center)',
 ] as const;
 
-function wait(ms: number) {
-  /* v8 ignore next -- production delay; vitest uses MODE=test */
-  const delay = import.meta.env.MODE === 'test' ? 5 : ms;
-  return new Promise((resolve) => setTimeout(resolve, delay));
-}
+type ChallengeMode = 'enroll' | 'login' | null;
 
 export function FacePage({
   skipCamera = false,
@@ -38,8 +34,10 @@ export function FacePage({
   const { t } = useT();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<ChallengeMode>(null);
+  const [step, setStep] = useState(0);
+  const [frames, setFrames] = useState<string[]>([]);
   const [email, setEmail] = useState('admin@example.com');
   const token = localStorage.getItem('accessToken');
 
@@ -56,71 +54,76 @@ export function FacePage({
     return () => stream?.getTracks().forEach((track) => track.stop());
   }, [skipCamera]);
 
-  async function captureChallenge(video: HTMLVideoElement): Promise<string[]> {
-    const frames: string[] = [];
-    for (let i = 0; i < CHALLENGE_PROMPTS.length; i++) {
-      setPrompt(
-        `Step ${i + 1}/${CHALLENGE_PROMPTS.length}: ${CHALLENGE_PROMPTS[i]}`,
-      );
-      await wait(i === 0 ? 700 : 1100);
-      frames.push(await captureDataUrl(video));
-    }
-    setPrompt(null);
-    return frames;
+  function resetChallenge() {
+    setMode(null);
+    setStep(0);
+    setFrames([]);
+    setBusy(false);
   }
 
-  async function enroll() {
-    if (!token) {
+  function startChallenge(next: 'enroll' | 'login') {
+    setMsg(null);
+    if (next === 'enroll' && !token) {
       setMsg('Sign in with password first, then enroll');
       return;
     }
-    const video = videoRef.current;
-    if (!video) {
-      setMsg('Camera not ready');
-      return;
-    }
+    setMode(next);
+    setStep(0);
+    setFrames([]);
+  }
+
+  async function captureStep(active: 'enroll' | 'login') {
     setBusy(true);
     try {
-      const frames = await captureChallenge(video);
-      const res = await apiPost<{ ok: boolean; limitation: string }>(
-        '/auth/face/enroll',
-        { frames },
-      );
-      setMsg(res.limitation);
-      toastOk('Enrolled');
+      const frame = skipCamera
+        ? 'data:image/jpeg;base64,abc'
+        : await captureDataUrl(videoRef.current as HTMLVideoElement);
+      const nextFrames = [...frames, frame];
+      if (nextFrames.length < CHALLENGE_PROMPTS.length) {
+        setFrames(nextFrames);
+        setStep(nextFrames.length);
+        setMsg(
+          `Captured ${nextFrames.length}/${CHALLENGE_PROMPTS.length}. Pose for the next step, then capture.`,
+        );
+        return;
+      }
+      setMsg('Submitting challenge…');
+      if (active === 'enroll') {
+        const res = await apiPost<{ ok: boolean; limitation: string }>(
+          '/auth/face/enroll',
+          { frames: nextFrames },
+        );
+        setMsg(res.limitation);
+        toastOk('Enrolled');
+      } else {
+        const res = await apiPost<{
+          accessToken: string;
+          limitation: string;
+        }>('/auth/face/login', { frames: nextFrames, email });
+        localStorage.setItem('accessToken', res.accessToken);
+        setMsg(res.limitation);
+        toastOk(t('signIn'));
+        resetChallenge();
+        navigate('/operator');
+        return;
+      }
+      resetChallenge();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Enroll failed';
+      const message =
+        err instanceof Error
+          ? err.message
+          : active === 'login'
+            ? t('err.face')
+            : 'Enroll failed';
       setMsg(message);
       toastErr(message);
+      resetChallenge();
     } finally {
       setBusy(false);
-      setPrompt(null);
     }
   }
 
-  async function faceLogin() {
-    const video = videoRef.current;
-    if (!video) return;
-    setBusy(true);
-    try {
-      const frames = await captureChallenge(video);
-      const res = await apiPost<{
-        accessToken: string;
-        limitation: string;
-      }>('/auth/face/login', { frames, email });
-      localStorage.setItem('accessToken', res.accessToken);
-      setMsg(res.limitation);
-      toastOk(t('signIn'));
-      navigate('/operator');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : t('err.face');
-      setMsg(message);
-      toastErr(message);
-    } finally {
-      setBusy(false);
-      setPrompt(null);
-    }
-  }
+  const inChallenge = mode !== null;
 
   return (
     <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-4 p-6">
@@ -153,47 +156,76 @@ export function FacePage({
           {!skipCamera ? (
             <video
               ref={videoRef}
-              className="aspect-video w-full rounded-md border bg-black object-cover"
+              className="aspect-video w-full scale-x-[-1] rounded-md border bg-black object-cover"
               autoPlay
               playsInline
               muted
             />
           ) : null}
-          {prompt ? (
-            <Alert>
-              <AlertDescription>{prompt}</AlertDescription>
-            </Alert>
-          ) : null}
-          <div className="grid gap-2">
-            <Label htmlFor="face-email">Email hint (login)</Label>
-            <Input
-              id="face-email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={busy}
-            />
-          </div>
-          <HelpTip id="tour.face.enroll">
-            <Button
-              type="button"
-              className="w-full"
-              disabled={busy}
-              onClick={() => void enroll()}
-            >
-              <UserPlus /> Enroll (3-step challenge · requires session)
-            </Button>
-          </HelpTip>
-          <HelpTip id="tour.face.login">
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full"
-              disabled={busy}
-              onClick={() => void faceLogin()}
-            >
-              <ScanFace /> Face login (3-step challenge)
-            </Button>
-          </HelpTip>
+          {inChallenge ? (
+            <>
+              <Alert>
+                <AlertDescription>
+                  Step {step + 1}/{CHALLENGE_PROMPTS.length}:{' '}
+                  {CHALLENGE_PROMPTS[step]}. Hold the new pose, then capture —
+                  each step must look different.
+                </AlertDescription>
+              </Alert>
+              <Button
+                type="button"
+                className="w-full"
+                disabled={busy || !mode}
+                onClick={() => mode && void captureStep(mode)}
+              >
+                <Camera />{' '}
+                {busy
+                  ? 'Working…'
+                  : `Capture pose ${step + 1}/${CHALLENGE_PROMPTS.length}`}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={busy}
+                onClick={resetChallenge}
+              >
+                Cancel challenge
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="face-email">Email hint (login)</Label>
+                <Input
+                  id="face-email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <HelpTip id="tour.face.enroll">
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={busy}
+                  onClick={() => startChallenge('enroll')}
+                >
+                  <UserPlus /> Enroll (3-step challenge · requires session)
+                </Button>
+              </HelpTip>
+              <HelpTip id="tour.face.login">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  disabled={busy}
+                  onClick={() => startChallenge('login')}
+                >
+                  <ScanFace /> Face login (3-step challenge)
+                </Button>
+              </HelpTip>
+            </>
+          )}
           {msg ? (
             <Alert>
               <AlertDescription>{msg}</AlertDescription>

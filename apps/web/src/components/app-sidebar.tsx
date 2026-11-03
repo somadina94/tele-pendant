@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useT } from '@/lib/i18n';
+import { clearSession } from '@/lib/session';
 import {
   Sidebar,
   SidebarContent,
@@ -78,7 +79,7 @@ export function AppSidebar() {
             <SidebarMenuButton
               tooltip={t('logout')}
               onClick={() => {
-                localStorage.removeItem('accessToken');
+                clearSession();
                 navigate('/');
               }}
             >

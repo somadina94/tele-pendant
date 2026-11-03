@@ -94,6 +94,25 @@ describe('face.util', () => {
     expect(parseDescriptor(serializeDescriptor(desc))).toEqual(desc);
   });
 
+  it('downscales large frames and keeps a dominant face blob', () => {
+    const large = paint(640, 480, (x, y) => {
+      if (x > 200 && x < 400 && y > 120 && y < 360) {
+        return x < 300 ? skin : [240, 200, 170];
+      }
+      return dark;
+    });
+    expect(descriptorFromImageDataUrl(dataUrl(large)).length).toBe(EMBED_LEN);
+
+    const dominant = paint(96, 64, (x, y) => {
+      const main = x > 8 && x < 56 && y > 8 && y < 56;
+      const tiny = x > 76 && x < 92 && y > 40 && y < 56;
+      return main || tiny ? skin : dark;
+    });
+    expect(descriptorFromImageDataUrl(dataUrl(dominant)).length).toBe(
+      EMBED_LEN,
+    );
+  });
+
   it('requires motion across challenge frames and seals templates', () => {
     expect(() => descriptorFromChallengeFrames([dataUrl(oneFace(0))])).toThrow(
       /Need 3 challenge frames/,
@@ -103,6 +122,33 @@ describe('face.util', () => {
     expect(() => descriptorFromChallengeFrames([still, still, still])).toThrow(
       /Liveness failed/,
     );
+
+    // Same bbox region, different appearance (head-turn style) — embed motion.
+    const poseA = paint(48, 48, (x, y) => {
+      if (x > 10 && x < 38 && y > 10 && y < 38) {
+        return x < 24 ? skin : [240, 200, 170];
+      }
+      return dark;
+    });
+    const poseB = paint(48, 48, (x, y) => {
+      if (x > 10 && x < 38 && y > 10 && y < 38) {
+        return x < 18 ? [200, 120, 90] : [250, 210, 180];
+      }
+      return dark;
+    });
+    const poseC = paint(48, 48, (x, y) => {
+      if (x > 10 && x < 38 && y > 10 && y < 38) {
+        return x < 30 ? [180, 100, 80] : skin;
+      }
+      return dark;
+    });
+    expect(
+      descriptorFromChallengeFrames([
+        dataUrl(poseA),
+        dataUrl(poseB),
+        dataUrl(poseC),
+      ]).length,
+    ).toBe(EMBED_LEN);
 
     const leftBias = paint(64, 64, (x, y) => {
       if (x > 2 && x < 26 && y > 16 && y < 48) {

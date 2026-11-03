@@ -1,3 +1,5 @@
+import { clearSession, isPublicAuthPath, redirectToLogin } from './session';
+
 const API_BASE = '/api/v1';
 
 export type ApiEnvelope<T> = { apiVersion: string; data: T };
@@ -9,9 +11,40 @@ function authHeaders(): HeadersInit {
     : { 'Content-Type': 'application/json' };
 }
 
+function isAuthBootstrapPath(path: string): boolean {
+  return (
+    path === '/auth/login' ||
+    path === '/auth/face/login' ||
+    path.startsWith('/auth/face/login?')
+  );
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+  const text = await res.text();
+  try {
+    const parsed = JSON.parse(text) as { message?: string | string[] };
+    if (typeof parsed.message === 'string') return parsed.message;
+    if (Array.isArray(parsed.message)) return parsed.message.join(', ');
+  } catch {
+    /* keep raw text */
+  }
+  return text || `Request failed (${res.status})`;
+}
+
+async function handleFailedResponse(
+  res: Response,
+  path: string,
+): Promise<never> {
+  if (res.status === 401 && !isAuthBootstrapPath(path)) {
+    if (isPublicAuthPath()) clearSession();
+    else redirectToLogin();
+  }
+  throw new Error(await readErrorMessage(res));
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) await handleFailedResponse(res, path);
   const body = (await res.json()) as ApiEnvelope<T>;
   return body.data;
 }
@@ -42,7 +75,7 @@ async function apiSend<T>(
     headers: authHeaders(),
     body: payload === undefined ? undefined : JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) await handleFailedResponse(res, path);
   const body = (await res.json()) as ApiEnvelope<T>;
   return body.data;
 }

@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { ArrowDown, ArrowUp, Mic, QrCode, Scan } from 'lucide-react-native';
 import { apiPost } from '../api';
@@ -9,12 +10,17 @@ import { Btn, BtnText, Field, Hint, OkText, Row, Section } from '../ui';
 
 export function MediaScreen({ token }: { token: string }) {
   const { t } = useLocale();
+  const isFocused = useIsFocused();
   const [code, setCode] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const [voice, setVoice] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const lastCode = useRef('');
   const [permission, requestPermission] = useCameraPermissions();
+
+  useEffect(() => {
+    if (!isFocused && scanning) setScanning(false);
+  }, [isFocused, scanning]);
 
   async function resolve(value: string) {
     setResult(null);
@@ -105,7 +111,7 @@ export function MediaScreen({ token }: { token: string }) {
       </HelpTip>
       <HelpTip id="tour.media.camera">
         <>
-          {scanning && permission?.granted ? (
+          {scanning && permission?.granted && isFocused ? (
             <CameraView
               className="mb-3 h-[220px] rounded-lg"
               facing="back"

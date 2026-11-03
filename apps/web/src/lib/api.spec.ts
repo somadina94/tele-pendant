@@ -68,6 +68,77 @@ describe('api helpers', () => {
     await expect(apiPost('/fail', {})).rejects.toThrow('nope');
   });
 
+  it('clears the session and redirects on 401 from protected calls', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    localStorage.setItem('user', '{"id":"1"}');
+    const assign = vi.fn();
+    vi.stubGlobal('location', { pathname: '/operator', assign });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify({ message: 'Unauthorized' }),
+      }),
+    );
+
+    await expect(apiGet('/hmi/layout')).rejects.toThrow('Unauthorized');
+    expect(localStorage.getItem('accessToken')).toBeNull();
+    expect(assign).toHaveBeenCalledWith('/');
+  });
+
+  it('does not redirect on login 401', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { pathname: '/', assign });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify({ message: 'Invalid credentials' }),
+      }),
+    );
+
+    await expect(
+      apiPost('/auth/login', { email: 'a', password: 'b' }),
+    ).rejects.toThrow('Invalid credentials');
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('clears a dead token on public routes without navigating away', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    const assign = vi.fn();
+    vi.stubGlobal('location', { pathname: '/face', assign });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () =>
+          JSON.stringify({ message: ['Unauthorized', 'jwt expired'] }),
+      }),
+    );
+
+    await expect(apiGet('/auth/me')).rejects.toThrow(
+      'Unauthorized, jwt expired',
+    );
+    expect(localStorage.getItem('accessToken')).toBeNull();
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('falls back when the error body is empty', async () => {
+    vi.stubGlobal('location', { pathname: '/', assign: vi.fn() });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        text: async () => '',
+      }),
+    );
+    await expect(apiGet('/health')).rejects.toThrow('Request failed (502)');
+  });
+
   it('patches payload or omits body and surfaces errors', async () => {
     const fetchMock = vi
       .fn()

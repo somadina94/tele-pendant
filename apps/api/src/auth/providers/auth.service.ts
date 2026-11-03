@@ -281,14 +281,21 @@ export class AuthService implements OnModuleInit {
   }
 
   private descriptorFromCapture(input: FaceCaptureInput): number[] {
-    if (input.frames && input.frames.length >= 3) {
-      return descriptorFromChallengeFrames(input.frames);
+    try {
+      if (input.frames && input.frames.length >= 3) {
+        return descriptorFromChallengeFrames(input.frames);
+      }
+      if (input.imageDataUrl) {
+        return descriptorFromImageDataUrl(input.imageDataUrl);
+      }
+      throw new BadRequestException(
+        'Provide frames[3] for challenge liveness (or imageDataUrl)',
+      );
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      const message =
+        err instanceof Error ? err.message : 'Face capture rejected';
+      throw new BadRequestException(message);
     }
-    if (input.imageDataUrl) {
-      return descriptorFromImageDataUrl(input.imageDataUrl);
-    }
-    throw new BadRequestException(
-      'Provide frames[3] for challenge liveness (or imageDataUrl)',
-    );
   }
 }

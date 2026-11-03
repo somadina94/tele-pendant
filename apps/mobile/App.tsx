@@ -11,10 +11,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LogIn } from 'lucide-react-native';
 import type { Locale } from '@tele-pendant/shared';
-import { apiPost } from './src/api';
+import { apiGet, apiPost } from './src/api';
 import { BrandMark } from './src/brand';
 import { LocaleProvider, useLocale } from './src/locale';
 import { AppShell } from './src/navigation';
+import { onUnauthorized } from './src/session';
 import { BootSplash } from './src/splash';
 import { HelpTip, TourBar, TourProvider } from './src/tour';
 import { ThemeProvider, ThemeToggle, useTheme } from './src/theme';
@@ -108,7 +109,14 @@ function Pendant() {
     void (async () => {
       try {
         const saved = await AsyncStorage.getItem('accessToken');
-        if (!cancelled && saved) setToken(saved);
+        if (!saved) return;
+        try {
+          await apiGet('/auth/me', saved);
+          if (!cancelled) setToken(saved);
+        } catch {
+          await AsyncStorage.removeItem('accessToken');
+          if (!cancelled) setToken(null);
+        }
       } finally {
         const wait = Math.max(0, SPLASH_MIN_MS - (Date.now() - started));
         await new Promise((resolve) => setTimeout(resolve, wait));
@@ -118,6 +126,12 @@ function Pendant() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    return onUnauthorized(() => {
+      setToken(null);
+    });
   }, []);
 
   const logout = async () => {

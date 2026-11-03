@@ -16,6 +16,15 @@ vi.mock('./lib/api', async () => {
   return {
     ...actual,
     apiGet: vi.fn(async (path: string) => {
+      if (path === '/auth/me') {
+        return {
+          id: '1',
+          email: 'admin@example.com',
+          role: 'admin',
+          displayName: 'Admin',
+          locale: 'en',
+        };
+      }
       if (path === '/hmi/layout') {
         return {
           matrix: { rows: 0, cols: 0 },
@@ -77,6 +86,17 @@ describe('App', () => {
     localStorage.setItem('accessToken', 'tok');
     renderWithProviders(<App />, { route: '/operator' });
     expect(await screen.findByText('Control matrix')).toBeInTheDocument();
+  });
+
+  it('sends expired tokens back to login after session check', async () => {
+    localStorage.setItem('accessToken', 'dead');
+    const api = await import('./lib/api');
+    vi.mocked(api.apiGet).mockRejectedValueOnce(new Error('Unauthorized'));
+    renderWithProviders(<App />, { route: '/operator' });
+    expect(
+      await screen.findByRole('button', { name: 'Sign in' }),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem('accessToken')).toBeNull();
   });
 
   it('renders other protected pages', async () => {

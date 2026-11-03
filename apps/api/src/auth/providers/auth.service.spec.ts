@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt';
 import { PNG } from 'pngjs';
 import { AuthService } from './auth.service';
 import { UserRole } from '../../users/enums/user-role.enum';
+import * as faceUtil from './face.util';
 import {
   descriptorFromImageDataUrl,
   openTemplate,
@@ -240,6 +241,18 @@ describe('AuthService', () => {
     await expect(service.loginWithFace({})).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    jest
+      .spyOn(faceUtil, 'descriptorFromImageDataUrl')
+      .mockImplementationOnce(() => {
+        // Cover non-Error reject path in descriptorFromCapture.
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- intentional
+        throw 'raw-reject';
+      });
+    await expect(
+      service.loginWithFace({ imageDataUrl: faceUrl('blob') }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ message: 'Face capture rejected' }),
+    });
 
     const image = faceUrl('blob');
     usersRepository.find.mockResolvedValue([

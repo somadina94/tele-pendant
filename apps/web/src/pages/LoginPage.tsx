@@ -1,12 +1,14 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { LogIn, ScanFace } from 'lucide-react';
 import { translate, type Locale } from '@tele-pendant/shared';
 import { Link, useNavigate } from 'react-router-dom';
-import { apiPost, PublicUser } from '../lib/api';
+import { apiGet, apiPost, PublicUser } from '../lib/api';
 import { LanguageSelect } from '../lib/LanguageSelect';
 import { readLocale } from '../lib/i18n';
+import { clearSession } from '../lib/session';
 import { HelpTip, PageTourBar } from '../lib/tour';
 import { BrandMark } from '@/components/brand-mark';
+import { PageSpinner } from '@/components/page-spinner';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,6 +31,29 @@ export function LoginPage() {
   const [password, setPassword] = useState('change-me-admin-password');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(() =>
+    Boolean(localStorage.getItem('accessToken')),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      setChecking(false);
+      return;
+    }
+    void apiGet('/auth/me')
+      .then(() => {
+        if (!cancelled) navigate('/operator', { replace: true });
+      })
+      .catch(() => {
+        clearSession();
+        if (!cancelled) setChecking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -50,6 +75,10 @@ export function LoginPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (checking) {
+    return <PageSpinner label="Checking session" className="min-h-svh" />;
   }
 
   return (

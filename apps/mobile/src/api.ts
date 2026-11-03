@@ -1,4 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { notifyUnauthorized } from './session';
 
 const LIVE_API = 'https://api.tele-pendant.jahbyte.com/api/v1';
 
@@ -11,6 +13,10 @@ export function getApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, '');
   return LIVE_API;
+}
+
+function isAuthBootstrapPath(path: string): boolean {
+  return path === '/auth/login' || path === '/auth/face/login';
 }
 
 async function apiSend<T>(
@@ -29,6 +35,10 @@ async function apiSend<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
+    if (res.status === 401 && !isAuthBootstrapPath(path)) {
+      await AsyncStorage.removeItem('accessToken');
+      notifyUnauthorized();
+    }
     const text = await res.text();
     let message = text;
     try {
