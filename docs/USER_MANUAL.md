@@ -237,35 +237,35 @@ From Operator, open **Assistant** (http://localhost:8080/assistant).
 - Optional **Open docs** when a docs link is saved (admin).
 - **Question** prefilled with **What happens on lost Modbus?** and button **Ask**.
 
-**Server config (optional Cursor Agent):** set `CURSOR_API_KEY` in the API `.env` (never commit the key). Optional `CURSOR_AGENT_CWD` (repo root) and `CURSOR_MODEL` (default `auto` — Cursor picks the model; override e.g. `composer-2.5` if needed). Without a key, answers use local document search only.
+**Acceptance default:** leave `CURSOR_API_KEY` unset. Answers use local SQLite FTS over manuals. Optional Cursor Agent: set `CURSOR_API_KEY` in the API `.env` (never commit the key). Optional `CURSOR_AGENT_CWD` (repo root) and `CURSOR_MODEL` (default `auto`).
 
 1. Click **Ask**.
-2. **Success (FTS-only):** bullet lines including **Lost communications** / `comms_lost`. Note mentions FTS or that `CURSOR_API_KEY` is unset.
-3. **Success (with Cursor key):** a short prose answer; note says Cursor Agent. The assistant is **advisory only** — it must not issue PLC or safety commands.
+2. **Success (FTS — required for acceptance):** bullet lines including **Lost communications** / `comms_lost`. Note mentions FTS or that `CURSOR_API_KEY` is unset.
+3. **Success (with Cursor key — optional):** a short prose answer; note says Cursor Agent. The assistant is **advisory only** — it must not issue PLC or safety commands.
 
 Admin: change **Docs root path**, save (reindexes when the path changes), or click **Reindex**. Set **Docs link** to a public manual URL for **Open docs**.
 
 Optional: ask **deadman** — expect deadman hold guidance. Nonsense tokens → **No local documents matched…**
 
-## 10. Face (basic)
+## 10. Face (local challenge)
 
 From Operator, click **Face** (http://localhost:8080/face). You must already be signed in before enroll.
 
 **Success, page chrome:**
 
-- Heading **Face auth (basic)**.
+- Heading **Face auth (local)**.
 - Link **Password login**.
-- Text: **Convenience match only — not certified biometrics. Fail closed to password.**
+- Text about local challenge liveness, not ISO-certified, fail closed to password, never for e-stop.
 - Field **Email hint (login)** = `admin@example.com`.
-- Buttons **Enroll (requires logged-in session)** and **Face login**.
+- Buttons for **3-step challenge** enroll and login.
 - A live camera preview, or a short error if the browser blocked the camera.
 
 1. Allow the camera if prompted.
-2. Click **Enroll (requires logged-in session)**.
-3. **Success:** status line **Basic convenience match only — not a high-assurance biometric product. Prefer password when unsure.**
-4. Click **Logout** is not on this page. Open http://localhost:8080, or click **Password login** and, if you are still signed in, go to Operator and click **Logout** so the login page is showing. Then open http://localhost:8080/face again.
-5. Leave **Email hint (login)** as `admin@example.com`. Click **Face login** with the same face in frame.
-6. **Success:** you land on **/operator** with the matrix visible (a new session). The match is a basic histogram, not certified biometrics. If the frame does not match, the status line includes **Face match failed — use password login** and you stay signed out. Sign in with email and password from step 0 and continue.
+2. Click enroll and follow prompts: center → turn left → turn right.
+3. **Success:** status line mentions local on-prem face match / not ISO-certified / face never authorizes safety actions.
+4. Log out (Operator **Logout** or password login page), then open `/face` again.
+5. Leave **Email hint (login)** as `admin@example.com`. Run **Face login** with the same 3-step challenge.
+6. **Success:** you land on **/operator**. Mismatch or failed liveness → **Face match failed — use password login** (or a liveness error). Prefer password when unsure.
 
 Click **Enroll** while logged out. **Success:** **Sign in with password first, then enroll**.
 
@@ -347,15 +347,23 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 
 ## Languages, alarms, trends, safety roles, and OPC UA
 
-- The **Language** menu on the sign-in page follows the browser until you pick English or Español. That choice is saved on your user and then wins over the browser. The phone uses the device language the same way.
+- The **Language** menu on the sign-in page follows the browser until you pick English, Español, Français, or Deutsch. That choice is saved on your user and then wins over the browser. The phone uses the device language the same way. To add a language: copy `packages/shared/i18n/en.json` to a new code, translate keys, register it in `packages/shared/src/i18n.ts`, and add it to the web/mobile pickers.
 - **Config** can create, edit, and delete alarm definitions (register, operator, threshold, severity). **Ops** still only acknowledges and shelves active alarms.
 - Mark a register **Trend**. **Ops** draws an SVG line for each trended series. Height and load start trended.
 - **Safety roles** bind E-stop, deadman, heartbeat, and safe-state to registers. Losing the deadman, the link, or e-stop clears the primary coil of every motion cell.
 - **Protocol** is Modbus TCP by default (simulator port 1502). OPC UA is optional: `docker compose -f docker-compose.dev.yml --profile opcua up opcua-sim`, then set the connection to OPC UA and fill each register’s node id (`ns=1;s=HoistUp` and the matching names).
 - The phone operator screen shows the same plant graphic, photo, and live labels as the web. Buttons stay the action name.
 - Phone **Listen** needs `npx expo run:android` in `apps/mobile`. Expo Go keeps **UP** and **DOWN**.
-- Face login detects one face and stores a local embedding. It is not liveness and not a certified biometric. See `FACE_LIMITATIONS.md`.
+- Face login uses a 3-pose challenge with local liveness and optional AES template encryption. It is not ISO-certified and never authorizes e-stop. See `FACE_LIMITATIONS.md`.
+
+## Security (operators & integrators)
+
+- Prefer **HTTPS** in production (`COOKIE_SECURE=true`, TLS on the reverse proxy). See `INSTALLATION.md`.
+- Keep `JWT_SECRET`, `ADMIN_PASSWORD`, `SAFE_ACTION_PIN`, and `FACE_TEMPLATE_KEY` strong and unique per environment (never commit real secrets).
+- Login and face endpoints are **rate-limited**. Face templates stay on the server (never returned to clients).
+- PIN policy: supervisors enter `SAFE_ACTION_PIN` for e-stop / safe actions. Face auth must never replace that PIN.
+- Roles (operator / supervisor / admin) gate Config, Audit, and safety actions via JWT.
 
 ## What this software does not do
 
-Deadman, e-stop, watchdog, and safe-state are software checks over Modbus. They do not replace a hardwired safety relay or a safety PLC.
+> **Software supervision only:** Deadman, e-stop, communication watchdog, and safe-state supervise the HMI/API path over Modbus/OPC UA. They are **not** a SIL/PL certified safety function and do not replace a hardwired safety relay or safety PLC. See `REAL_PLC_WIRING.md`.

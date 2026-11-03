@@ -15,7 +15,7 @@ Live demo hosts: web https://tele-pendant.jahbyte.com · API/Swagger https://api
 1. Ops: alarms ack, trends, diagnostics
 2. Media: QR seed code, voice allowlist
 3. Assistant local search demos
-4. Face enroll limitations
+4. Face challenge enroll/login limitations (local, not ISO; never for e-stop)
 
 ## Session 3 (30 min)
 
@@ -24,8 +24,10 @@ Live demo hosts: web https://tele-pendant.jahbyte.com · API/Swagger https://api
 3. Docker deploy / OTA overview
 4. Manual test plan dry-run
 
-Hand out `USER_MANUAL.md` and `REAL_PLC_WIRING.md`.
+Hand out `USER_MANUAL.md`, `REAL_PLC_WIRING.md`, and `SCOPE_ACCEPTANCE.md`.
 
-A live classroom session is a person in the room. This repository does not run that session. The outline above is the note the trainer follows.
+> **Safety:** Software deadman, e-stop latch, watchdog, and safe-state **supervise the HMI path only**. They are not a SIL/PL certified safety system. Wire hardwired safety per `REAL_PLC_WIRING.md`.
 
-Cover language (browser or phone until the operator pins one), user-defined alarms, trend checkboxes, safety-role bindings, and that OPC UA is the second driver beside Modbus. Face login detects a face and is not a certified biometric (`FACE_LIMITATIONS.md`).
+A live classroom session is a person in the room. This repository does not run that session. The outline above is the note the trainer follows (**outline delivered / live session by vendor**).
+
+Cover language (`en`/`es`/`fr`/`de`), user-defined alarms, trend checkboxes, safety-role bindings, Modbus + OPC UA (`DRIVERS.md`), FTS assistant without Cursor key, and face challenge liveness (`FACE_LIMITATIONS.md`).

@@ -352,6 +352,26 @@ export function OperatorScreen({ token }: { token: string }) {
                   <Text className="text-center font-bold text-foreground">
                     {cell.label}
                   </Text>
+                  {cell.feedbackRegister || cell.statusRegister ? (
+                    <Text className="mt-1 text-center text-[10px] text-muted-foreground">
+                      {cell.feedbackRegister
+                        ? `F ${String(
+                            tagValueForRegister(
+                              tags,
+                              cell.feedbackRegister.name,
+                            ),
+                          )}`
+                        : ''}
+                      {cell.feedbackRegister && cell.statusRegister
+                        ? ' · '
+                        : ''}
+                      {cell.statusRegister
+                        ? `S ${String(
+                            tagValueForRegister(tags, cell.statusRegister.name),
+                          )}`
+                        : ''}
+                    </Text>
+                  ) : null}
                 </Pressable>
               ) : (
                 <View

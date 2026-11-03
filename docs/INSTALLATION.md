@@ -102,7 +102,14 @@ Optional OPC UA simulator (Modbus on port 1502 stays the default):
 docker compose -f docker-compose.dev.yml --profile opcua up --build opcua-sim
 ```
 
-TLS stays on your reverse proxy and certificate. The API already sets Helmet and a request limit.
+TLS stays on your reverse proxy and certificate. The API already sets Helmet, JWT auth/roles, and request rate limits (stricter on `/auth/login` and face routes).
+
+### Security checklist
+
+- Set strong `JWT_SECRET`, `ADMIN_PASSWORD`, `SAFE_ACTION_PIN`, and `FACE_TEMPLATE_KEY` (32+ chars) before production.
+- `COOKIE_SECURE=true` when serving HTTPS.
+- Face templates are encrypted at rest when `FACE_TEMPLATE_KEY` is set; they are never returned to clients.
+- Software deadman/e-stop/watchdog supervise the HMI path only — not SIL. See `REAL_PLC_WIRING.md`.
 
 ## HTTPS hostnames (production)
 

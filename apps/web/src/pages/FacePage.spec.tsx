@@ -4,6 +4,9 @@ import { FacePage } from './FacePage';
 import { renderWithProviders } from '../test/render';
 import * as api from '../lib/api';
 
+const enrollName = 'Enroll (3-step challenge · requires session)';
+const loginName = 'Face login (3-step challenge)';
+
 describe('FacePage', () => {
   beforeEach(() => {
     const track = { stop: vi.fn() };
@@ -41,11 +44,7 @@ describe('FacePage', () => {
 
   it('requires login before enroll', async () => {
     renderWithProviders(<FacePage />);
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Enroll (requires logged-in session)',
-      }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: enrollName }));
     expect(
       await screen.findByText('Sign in with password first, then enroll'),
     ).toBeInTheDocument();
@@ -64,15 +63,15 @@ describe('FacePage', () => {
     fireEvent.change(screen.getByLabelText(/Email hint/), {
       target: { value: 'a@b.com' },
     });
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Enroll (requires logged-in session)',
-      }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: enrollName }));
     await waitFor(() =>
       expect(screen.getByText('basic only')).toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Face login' }));
+    expect(post).toHaveBeenCalledWith(
+      '/auth/face/enroll',
+      expect.objectContaining({ frames: expect.any(Array) }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     expect(localStorage.getItem('accessToken')).toBe('face');
   });
@@ -80,8 +79,15 @@ describe('FacePage', () => {
   it('no-ops face login when video ref is missing', async () => {
     const post = vi.spyOn(api, 'apiPost');
     renderWithProviders(<FacePage skipCamera />);
-    fireEvent.click(screen.getByRole('button', { name: 'Face login' }));
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it('surfaces camera-not-ready when enrolling without a video element', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    renderWithProviders(<FacePage skipCamera />);
+    fireEvent.click(screen.getByRole('button', { name: enrollName }));
+    expect(await screen.findByText('Camera not ready')).toBeInTheDocument();
   });
 
   it('surfaces enroll and login failures', async () => {
@@ -92,21 +98,13 @@ describe('FacePage', () => {
       .mockRejectedValueOnce('enroll string')
       .mockRejectedValueOnce('login string');
     renderWithProviders(<FacePage />);
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Enroll (requires logged-in session)',
-      }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: enrollName }));
     expect(await screen.findByText('enroll boom')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Face login' }));
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
     expect(await screen.findByText('login boom')).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Enroll (requires logged-in session)',
-      }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: enrollName }));
     expect(await screen.findByText('Enroll failed')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Face login' }));
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
     expect(
       await screen.findByText('Face match failed — use password login'),
     ).toBeInTheDocument();

@@ -80,9 +80,10 @@ Images pushed on main: `tele-pendant-api`, `tele-pendant-sim`, `tele-pendant-web
 - Default admin: `admin@example.com` / `change-me-admin-password` (from `.env`)
 - Safe-action PIN (e-stop cell): `SAFE_ACTION_PIN`
 - Seed QR: `TP-CRANE-DEMO-01`
-- Face auth: basic convenience only — see [`docs/FACE_LIMITATIONS.md`](./docs/FACE_LIMITATIONS.md)
-- Assistant: local SQLite FTS — no cloud LLM
-- OTA: [`docs/OTA.md`](./docs/OTA.md)
+- Face auth: local challenge liveness (not ISO-certified) — [`docs/FACE_LIMITATIONS.md`](./docs/FACE_LIMITATIONS.md)
+- Assistant: **acceptance = local SQLite FTS** (Cursor Agent only if `CURSOR_API_KEY` is set)
+- Drivers: [`docs/DRIVERS.md`](./docs/DRIVERS.md) · Scope checklist: [`docs/SCOPE_ACCEPTANCE.md`](./docs/SCOPE_ACCEPTANCE.md)
+- OTA: [`docs/OTA.md`](./docs/OTA.md) (JS OTA; native modules need APK rebuild)
 
 ## Verify before deploy
 

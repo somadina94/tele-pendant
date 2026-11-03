@@ -69,6 +69,8 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
           options={[
             { value: 'en', label: 'English' },
             { value: 'es', label: 'Español' },
+            { value: 'fr', label: 'Français' },
+            { value: 'de', label: 'Deutsch' },
           ]}
           onChange={setLocale}
         />

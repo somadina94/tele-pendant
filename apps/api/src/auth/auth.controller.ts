@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { ACCESS_TOKEN_COOKIE } from '../common/constants';
 import { ApiAuth } from '../common/swagger/api-auth.decorator';
@@ -33,6 +34,7 @@ export class AuthController {
    */
   @Post('login')
   @HttpCode(200)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({
     summary: 'Login (sets access_token cookie + returns Bearer)',
   })
@@ -84,20 +86,26 @@ export class AuthController {
   }
 
   /**
-   * Enroll basic face template (convenience auth — not biometrics).
+   * Enroll local face template (challenge frames preferred). Not ISO-certified.
    */
   @Post('face/enroll')
   @UseGuards(JwtAuthGuard)
   @ApiAuth()
   @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
-    summary: 'Enroll face template (basic / convenience only)',
+    summary:
+      'Enroll face template (local challenge liveness; not ISO-certified)',
   })
   enrollFace(
     @Body() dto: FaceImageDto,
     @Req() req: Request & { user: JwtPayload },
   ) {
-    return this.authService.enrollFace(req.user.sub, dto.imageDataUrl, req.ip);
+    return this.authService.enrollFace(
+      req.user.sub,
+      { imageDataUrl: dto.imageDataUrl, frames: dto.frames },
+      req.ip,
+    );
   }
 
   /**
@@ -105,8 +113,10 @@ export class AuthController {
    */
   @Post('face/login')
   @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
-    summary: 'Face login (basic match; prefer password if unsure)',
+    summary:
+      'Face login with optional challenge frames (prefer password if unsure)',
   })
   async faceLogin(
     @Body() dto: FaceLoginDto,
@@ -114,7 +124,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.loginWithFace(
-      dto.imageDataUrl,
+      { imageDataUrl: dto.imageDataUrl, frames: dto.frames },
       dto.email,
       req.ip,
     );

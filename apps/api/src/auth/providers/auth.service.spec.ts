@@ -3,7 +3,12 @@ import * as bcrypt from 'bcrypt';
 import { PNG } from 'pngjs';
 import { AuthService } from './auth.service';
 import { UserRole } from '../../users/enums/user-role.enum';
-import { descriptorFromImageDataUrl, serializeDescriptor } from './face.util';
+import {
+  descriptorFromImageDataUrl,
+  openTemplate,
+  sealTemplate,
+  serializeDescriptor,
+} from './face.util';
 
 function faceUrl(mode: 'blob' | 'ring'): string {
   const png = new PNG({ width: 48, height: 48 });
@@ -63,6 +68,7 @@ describe('AuthService', () => {
     if (key === 'appConfig.cookieSecure') return false;
     if (key === 'appConfig.admin.email') return 'admin@example.com';
     if (key === 'appConfig.admin.password') return 'change-me-admin-password';
+    if (key === 'appConfig.faceTemplateKey') return '';
     return undefined;
   }
 
@@ -190,13 +196,99 @@ describe('AuthService', () => {
   it('enrolls face template', async () => {
     const image = faceUrl('blob');
     usersRepository.findOneByOrFail.mockResolvedValue({ ...user });
-    const result = await service.enrollFace(user.id, image, '127.0.0.1');
+    const result = await service.enrollFace(
+      user.id,
+      { imageDataUrl: image },
+      '127.0.0.1',
+    );
     expect(result.ok).toBe(true);
     expect(usersRepository.save).toHaveBeenCalled();
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'auth.face_enroll',
         result: 'success',
+      }),
+    );
+  });
+
+  it('seals enrolled templates when FACE_TEMPLATE_KEY is set', async () => {
+    const key = 'unit-test-face-template-key-32chars!!';
+    configService.get.mockImplementation((k: string) => {
+      if (k === 'appConfig.faceTemplateKey') return key;
+      return defaultConfig(k);
+    });
+    const image = faceUrl('blob');
+    usersRepository.findOneByOrFail.mockResolvedValue({ ...user });
+    await service.enrollFace(user.id, { imageDataUrl: image });
+    const saved = usersRepository.save.mock.calls[0][0] as {
+      faceTemplate: string;
+    };
+    expect(saved.faceTemplate.startsWith('v1:')).toBe(true);
+    expect(openTemplate(saved.faceTemplate, key).length).toBeGreaterThan(0);
+
+    const sealed = sealTemplate(descriptorFromImageDataUrl(image), key);
+    usersRepository.find.mockResolvedValue([{ ...user, faceTemplate: sealed }]);
+    const ok = await service.loginWithFace({ imageDataUrl: image });
+    expect(ok.accessToken).toBe('token');
+  });
+
+  it('rejects empty face capture and skips unreadable sealed templates', async () => {
+    configService.get.mockImplementation((k: string) => {
+      if (k === 'appConfig.faceTemplateKey') return undefined;
+      return defaultConfig(k);
+    });
+    await expect(service.loginWithFace({})).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+
+    const image = faceUrl('blob');
+    usersRepository.find.mockResolvedValue([
+      { ...user, faceTemplate: 'v1:bad:sealed:template' },
+    ]);
+    await expect(
+      service.loginWithFace({ imageDataUrl: image }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('enrolls with challenge frame details when motion is present', async () => {
+    function shiftedFace(shift: number) {
+      const png = new PNG({ width: 64, height: 64 });
+      for (let y = 0; y < 64; y++) {
+        for (let x = 0; x < 64; x++) {
+          const left = 4 + shift;
+          const right = 28 + shift;
+          const skin = x > left && x < right && y > 16 && y < 48;
+          const i = (y * 64 + x) << 2;
+          png.data[i] = skin ? 210 : 20;
+          png.data[i + 1] = skin ? 140 : 20;
+          png.data[i + 2] = skin ? 110 : 20;
+          png.data[i + 3] = 255;
+        }
+      }
+      return `data:image/png;base64,${PNG.sync.write(png).toString('base64')}`;
+    }
+    usersRepository.findOneByOrFail.mockResolvedValue({ ...user });
+    await service.enrollFace(user.id, {
+      frames: [shiftedFace(0), shiftedFace(18), shiftedFace(36)],
+    });
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.face_enroll',
+        details: 'challenge_frames=3',
+      }),
+    );
+  });
+
+  it('audits face spoof when liveness fails on challenge frames', async () => {
+    const still = faceUrl('blob');
+    usersRepository.find.mockResolvedValue([{ ...user, faceTemplate: null }]);
+    await expect(
+      service.loginWithFace({ frames: [still, still, still] }),
+    ).rejects.toThrow(/Liveness failed|No face/);
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.face_spoof',
+        result: 'failure',
       }),
     );
   });
@@ -227,7 +319,7 @@ describe('AuthService', () => {
       twin, // equal score → ! (score > best.score)
     ]);
 
-    const ok = await service.loginWithFace(image);
+    const ok = await service.loginWithFace({ imageDataUrl: image });
     expect(ok.accessToken).toBe('token');
     expect(ok.user.email).toBe(user.email);
     expect(ok.matchScore).toBeGreaterThan(0.9);
@@ -237,12 +329,14 @@ describe('AuthService', () => {
     const image = faceUrl('blob');
     usersRepository.find.mockResolvedValue([{ ...user, faceTemplate: null }]);
     await expect(
-      service.loginWithFace(image, user.email),
+      service.loginWithFace({ imageDataUrl: image }, user.email),
     ).rejects.toBeInstanceOf(UnauthorizedException);
 
     const rejectValue = { code: 'face-boom' };
     usersRepository.find.mockRejectedValue(rejectValue);
-    await expect(service.loginWithFace(image)).rejects.toBe(rejectValue);
+    await expect(service.loginWithFace({ imageDataUrl: image })).rejects.toBe(
+      rejectValue,
+    );
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'auth.face_login',
@@ -252,7 +346,7 @@ describe('AuthService', () => {
     );
   });
 
-  it('pins en or es and rejects anything else', async () => {
+  it('pins en/es/fr/de and rejects anything else', async () => {
     usersRepository.findOneByOrFail.mockResolvedValue({
       ...user,
       locale: 'en',
@@ -266,7 +360,11 @@ describe('AuthService', () => {
     });
     const english = await service.updateLocale(user.id, 'EN');
     expect(english.locale).toBe('en');
-    await expect(service.updateLocale(user.id, 'fr')).rejects.toBeInstanceOf(
+    usersRepository.findOneByOrFail.mockResolvedValue({ ...user });
+    expect((await service.updateLocale(user.id, 'fr-FR')).locale).toBe('fr');
+    usersRepository.findOneByOrFail.mockResolvedValue({ ...user });
+    expect((await service.updateLocale(user.id, 'de')).locale).toBe('de');
+    await expect(service.updateLocale(user.id, 'it')).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });

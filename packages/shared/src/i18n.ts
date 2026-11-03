@@ -1,14 +1,20 @@
+import de from '../i18n/de.json';
 import en from '../i18n/en.json';
 import es from '../i18n/es.json';
+import fr from '../i18n/fr.json';
 
-export type Locale = 'en' | 'es';
+export type Locale = 'en' | 'es' | 'fr' | 'de';
 
-const catalogs: Record<Locale, Record<string, string>> = { en, es };
+export const LOCALES: Locale[] = ['en', 'es', 'fr', 'de'];
+
+const catalogs: Record<Locale, Record<string, string>> = { en, es, fr, de };
 
 export function normalizeLocale(raw: string | null | undefined): Locale | null {
   if (!raw) return null;
   const base = raw.toLowerCase().replace('_', '-').split('-')[0];
   if (base === 'es') return 'es';
+  if (base === 'fr') return 'fr';
+  if (base === 'de') return 'de';
   if (base === 'en') return 'en';
   return null;
 }

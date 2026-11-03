@@ -15,7 +15,7 @@ vi.mock('../lib/realtime', () => ({
 }));
 
 const layout = {
-  matrix: { rows: 1, cols: 2 },
+  matrix: { rows: 1, cols: 3 },
   cells: [
     {
       id: 'm1',
@@ -26,8 +26,18 @@ const layout = {
       isMotion: true,
       requiresSafeAction: false,
       primaryRegister: null,
-      feedbackRegister: null,
-      statusRegister: null,
+      feedbackRegister: {
+        id: 'rf',
+        name: 'holding.hoistHeightMm',
+        address: 1,
+        kind: 'holding',
+      },
+      statusRegister: {
+        id: 'rs',
+        name: 'discrete.motorRunning',
+        address: 3,
+        kind: 'discrete',
+      },
     },
     {
       id: 's1',
@@ -39,6 +49,28 @@ const layout = {
       requiresSafeAction: true,
       primaryRegister: null,
       feedbackRegister: null,
+      statusRegister: {
+        id: 'rs2',
+        name: 'coil.estop',
+        address: 5,
+        kind: 'coil',
+      },
+    },
+    {
+      id: 't1',
+      row: 0,
+      col: 2,
+      label: 'Trolley L',
+      style: 'default',
+      isMotion: true,
+      requiresSafeAction: false,
+      primaryRegister: null,
+      feedbackRegister: {
+        id: 'rf2',
+        name: 'holding.loadKg',
+        address: 2,
+        kind: 'holding',
+      },
       statusRegister: null,
     },
   ],
@@ -155,6 +187,10 @@ describe('OperatorPage', () => {
       watchdogOk: true,
     });
     expect(await screen.findByText(/E-STOP/)).toBeInTheDocument();
+    expect(await screen.findByText(/F 100/)).toBeInTheDocument();
+    expect(screen.getByText(/S RUN/)).toBeInTheDocument();
+    expect(screen.getByText(/F 5/)).toBeInTheDocument();
+    expect(screen.getByText(/S —/)).toBeInTheDocument();
 
     const hoist = screen.getByRole('button', { name: 'Hoist Up' });
     fireEvent.pointerDown(hoist);

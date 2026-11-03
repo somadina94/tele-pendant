@@ -1,9 +1,16 @@
 import { useState } from 'react';
-import { translate, type Locale } from '@tele-pendant/shared';
+import { LOCALES, translate, type Locale } from '@tele-pendant/shared';
 import { apiPatch } from './api';
 import { pinLocale, readLocale } from './i18n';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+
+const LABELS: Record<Locale, string> = {
+  en: 'English',
+  es: 'Español',
+  fr: 'Français',
+  de: 'Deutsch',
+};
 
 export function LanguageSelect({
   onLocale,
@@ -32,10 +39,16 @@ export function LanguageSelect({
           'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         )}
         value={locale}
-        onChange={(event) => change(event.target.value === 'es' ? 'es' : 'en')}
+        onChange={(event) => {
+          const next = event.target.value as Locale;
+          if (LOCALES.includes(next)) change(next);
+        }}
       >
-        <option value="en">English</option>
-        <option value="es">Español</option>
+        {LOCALES.map((code) => (
+          <option key={code} value={code}>
+            {LABELS[code]}
+          </option>
+        ))}
       </select>
     </div>
   );

@@ -16,6 +16,7 @@ export interface HealthPayload {
 export {
   normalizeLocale,
   resolveLocale,
+  LOCALES,
   translate,
   translateError,
 } from './i18n';

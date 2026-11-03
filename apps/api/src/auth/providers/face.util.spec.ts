@@ -4,13 +4,18 @@ import { join } from 'path';
 import { encode as encodeJpeg } from 'jpeg-js';
 import { PNG } from 'pngjs';
 import {
+  descriptorFromChallengeFrames,
   descriptorFromImageDataUrl,
   faceDistance,
   FACE_MATCH_THRESHOLD,
   matchScore,
+  openTemplate,
   parseDescriptor,
+  sealTemplate,
   serializeDescriptor,
 } from './face.util';
+
+const EMBED_LEN = 12 * 12 * 3;
 
 function paint(
   width: number,
@@ -38,7 +43,7 @@ function dataUrl(buf: Buffer, mime = 'image/png'): string {
 const skin: [number, number, number] = [210, 140, 110];
 const dark: [number, number, number] = [20, 20, 20];
 
-function oneFace(): Buffer {
+function oneFace(shift = 0): Buffer {
   return paint(48, 48, (x, y) => {
     if (x === 0 && y === 0) return [200, 10, 10];
     if (x === 1 && y === 0) return [200, 80, 10];
@@ -46,8 +51,10 @@ function oneFace(): Buffer {
     if (x === 3 && y === 0) return [180, 100, 190];
     if (x === 4 && y === 0) return [200, 190, 180];
     if (x === 5 && y === 0) return [80, 200, 80];
-    if (x > 10 && x < 38 && y > 10 && y < 38) {
-      return x < 24 ? skin : [240, 200, 170];
+    const left = 10 + shift;
+    const right = 38 + shift;
+    if (x > left && x < right && y > 10 && y < 38) {
+      return x < 24 + shift ? skin : [240, 200, 170];
     }
     return dark;
   });
@@ -75,6 +82,7 @@ describe('face.util', () => {
   it('matches one face and rejects lookalikes by distance', () => {
     const url = dataUrl(oneFace());
     const desc = descriptorFromImageDataUrl(url);
+    expect(desc.length).toBe(EMBED_LEN);
     const again = descriptorFromImageDataUrl(url.split(',')[1]);
     expect(matchScore(desc, again)).toBe(1);
     expect(matchScore(desc, again)).toBeGreaterThanOrEqual(
@@ -84,6 +92,50 @@ describe('face.util', () => {
     expect(matchScore(desc, other)).toBeLessThan(FACE_MATCH_THRESHOLD);
     expect(serializeDescriptor(desc)).toContain('[');
     expect(parseDescriptor(serializeDescriptor(desc))).toEqual(desc);
+  });
+
+  it('requires motion across challenge frames and seals templates', () => {
+    expect(() => descriptorFromChallengeFrames([dataUrl(oneFace(0))])).toThrow(
+      /Need 3 challenge frames/,
+    );
+
+    const still = dataUrl(oneFace(0));
+    expect(() => descriptorFromChallengeFrames([still, still, still])).toThrow(
+      /Liveness failed/,
+    );
+
+    const leftBias = paint(64, 64, (x, y) => {
+      if (x > 2 && x < 26 && y > 16 && y < 48) {
+        return x < 14 ? skin : [240, 200, 170];
+      }
+      return dark;
+    });
+    const rightBias = paint(64, 64, (x, y) => {
+      if (x > 38 && x < 62 && y > 16 && y < 48) {
+        return x < 50 ? [200, 120, 90] : [250, 210, 180];
+      }
+      return dark;
+    });
+    const frames = [dataUrl(oneFace(0)), dataUrl(leftBias), dataUrl(rightBias)];
+    const avg = descriptorFromChallengeFrames(frames);
+    expect(avg.length).toBe(EMBED_LEN);
+
+    const key = 'test-face-template-key-min-32-chars!!';
+    const sealed = sealTemplate(avg, key);
+    expect(sealed.startsWith('v1:')).toBe(true);
+    expect(openTemplate(sealed, key)).toEqual(avg);
+    expect(() => openTemplate(sealed)).toThrow(/FACE_TEMPLATE_KEY/);
+    expect(() => parseDescriptor(sealed)).toThrow(/Sealed template/);
+    expect(() => openTemplate('v1:only:three', key)).toThrow(
+      /Invalid sealed template/,
+    );
+    expect(() =>
+      descriptorFromChallengeFrames([
+        dataUrl(twoFaces()),
+        dataUrl(oneFace(0)),
+        dataUrl(oneFace(2)),
+      ]),
+    ).toThrow(/No face detected/);
   });
 
   it('decodes a jpeg and rejects empty, invalid, and multi-face frames', () => {
@@ -98,7 +150,7 @@ describe('face.util', () => {
       ).data,
     );
     expect(descriptorFromImageDataUrl(dataUrl(jpeg, 'image/jpeg')).length).toBe(
-      64,
+      EMBED_LEN,
     );
     expect(() => descriptorFromImageDataUrl('data:image/png;base64,')).toThrow(
       /Empty face image/,
@@ -139,7 +191,9 @@ describe('face.util', () => {
       : cwd;
     try {
       process.chdir(repoRoot);
-      expect(descriptorFromImageDataUrl(dataUrl(oneFace())).length).toBe(64);
+      expect(descriptorFromImageDataUrl(dataUrl(oneFace())).length).toBe(
+        EMBED_LEN,
+      );
       process.chdir(mkdtempSync(join(tmpdir(), 'face-')));
       expect(() => descriptorFromImageDataUrl(dataUrl(oneFace()))).toThrow(
         /Face model missing/,

@@ -5,8 +5,8 @@ Advisory only — never issue PLC writes, motion, e-stop, or safe-state commands
 ## HMI matrix and overlays
 
 - Operator screen: NxM cell matrix. Each cell can bind primary / feedback / status PLC registers (read/write coils or holdings via Modbus TCP).
-- Motion cells need an active deadman hold; release stops motion (software supervision, not SIL).
-- Safe-action cells (e.g. e-stop) need the supervisor safe-action PIN.
+- Motion cells need an active deadman hold; release stops motion (**software supervision of the HMI path — not a SIL/PL replacement**).
+- Safe-action cells (e.g. e-stop) need the supervisor safe-action PIN (never face auth).
 - Plant graphic: static background with overlay labels showing live tag values (same register model as cells).
 
 ## Safety supervision
@@ -28,14 +28,15 @@ Advisory only — never issue PLC writes, motion, e-stop, or safe-state commands
 
 ## Auth, audit, config, OTA
 
-- Password login + optional face convenience match (fail closed to password).
-- Audit log: who did what (login, cell activate, config changes).
+- Password login + optional local face challenge (fail closed to password; never for e-stop).
+- Audit log: who did what (login, face enroll/match/spoof, cell activate, config changes).
 - Config (admin): PLC connections, registers, cells, overlays, background, alarm defs, safety roles.
 - OTA: Expo update manifest for mobile JS; native modules still need binary rebuilds.
-- i18n: English/Spanish via locale.
+- i18n: English / Spanish / French / German via locale.
 
 ## Assistant rules
 
+- **Delivery default = local SQLite FTS** over manuals. Cursor Agent runs only when `CURSOR_API_KEY` is set (optional; not required for acceptance).
 - Prefer manuals and this handbook.
 - Explain alarms and troubleshooting; do not ack/shelve or change config yourself.
 - Say clearly when something is not certified safety.

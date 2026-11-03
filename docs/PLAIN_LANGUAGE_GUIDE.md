@@ -78,7 +78,7 @@ After sign-in, the top menu on the **Operator** page links to:
 | **Operator** | Main control: picture, live numbers, button matrix. |
 | **Media** | Camera, QR/barcode, voice shortcuts. |
 | **Assistant** | Ask questions about manuals and how the pendant works (local search; optional Cursor Agent if `CURSOR_API_KEY` is set). |
-| **Face** | Optional face login (convenience only — see [FACE_LIMITATIONS.md](./FACE_LIMITATIONS.md)). |
+| **Face** | Optional local face login with challenge liveness (not ISO-certified — see [FACE_LIMITATIONS.md](./FACE_LIMITATIONS.md)). |
 | **Ops** | Alarms, trends, connection diagnostics. |
 | **Config** | Admin: PLC connection, registers, buttons, labels, alarms, safety bindings. |
 | **Audit** | Who did what and when. |

@@ -20,7 +20,7 @@ export interface AssistantSettings {
 }
 
 const DEFAULT_DOCS_ROOT = 'docs';
-const FALLBACK_HANDBOOK = `Tele-Pendant advisory handbook: NxM cells with PLC registers; deadman for motion; safe-action PIN for e-stop; Modbus loss clears motion and writes safe-state; alarms/trends/diagnostics on Ops; camera/QR/voice on Media; face login is convenience only; Config for PLC/registers/cells; Audit logs actions; OTA for mobile JS. Never issue PLC or safety commands.`;
+const FALLBACK_HANDBOOK = `Tele-Pendant advisory handbook: NxM cells with PLC registers; deadman for motion; safe-action PIN for e-stop; Modbus loss clears motion and writes safe-state; alarms/trends/diagnostics on Ops; camera/QR/voice on Media; face login is local challenge liveness (not ISO; never for e-stop); Config for PLC/registers/cells; Audit logs actions; OTA for mobile JS; assistant default is local FTS. Never issue PLC or safety commands.`;
 
 /**
  * Document assistant: SQLite FTS5 retrieval + optional Cursor Agent synthesis.

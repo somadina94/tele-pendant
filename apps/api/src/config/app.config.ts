@@ -27,4 +27,5 @@ export default registerAs('appConfig', () => ({
     agentCwd: process.env.CURSOR_AGENT_CWD?.trim() || '',
     model: process.env.CURSOR_MODEL?.trim() || 'auto',
   },
+  faceTemplateKey: process.env.FACE_TEMPLATE_KEY?.trim() || '',
 }));

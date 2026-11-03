@@ -16,12 +16,19 @@ import { UserRole } from '../../users/enums/user-role.enum';
 import { User } from '../../users/entities/user.entity';
 import { LoginDto } from '../dtos/login.dto';
 import {
+  descriptorFromChallengeFrames,
   descriptorFromImageDataUrl,
   FACE_MATCH_THRESHOLD,
   matchScore,
-  parseDescriptor,
+  openTemplate,
+  sealTemplate,
   serializeDescriptor,
 } from './face.util';
+
+export type FaceCaptureInput = {
+  imageDataUrl?: string;
+  frames?: string[];
+};
 
 export interface JwtPayload {
   sub: string;
@@ -154,33 +161,45 @@ export class AuthService implements OnModuleInit {
   }
 
   /**
-   * Enroll a basic face template for the current user (convenience auth only).
+   * Enroll local face template (challenge frames preferred). Not ISO-certified.
+   * Never used for e-stop / safe-action authorization.
    */
-  async enrollFace(userId: string, imageDataUrl: string, ip?: string) {
+  async enrollFace(userId: string, input: FaceCaptureInput, ip?: string) {
     const user = await this.usersRepository.findOneByOrFail({ id: userId });
-    const desc = descriptorFromImageDataUrl(imageDataUrl);
-    user.faceTemplate = serializeDescriptor(desc);
+    const desc = this.descriptorFromCapture(input);
+    const key = this.faceKey();
+    user.faceTemplate = key
+      ? sealTemplate(desc, key)
+      : serializeDescriptor(desc);
     await this.usersRepository.save(user);
     await this.auditService.write({
       userId: user.id,
       userEmail: user.email,
       action: 'auth.face_enroll',
+      details: input.frames?.length
+        ? `challenge_frames=${input.frames.length}`
+        : 'single_frame',
       ip,
       result: 'success',
     });
     return {
       ok: true,
       limitation:
-        'Basic convenience match only — not a high-assurance biometric product. Prefer password when unsure.',
+        'Local on-prem face match with challenge liveness — not ISO-certified. Prefer password for high-assurance access. Face never authorizes e-stop or SAFE_ACTION_PIN.',
     };
   }
 
   /**
    * Face login: match against enrolled templates. Fail closed to password.
    */
-  async loginWithFace(imageDataUrl: string, emailHint?: string, ip?: string) {
+  async loginWithFace(
+    input: FaceCaptureInput,
+    emailHint?: string,
+    ip?: string,
+  ) {
     try {
-      const probe = descriptorFromImageDataUrl(imageDataUrl);
+      const probe = this.descriptorFromCapture(input);
+      const key = this.faceKey();
       const candidates = emailHint
         ? await this.usersRepository.find({ where: { email: emailHint } })
         : await this.usersRepository.find();
@@ -188,7 +207,12 @@ export class AuthService implements OnModuleInit {
       let best: { user: User; score: number } | null = null;
       for (const user of candidates) {
         if (!user.faceTemplate) continue;
-        const stored = parseDescriptor(user.faceTemplate);
+        let stored: number[];
+        try {
+          stored = openTemplate(user.faceTemplate, key || undefined);
+        } catch {
+          continue;
+        }
         const score = matchScore(probe, stored);
         if (!best || score > best.score) {
           best = { user, score };
@@ -206,7 +230,7 @@ export class AuthService implements OnModuleInit {
         userId: best.user.id,
         userEmail: best.user.email,
         action: 'auth.face_login',
-        details: `score=${best.score.toFixed(3)}`,
+        details: `score=${best.score.toFixed(3)};challenge=${Boolean(input.frames?.length)}`,
         ip,
         result: 'success',
       });
@@ -214,15 +238,18 @@ export class AuthService implements OnModuleInit {
         accessToken,
         user: this.toPublicUser(best.user),
         matchScore: best.score,
-        limitation: 'Basic convenience match only — not certified biometrics.',
+        limitation:
+          'Local on-prem face match — not ISO-certified. Fail closed to password. Face never authorizes safety actions.',
       };
     } catch (err) {
+      const details = err instanceof Error ? err.message : 'face login failed';
+      const spoof = /liveness|motion|No face/i.test(details);
       await this.auditService.write({
         userEmail: emailHint,
-        action: 'auth.face_login',
+        action: spoof ? 'auth.face_spoof' : 'auth.face_login',
         ip,
         result: 'failure',
-        details: err instanceof Error ? err.message : 'face login failed',
+        details,
       });
       throw err;
     }
@@ -230,17 +257,38 @@ export class AuthService implements OnModuleInit {
 
   async updateLocale(userId: string, locale: string) {
     const user = await this.usersRepository.findOneByOrFail({ id: userId });
-    const normalized = locale.toLowerCase().startsWith('es')
+    const lower = locale.toLowerCase();
+    const normalized = lower.startsWith('es')
       ? 'es'
-      : locale.toLowerCase().startsWith('en')
-        ? 'en'
-        : null;
+      : lower.startsWith('fr')
+        ? 'fr'
+        : lower.startsWith('de')
+          ? 'de'
+          : lower.startsWith('en')
+            ? 'en'
+            : null;
     if (!normalized) {
-      throw new BadRequestException('Locale must be en or es');
+      throw new BadRequestException('Locale must be en, es, fr, or de');
     }
     user.locale = normalized;
     user.localePinned = true;
     await this.usersRepository.save(user);
     return this.toPublicUser(user);
+  }
+
+  private faceKey(): string {
+    return this.configService.get<string>('appConfig.faceTemplateKey') ?? '';
+  }
+
+  private descriptorFromCapture(input: FaceCaptureInput): number[] {
+    if (input.frames && input.frames.length >= 3) {
+      return descriptorFromChallengeFrames(input.frames);
+    }
+    if (input.imageDataUrl) {
+      return descriptorFromImageDataUrl(input.imageDataUrl);
+    }
+    throw new BadRequestException(
+      'Provide frames[3] for challenge liveness (or imageDataUrl)',
+    );
   }
 }

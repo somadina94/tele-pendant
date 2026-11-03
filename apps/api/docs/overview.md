@@ -5,7 +5,7 @@
 Industrial tele-pendant API: NxM cell matrix HMI, Modbus TCP driver, safety
 supervision (deadman, watchdog, e-stop, safe-state), alarms, trends, and local
 assistant search (SQLite FTS, no cloud LLM). Optional basic face enroll/login is
-convenience-only — see repo `docs/FACE_LIMITATIONS.md`. Operators use the web or
+local challenge liveness (not ISO-certified) — see repo `docs/FACE_LIMITATIONS.md`. Operators use the web or
 Expo client; configuration and Modbus maps live in SQLite.
 
 ## Live URLs

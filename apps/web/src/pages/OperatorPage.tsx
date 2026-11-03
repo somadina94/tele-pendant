@@ -283,7 +283,30 @@ export function OperatorPage() {
                     }}
                     aria-label={cell.label}
                   >
-                    {cell.label}
+                    <span className="block font-semibold">{cell.label}</span>
+                    {(cell.feedbackRegister || cell.statusRegister) && (
+                      <span className="mt-1 block text-[10px] font-normal leading-tight opacity-80">
+                        {cell.feedbackRegister
+                          ? `F ${String(
+                              tagValueForRegister(
+                                tags,
+                                cell.feedbackRegister.name,
+                              ),
+                            )}`
+                          : null}
+                        {cell.feedbackRegister && cell.statusRegister
+                          ? ' · '
+                          : null}
+                        {cell.statusRegister
+                          ? `S ${String(
+                              tagValueForRegister(
+                                tags,
+                                cell.statusRegister.name,
+                              ),
+                            )}`
+                          : null}
+                      </span>
+                    )}
                   </Button>
                 ) : (
                   <div key={`empty-${idx}`} className="min-h-14 md:min-h-16" />
