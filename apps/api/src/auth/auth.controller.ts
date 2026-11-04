@@ -15,8 +15,10 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { ACCESS_TOKEN_COOKIE } from '../common/constants';
 import { ApiAuth } from '../common/swagger/api-auth.decorator';
+import { SkipDataWrap } from '../common/swagger/skip-data-wrap.decorator';
 import { FaceImageDto, FaceLoginDto } from './dtos/face-image.dto';
 import { LoginDto } from './dtos/login.dto';
+import { OAuthTokenDto } from './dtos/oauth-token.dto';
 import { UpdateLocaleDto } from './dtos/update-locale.dto';
 import { AuthService, JwtPayload } from './providers/auth.service';
 import { JwtAuthGuard } from './providers/jwt-auth.guard';
@@ -50,6 +52,30 @@ export class AuthController {
       this.authService.getCookieOptions(),
     );
     return result;
+  }
+
+  /**
+   * OAuth2 password-grant token for Swagger Authorize (username = email).
+   * Returns a raw `{ access_token, token_type }` body (not the usual API envelope).
+   */
+  @Post('token')
+  @HttpCode(200)
+  @SkipDataWrap()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'OAuth2 password token (Swagger Authorize)',
+    description:
+      'Form or JSON: username (email) + password. Used by Swagger UI oauth2 password flow.',
+  })
+  async token(@Body() dto: OAuthTokenDto, @Req() req: Request) {
+    const result = await this.authService.login(
+      { email: dto.username, password: dto.password },
+      req.ip,
+    );
+    return {
+      access_token: result.accessToken,
+      token_type: 'bearer',
+    };
   }
 
   /**

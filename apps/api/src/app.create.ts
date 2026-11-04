@@ -102,11 +102,31 @@ export function appCreate(app: INestApplication): void {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Tele-Pendant API')
     .setDescription(
-      'Industrial tele-pendant HMI API. Modbus TCP, cell matrix, safety supervision, alarms, trends, local assistant. Use the Servers dropdown to target Localhost or Live.',
+      'Industrial tele-pendant HMI API. Modbus TCP, cell matrix, safety supervision, alarms, trends, local assistant. Use the Servers dropdown to target Localhost or Live. Authorize with oauth2 (username = email, password = account password), or paste a Bearer token from POST /auth/login.',
     )
     .setVersion('1.0')
     .addCookieAuth('access_token')
-    .addBearerAuth()
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      description:
+        'Paste `accessToken` from POST /api/v1/auth/login (or use oauth2 below for email + password).',
+    })
+    .addOAuth2(
+      {
+        type: 'oauth2',
+        description:
+          'Swagger login: username = account email, password = account password. Client id/secret can be left blank.',
+        flows: {
+          password: {
+            tokenUrl: '/api/v1/auth/token',
+            scopes: {},
+          },
+        },
+      },
+      'oauth2',
+    )
     .addServer(localSwaggerUrl, 'Localhost')
     .addServer(liveSwaggerUrl, 'Live')
     .addTag('health', 'Service health')
