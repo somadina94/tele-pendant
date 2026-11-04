@@ -7,9 +7,16 @@ import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 
 function otaDirectory(): string {
-  const besideApi = join(process.cwd(), 'ota');
-  if (existsSync(join(besideApi, 'manifest.json'))) return besideApi;
-  return join(process.cwd(), 'apps', 'api', 'ota');
+  const candidates = [
+    join(process.cwd(), 'ota'),
+    join(process.cwd(), 'apps', 'api', 'ota'),
+    join(__dirname, '..', 'ota'),
+    join(__dirname, '..', '..', 'ota'),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(join(dir, 'manifest.json'))) return dir;
+  }
+  return candidates[0];
 }
 
 function otaHeaders(res: Response): void {
@@ -26,9 +33,16 @@ function serveOta(req: Request, res: Response, next: NextFunction): void {
   }
   const root = otaDirectory();
   if (req.path === '/ota/manifest') {
+    const file = join(root, 'manifest.json');
+    if (!existsSync(file)) {
+      res.status(404).type('application/json').json({
+        message: 'OTA manifest missing — publish apps/api/ota on the API host',
+      });
+      return;
+    }
     otaHeaders(res);
     res.type('application/json');
-    res.sendFile(join(root, 'manifest.json'), (err) => {
+    res.sendFile(file, (err) => {
       if (err) next(err);
     });
     return;
@@ -38,8 +52,15 @@ function serveOta(req: Request, res: Response, next: NextFunction): void {
     next();
     return;
   }
+  const file = join(root, 'assets', asset[1]);
+  if (!existsSync(file)) {
+    res.status(404).type('application/json').json({
+      message: 'OTA asset not found',
+    });
+    return;
+  }
   otaHeaders(res);
-  res.sendFile(join(root, 'assets', asset[1]), (err) => {
+  res.sendFile(file, (err) => {
     if (err) next(err);
   });
 }

@@ -255,6 +255,13 @@ export class AlarmEngineService implements OnModuleInit {
   async deleteDefinition(id: string) {
     const row = await this.definitions.findOneBy({ id });
     if (!row) throw new NotFoundException('Alarm definition not found');
+    // Drop history first — alarm_events.definition_id has no ON DELETE CASCADE
+    // on existing SQLite DBs, so remove() alone returns 500.
+    await this.events
+      .createQueryBuilder()
+      .delete()
+      .where('definition_id = :id', { id })
+      .execute();
     await this.definitions.remove(row);
     this.activeByDef.delete(id);
     return { ok: true as const };

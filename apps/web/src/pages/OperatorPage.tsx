@@ -129,6 +129,7 @@ export function OperatorPage() {
 
   const layout = layoutQuery.data;
   const imageUrl = layout?.background?.imageUrl ?? '';
+  const cssBackground = layout?.background?.cssBackground?.trim() || '';
   const mode = safety?.mode ?? layout?.safety.mode ?? 'unknown';
 
   useEffect(() => {
@@ -163,7 +164,10 @@ export function OperatorPage() {
       ) : null}
 
       <HelpTip id="tour.operator.graphic">
-        <div className="plant-graphic">
+        <div
+          className="plant-graphic"
+          style={cssBackground ? { background: cssBackground } : undefined}
+        >
           {imageUrl && photoOk ? (
             <img
               alt="Plant background"

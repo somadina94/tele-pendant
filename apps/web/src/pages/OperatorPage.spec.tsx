@@ -161,9 +161,13 @@ describe('OperatorPage', () => {
   });
 
   it('renders matrix overlays and handles motion press/release', async () => {
-    renderWithProviders(<OperatorPage />);
+    const { container } = renderWithProviders(<OperatorPage />);
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
     expect(screen.getByText('Bay')).toBeInTheDocument();
+    expect(
+      (container.querySelector('.plant-graphic') as HTMLElement).style
+        .background,
+    ).toBe('red');
 
     const tagsHandler = socket.on.mock.calls.find(
       (c) => c[0] === 'tags.update',

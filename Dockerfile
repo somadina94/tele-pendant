@@ -62,6 +62,7 @@ COPY --from=builder /app/packages/modbus-core/dist ./packages/modbus-core/dist
 COPY --from=builder /app/packages/plc-driver/dist ./packages/plc-driver/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/assets ./apps/api/assets
+COPY --from=builder /app/apps/api/ota ./apps/api/ota
 COPY --from=builder /app/docs ./docs
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/
 COPY --from=builder /app/packages/modbus-core/package.json ./packages/modbus-core/

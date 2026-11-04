@@ -19,12 +19,18 @@ describe('AlarmEngineService', () => {
     findOneBy: jest.fn(),
     remove: jest.fn().mockImplementation(async (x) => x),
   };
+  const eventsDeleteQb = {
+    delete: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    execute: jest.fn().mockResolvedValue({ affected: 1 }),
+  };
   const events = {
     find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn(),
     findOneByOrFail: jest.fn(),
     save: jest.fn().mockImplementation(async (x) => ({ id: 'e1', ...x })),
     create: jest.fn((x) => x),
+    createQueryBuilder: jest.fn(() => eventsDeleteQb),
   };
   const registers = {
     findOne: jest.fn().mockResolvedValue(null),
@@ -305,5 +311,10 @@ describe('AlarmEngineService', () => {
     expect(row.threshold).toBe(8);
     await expect(service.listDefinitions()).resolves.toBeDefined();
     await expect(service.deleteDefinition('d2')).resolves.toEqual({ ok: true });
+    expect(events.createQueryBuilder).toHaveBeenCalled();
+    expect(eventsDeleteQb.where).toHaveBeenCalledWith('definition_id = :id', {
+      id: 'd2',
+    });
+    expect(definitions.remove).toHaveBeenCalledWith(row);
   });
 });

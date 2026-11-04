@@ -13,7 +13,7 @@ export class AlarmEvent {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @ManyToOne(() => AlarmDefinition, { eager: true })
+  @ManyToOne(() => AlarmDefinition, { eager: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'definition_id' })
   definition!: AlarmDefinition;
 

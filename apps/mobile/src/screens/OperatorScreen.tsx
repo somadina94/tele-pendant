@@ -163,6 +163,11 @@ export function OperatorScreen({ token }: { token: string }) {
   };
 
   const imageUrl = layoutQuery.data?.background?.imageUrl ?? '';
+  const cssBackground =
+    layoutQuery.data?.background?.cssBackground?.trim() || '';
+  // RN View only accepts solid colors (not CSS gradients).
+  const solidBackground =
+    cssBackground && !/[()]/.test(cssBackground) ? cssBackground : '';
   const tone = statusTone(safetyMode);
   useEffect(() => {
     setPhotoOk(true);
@@ -201,7 +206,7 @@ export function OperatorScreen({ token }: { token: string }) {
       <HelpTip id="tour.operator.graphic">
         <View
           className="relative mb-3 min-h-[220px] overflow-hidden rounded-2xl border border-white/10"
-          style={{ backgroundColor: '#07090c' }}
+          style={{ backgroundColor: solidBackground || '#07090c' }}
         >
           {imageUrl && photoOk ? (
             <Image
