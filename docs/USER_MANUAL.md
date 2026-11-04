@@ -201,7 +201,7 @@ From Operator, click **Config** (http://localhost:8080/admin). Sign in as the ad
   - `[1,2] Trolley R` — primary `coil.trolleyRight`
   - `[2,1] Hoist Down` — primary `coil.hoistDown` / feedback `discrete.motorRunning` / status `holding.hoistHeightMm`
 - **Add a cell** is an empty form. Pick a primary register, fill the label, and click **Add cell**.
-- **Live labels** lists **Height**, **Load**, and **Motor** with **X**, **Y**, **Format**, and a register. **Add a label** posts a new one.
+- **Live labels** lists **Height**, **Load**, and **Motor** with **X**, **Y**, **Format**, and a register. Those three feed the fixed **cluster readout** on Operator (they do not float on the graphic). **Add a label** posts a free-position overlay (use X/Y for placement).
 - **Background** has **Name**, a CSS background, and an image URL. If the image URL is filled, Operator uses that picture. If it is empty, Operator uses the CSS background.
 
 ### Edit a cell, a label, and the background, then put them back
@@ -209,8 +209,8 @@ From Operator, click **Config** (http://localhost:8080/admin). Sign in as the ad
 1. On **Hoist Up**, change **Cell label** to `Lift`. The button stays **Save Hoist Up** (it uses the saved name). Click it.
 2. **Success:** **Saved Lift.** Open **Operator**. The button now says **Lift**.
 3. Back on Config, set that label to `Hoist Up` and click **Save Lift**. **Success:** Operator shows **Hoist Up** again.
-4. On the **Height** label, set **X** to `40` and **Y** to `50`. Click **Save Height**.
-5. **Success:** **Saved Height.** On Operator the **Height** label has moved. Set **X** back to `18` and **Y** back to `22`, click **Save Height**, and it sits where it started.
+4. Under **Add a label**, set **Label** to `Tip`, **X** to `40`, **Y** to `50`, **Format** to `{value}`, leave the register empty, and save.
+5. **Success:** on Operator a floating **Tip** overlay appears near mid-graphic. Change Tip to **X** `10` / **Y** `10` and save again to see it move, then **Delete Tip** when done. (Do not expect **Height** / **Load** / **Motor** to move; they stay in the cluster strip.)
 6. On **Background**, replace the CSS with `red`. Leave the image URL empty. Click **Save background**.
 7. **Success:** **Saved background.** Operator’s graphic is red. Put this CSS back and save again:
 
