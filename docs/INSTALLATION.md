@@ -109,7 +109,7 @@ TLS stays on your reverse proxy and certificate. The API already sets Helmet, JW
 - Set strong `JWT_SECRET`, `ADMIN_PASSWORD`, `SAFE_ACTION_PIN`, and `FACE_TEMPLATE_KEY` (32+ chars) before production.
 - `COOKIE_SECURE=true` when serving HTTPS.
 - Face templates are encrypted at rest when `FACE_TEMPLATE_KEY` is set; they are never returned to clients.
-- Software deadman/e-stop/watchdog supervise the HMI path only — not SIL. See `REAL_PLC_WIRING.md`.
+- Software deadman/e-stop/watchdog supervise the HMI path only — not SIL. See `REAL_PLC_WIRING.md` for **step-by-step real PLC registration** (example values and where to get host, port, unit id, and register addresses from the machine).
 
 ## HTTPS hostnames (production)
 

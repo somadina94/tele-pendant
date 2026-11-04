@@ -194,6 +194,7 @@ From Operator, click **Config** (http://localhost:8080/admin). Sign in as the ad
 - Each register row has an **Address** field and a **Save** button. **Save** stores that Modbus number. Buttons and safety checks use the saved number.
 - **Add a PLC** is an empty form (port `502`, unit id `1`, **Use this PLC** checked). Fill **Label** and **Host**, then **Add PLC**. **Success:** **Saved and connecting.** Ops then shows that label when the socket opens. If the host is unreachable, the red text includes **the PLC did not connect**. The row is still saved.
 - To go back to the fake crane, check **Use this PLC** on **demo-simulator** and click **Save**. **Success:** **Saved and connecting.**
+- **Real plant PLC:** full step-by-step (example IPs, ports, unit id, register addresses, and where to get each value from the machine) is in [REAL_PLC_WIRING.md](./REAL_PLC_WIRING.md).
 - **Cells (3 PLC addresses each):**
   - `[0,1] Hoist Up` — primary `coil.hoistUp` / feedback `discrete.motorRunning` / status `holding.hoistHeightMm`
   - `[1,0] Trolley L` — primary `coil.trolleyLeft`

@@ -20,6 +20,8 @@ New fieldbuses implement `PlcPort`. The API (`apps/api/src/plc/providers/plc.ser
 
 Admin **Config → PLC connections** toggles protocol. Register maps store Modbus address and optional OPC UA node id so the same HMI layout can switch backends.
 
+For connecting a **real** PLC (fields, example values, where to read them on the machine), see [REAL_PLC_WIRING.md](./REAL_PLC_WIRING.md).
+
 ## Adding a driver
 
 1. Implement `PlcPort` in `packages/plc-driver` (or a sibling package).
