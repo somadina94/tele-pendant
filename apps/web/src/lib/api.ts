@@ -4,11 +4,12 @@ const API_BASE = '/api/v1';
 
 export type ApiEnvelope<T> = { apiVersion: string; data: T };
 
-function authHeaders(): HeadersInit {
+function authHeaders(json = true): HeadersInit {
   const token = localStorage.getItem('accessToken');
-  return token
-    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-    : { 'Content-Type': 'application/json' };
+  const headers: HeadersInit = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (json) headers['Content-Type'] = 'application/json';
+  return headers;
 }
 
 function isAuthBootstrapPath(path: string): boolean {
@@ -47,6 +48,19 @@ export async function apiGet<T>(path: string): Promise<T> {
   if (!res.ok) await handleFailedResponse(res, path);
   const body = (await res.json()) as ApiEnvelope<T>;
   return body.data;
+}
+
+/** GET a non-JSON response (e.g. CSV export) and trigger a browser download. */
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders(false) });
+  if (!res.ok) await handleFailedResponse(res, path);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function apiPost<T>(path: string, payload?: unknown): Promise<T> {

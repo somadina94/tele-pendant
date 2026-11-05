@@ -102,7 +102,7 @@ Optional OPC UA simulator (Modbus on port 1502 stays the default):
 docker compose -f docker-compose.dev.yml --profile opcua up --build opcua-sim
 ```
 
-TLS stays on your reverse proxy and certificate. The API already sets Helmet, JWT auth/roles, and request rate limits (stricter on `/auth/login` and face routes).
+TLS stays on your reverse proxy and certificate. Enable HSTS on that proxy (`Strict-Transport-Security`). The web container sends `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`. Swagger is not mounted when `NODE_ENV=production`. The API already sets Helmet, JWT auth/roles, and request rate limits (stricter on `/auth/login` and face routes).
 
 ### Security checklist
 

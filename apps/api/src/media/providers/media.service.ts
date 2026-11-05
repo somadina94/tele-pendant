@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -69,6 +71,52 @@ export class MediaService implements OnModuleInit {
     return this.codes.find({ order: { label: 'ASC' } });
   }
 
+  async saveCode(input: {
+    id?: string;
+    code: string;
+    label: string;
+    kind?: string;
+    routeHint?: string | null;
+    notes?: string | null;
+  }): Promise<ScanCode> {
+    const code = input.code.trim();
+    const label = input.label.trim();
+    if (!code || !label) {
+      throw new BadRequestException('Code and label are required');
+    }
+    const routeHint = input.routeHint?.trim() || null;
+    if (routeHint && !routeHint.startsWith('/')) {
+      throw new BadRequestException('Route hint must start with /');
+    }
+
+    let row: ScanCode;
+    if (input.id) {
+      const existing = await this.codes.findOneBy({ id: input.id });
+      if (!existing) throw new NotFoundException('Scan code not found');
+      row = existing;
+    } else {
+      row = this.codes.create({});
+    }
+
+    const duplicate = await this.codes.findOne({ where: { code } });
+    if (duplicate && duplicate.id !== row.id) {
+      throw new ConflictException('A code with that payload already exists');
+    }
+
+    row.code = code;
+    row.label = label;
+    row.kind = input.kind?.trim() || 'asset';
+    row.routeHint = routeHint;
+    row.notes = input.notes?.trim() || null;
+    return this.codes.save(row);
+  }
+
+  async deleteCode(id: string): Promise<void> {
+    const row = await this.codes.findOneBy({ id });
+    if (!row) throw new NotFoundException('Scan code not found');
+    await this.codes.remove(row);
+  }
+
   /**
    * Map a spoken phrase to an allowlisted cell label and activate it.
    */
@@ -77,6 +125,7 @@ export class MediaService implements OnModuleInit {
     opts: {
       userId?: string;
       userEmail?: string;
+      userDisplayName?: string | null;
       role?: UserRole;
       ip?: string;
       safeActionPin?: string;
@@ -109,6 +158,17 @@ export class MediaService implements OnModuleInit {
     }
 
     if (cell.isMotion) {
+      const allowed = await this.safetyState.allowTimedMediaMotion();
+      if (!allowed) {
+        return {
+          ok: false,
+          reason: 'timed_motion_disabled',
+          transcript: heard,
+          label,
+          message:
+            'Timed motion is off. Hold the button on Operator, or turn on Allow timed media motion in Config.',
+        };
+      }
       this.beginMotionJog(cell.id);
       const otherLabel =
         label === 'Hoist Up'
@@ -124,6 +184,7 @@ export class MediaService implements OnModuleInit {
           await this.hmiService.activateCell(other.id, false, {
             userId: opts.userId,
             userEmail: opts.userEmail,
+            userDisplayName: opts.userDisplayName,
             role: opts.role,
             safeActionPin: opts.safeActionPin,
             ip: opts.ip,
@@ -137,6 +198,7 @@ export class MediaService implements OnModuleInit {
     await this.hmiService.activateCell(cell.id, true, {
       userId: opts.userId,
       userEmail: opts.userEmail,
+      userDisplayName: opts.userDisplayName,
       role: opts.role,
       safeActionPin: opts.safeActionPin,
       ip: opts.ip,
@@ -145,14 +207,23 @@ export class MediaService implements OnModuleInit {
     await this.auditService.write({
       userId: opts.userId,
       userEmail: opts.userEmail,
+      userDisplayName: opts.userDisplayName ?? null,
       action: 'voice.command',
-      resource: cell.id,
+      resource: cell.label,
       details: heard,
       ip: opts.ip,
       result: 'success',
     });
 
-    return { ok: true, cellId: cell.id, label, transcript: heard };
+    return {
+      ok: true,
+      cellId: cell.id,
+      label,
+      transcript: heard,
+      message: cell.requiresSafeAction
+        ? `Crane commanded to stop (${label}).`
+        : undefined,
+    };
   }
 
   /** Hold deadman for a short jog, then drop the motion coil. */
@@ -193,7 +264,7 @@ export class MediaService implements OnModuleInit {
       deviceCameraEnabled: true,
       rtspUrl: process.env.CAMERA_RTSP_URL || null,
       notes:
-        'Browser/device camera for demo. Set CAMERA_RTSP_URL for plant CCTV later.',
+        'This screen uses the device camera. A plant camera can be connected later by an administrator.',
     };
   }
 }

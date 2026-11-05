@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Camera, ScanFace, UserPlus } from 'lucide-react';
 import { apiPost, type PublicUser } from '../lib/api';
@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CameraAccessAlert } from '@/components/device-camera-panel';
+import { useDeviceCamera } from '@/lib/use-device-camera';
 import { toastErr, toastOk } from '@/lib/toast';
 
 const CHALLENGE_PROMPTS = [
@@ -32,7 +34,6 @@ export function FacePage({
 }: { skipCamera?: boolean } = {}) {
   const navigate = useNavigate();
   const { t } = useT();
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -40,20 +41,11 @@ export function FacePage({
   const [step, setStep] = useState(0);
   const [frames, setFrames] = useState<string[]>([]);
   const [email, setEmail] = useState('');
-  const token = localStorage.getItem('accessToken');
-
-  useEffect(() => {
-    if (skipCamera) return;
-    let stream: MediaStream | null = null;
-    void navigator.mediaDevices
-      .getUserMedia({ video: true, audio: false })
-      .then((s) => {
-        stream = s;
-        if (videoRef.current) videoRef.current.srcObject = s;
-      })
-      .catch((err: Error) => setMsg(err.message));
-    return () => stream?.getTracks().forEach((track) => track.stop());
-  }, [skipCamera]);
+  const loggedIn = Boolean(localStorage.getItem('accessToken'));
+  const deviceCamera = useDeviceCamera({
+    enabled: !skipCamera,
+    facingMode: 'user',
+  });
 
   function resetChallenge() {
     setMode(null);
@@ -65,7 +57,7 @@ export function FacePage({
   function startChallenge(next: 'enroll' | 'login') {
     setMsg(null);
     setFailed(false);
-    if (next === 'enroll' && !token) {
+    if (next === 'enroll' && !loggedIn) {
       setFailed(true);
       setMsg('Sign in with password first, then enroll');
       return;
@@ -81,7 +73,7 @@ export function FacePage({
     try {
       const frame = skipCamera
         ? 'data:image/jpeg;base64,abc'
-        : await captureDataUrl(videoRef.current as HTMLVideoElement);
+        : await captureDataUrl(deviceCamera.videoRef.current as HTMLVideoElement);
       const nextFrames = [...frames, frame];
       if (nextFrames.length < CHALLENGE_PROMPTS.length) {
         setFrames(nextFrames);
@@ -139,7 +131,13 @@ export function FacePage({
   const inChallenge = mode !== null;
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-4 p-6">
+    <main
+      className={
+        loggedIn
+          ? 'mx-auto flex w-full max-w-lg flex-col gap-4'
+          : 'mx-auto flex min-h-svh max-w-lg flex-col gap-4 p-6'
+      }
+    >
       <div className="flex items-start justify-between gap-4">
         <HelpTip id="tour.face.title">
           <div>
@@ -150,14 +148,16 @@ export function FacePage({
             </p>
           </div>
         </HelpTip>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Button variant="link" asChild>
-            <Link to="/">Password login</Link>
-          </Button>
-        </div>
+        {loggedIn ? null : (
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="link" asChild>
+              <Link to="/">Password login</Link>
+            </Button>
+          </div>
+        )}
       </div>
-      <PageTourBar screen="face" />
+      {loggedIn ? null : <PageTourBar screen="face" />}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -167,13 +167,17 @@ export function FacePage({
         </CardHeader>
         <CardContent className="space-y-4">
           {!skipCamera ? (
-            <video
-              ref={videoRef}
-              className="aspect-video w-full scale-x-[-1] rounded-md border bg-black object-cover"
-              autoPlay
-              playsInline
-              muted
-            />
+            deviceCamera.camError ? (
+              <CameraAccessAlert {...deviceCamera} />
+            ) : (
+              <video
+                ref={deviceCamera.videoRef}
+                className="aspect-video w-full scale-x-[-1] rounded-md border bg-black object-cover"
+                autoPlay
+                playsInline
+                muted
+              />
+            )
           ) : null}
           {inChallenge ? (
             <>
@@ -207,39 +211,60 @@ export function FacePage({
             </>
           ) : (
             <>
-              <div className="grid gap-2">
-                <Label htmlFor="face-email">Email hint (login)</Label>
-                <Input
-                  id="face-email"
-                  name="face-email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  type="email"
-                  autoComplete="off"
-                  disabled={busy}
-                />
-              </div>
-              <HelpTip id="tour.face.enroll">
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={busy}
-                  onClick={() => startChallenge('enroll')}
-                >
-                  <UserPlus /> Enroll (3-step challenge · requires session)
-                </Button>
-              </HelpTip>
-              <HelpTip id="tour.face.login">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full"
-                  disabled={busy}
-                  onClick={() => startChallenge('login')}
-                >
-                  <ScanFace /> Face login (3-step challenge)
-                </Button>
-              </HelpTip>
+              {loggedIn ? (
+                <p className="text-sm text-muted-foreground">
+                  {t('faceEnrollOnlyHint')}
+                </p>
+              ) : (
+                <div className="grid gap-2">
+                  <Label htmlFor="face-email">Email hint (login)</Label>
+                  <Input
+                    id="face-email"
+                    name="face-email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    type="email"
+                    autoComplete="off"
+                    disabled={busy}
+                  />
+                </div>
+              )}
+              {loggedIn ? (
+                <HelpTip id="tour.face.enroll">
+                  <Button
+                    type="button"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={() => startChallenge('enroll')}
+                  >
+                    <UserPlus /> Enroll (3-step challenge · requires session)
+                  </Button>
+                </HelpTip>
+              ) : (
+                <>
+                  <HelpTip id="tour.face.enroll">
+                    <Button
+                      type="button"
+                      className="w-full"
+                      disabled={busy}
+                      onClick={() => startChallenge('enroll')}
+                    >
+                      <UserPlus /> Enroll (3-step challenge · requires session)
+                    </Button>
+                  </HelpTip>
+                  <HelpTip id="tour.face.login">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full"
+                      disabled={busy}
+                      onClick={() => startChallenge('login')}
+                    >
+                      <ScanFace /> Face login (3-step challenge)
+                    </Button>
+                  </HelpTip>
+                </>
+              )}
             </>
           )}
           {msg ? (

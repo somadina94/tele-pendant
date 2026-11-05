@@ -17,6 +17,7 @@ const DEMO_NODE_IDS: Record<string, string> = {
   'coil.bridgeRev': 'ns=1;s=BridgeRev',
   'coil.deadman': 'ns=1;s=Deadman',
   'coil.eStop': 'ns=1;s=EStop',
+  'holding.trolleyPosition': 'ns=1;s=TrolleyPosition',
   'holding.hoistHeightMm': 'ns=1;s=HoistHeightMm',
   'holding.loadKg': 'ns=1;s=LoadKg',
   'holding.speedPct': 'ns=1;s=SpeedPct',
@@ -53,6 +54,7 @@ export class HmiSeedService implements OnModuleInit {
       await this.seed();
     }
     await this.ensureRuntimeRegisters();
+    await this.ensureTrolleyFeedback();
     await this.ensureSafetyRoles();
   }
 
@@ -125,6 +127,13 @@ export class HmiSeedService implements OnModuleInit {
           'uint16',
           'r',
         ],
+        [
+          'holding.trolleyPosition',
+          DEMO_CRANE_MAP.holdings.trolleyPosition,
+          'holding',
+          'uint16',
+          'r',
+        ],
       ];
     for (const [name, address, kind, dataType, rw] of extras) {
       await this.upsertRegister(name, address, kind, dataType, rw);
@@ -167,6 +176,33 @@ export class HmiSeedService implements OnModuleInit {
     }
     if (dirty) row = await this.registers.save(row);
     return row;
+  }
+
+  private async ensureTrolleyFeedback(): Promise<void> {
+    const motor = await this.registers.findOne({
+      where: { name: 'discrete.motorRunning' },
+    });
+    const position = await this.registers.findOne({
+      where: { name: 'holding.trolleyPosition' },
+    });
+    if (!motor && !position) return;
+    const rows = await this.cells.find({
+      relations: { primaryRegister: true },
+    });
+    for (const cell of rows) {
+      const name = cell.primaryRegister?.name;
+      if (name !== 'coil.trolleyLeft' && name !== 'coil.trolleyRight') continue;
+      let dirty = false;
+      if (motor && !cell.feedbackRegister) {
+        cell.feedbackRegister = motor;
+        dirty = true;
+      }
+      if (position && !cell.statusRegister) {
+        cell.statusRegister = position;
+        dirty = true;
+      }
+      if (dirty) await this.cells.save(cell);
+    }
   }
 
   private async ensureSafetyRoles(): Promise<void> {
@@ -279,6 +315,14 @@ export class HmiSeedService implements OnModuleInit {
       }),
     ]);
 
+    const trolleyPosition = await this.upsertRegister(
+      'holding.trolleyPosition',
+      DEMO_CRANE_MAP.holdings.trolleyPosition,
+      'holding',
+      'uint16',
+      'r',
+    );
+
     const cellDefs: Array<{
       row: number;
       col: number;
@@ -306,6 +350,8 @@ export class HmiSeedService implements OnModuleInit {
         label: 'Trolley L',
         style: 'motion',
         primary: trolleyLeft,
+        feedback: motorRunning,
+        status: trolleyPosition,
         isMotion: true,
       },
       {
@@ -322,6 +368,8 @@ export class HmiSeedService implements OnModuleInit {
         label: 'Trolley R',
         style: 'motion',
         primary: trolleyRight,
+        feedback: motorRunning,
+        status: trolleyPosition,
         isMotion: true,
       },
       {

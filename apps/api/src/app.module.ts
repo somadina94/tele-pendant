@@ -17,6 +17,7 @@ import { PlcModule } from './plc/plc.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SafetyModule } from './safety/safety.module';
 import { TrendsModule } from './trends/trends.module';
+import { UsersModule } from './users/users.module';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import enviromentValidation from './config/enviroment.validation';
@@ -60,6 +61,7 @@ const ENV = process.env.NODE_ENV;
     DiagnosticsModule,
     MediaModule,
     AssistantModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [

@@ -97,7 +97,7 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
       await this.alarms.evaluate();
 
       this.tick += 1;
-      if (this.tick % 4 === 0) {
+      if (this.tick === 1 || this.tick % 4 === 0) {
         const series = await this.plcService.trendedSamples();
         for (const sample of series) {
           await this.trends.record(sample.key, sample.value);

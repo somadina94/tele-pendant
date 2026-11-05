@@ -50,6 +50,47 @@ describe('SafetyStateService', () => {
     );
   });
 
+  it('stores the timed-motion flag and reads it back', async () => {
+    roles.find.mockResolvedValueOnce([]);
+    await service.saveRoles({ allowTimedMediaMotion: true });
+    expect(service.snapshot().allowTimedMediaMotion).toBe(true);
+    roles.find.mockResolvedValueOnce([
+      { id: 'role-1', allowTimedMediaMotion: false },
+    ]);
+    await expect(service.allowTimedMediaMotion()).resolves.toBe(false);
+    roles.find.mockResolvedValueOnce([
+      { id: 'role-1', allowTimedMediaMotion: true },
+    ]);
+    await expect(service.allowTimedMediaMotion()).resolves.toBe(true);
+  });
+
+  it('resets e-stop only when the PIN matches', async () => {
+    process.env.SAFE_ACTION_PIN = '1234';
+    await expect(
+      service.resetEStop('nope', { userEmail: 'a@b.c' }),
+    ).rejects.toThrow('PIN does not match');
+    delete process.env.SAFE_ACTION_PIN;
+    await expect(service.resetEStop('1234')).rejects.toThrow(
+      'PIN does not match',
+    );
+    process.env.SAFE_ACTION_PIN = '1234';
+    await expect(service.resetEStop('   ')).rejects.toThrow(
+      'PIN does not match',
+    );
+    driver.isConnected.mockReturnValue(false);
+    (service as unknown as { mode: string }).mode = 'normal';
+    const disconnected = await service.resetEStop('1234');
+    expect(disconnected.mode).toBe('normal');
+    expect(driver.writeCoil).not.toHaveBeenCalled();
+    driver.isConnected.mockReturnValue(true);
+    (service as unknown as { mode: string }).mode = 'e_stop';
+    const reset = await service.resetEStop(' 1234 ', { userEmail: 'a@b.c' });
+    expect(reset.mode).toBe('normal');
+    expect(reset.eStopActive).toBe(false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(11, false);
+    delete process.env.SAFE_ACTION_PIN;
+  });
+
   it('blocks motion until deadman pulse and releases', () => {
     expect(service.canIssueMotion()).toBe(false);
     service.pulseDeadman();
@@ -68,6 +109,21 @@ describe('SafetyStateService', () => {
     const writes = auditService.write.mock.calls.length;
     await service.tick();
     expect(auditService.write.mock.calls.length).toBe(writes);
+  });
+
+  it('keeps e_stop latched when the coil drops before reset', async () => {
+    driver.readCoils.mockResolvedValueOnce([true]);
+    await service.tick();
+    driver.readCoils.mockResolvedValue([false]);
+    const snap = await service.tick();
+    expect(snap.mode).toBe('e_stop');
+    expect(snap.eStopActive).toBe(true);
+  });
+
+  it('latches operator STOP without waiting for the poller', async () => {
+    const snap = await service.latchOperatorEStop();
+    expect(snap.mode).toBe('e_stop');
+    expect(snap.eStopActive).toBe(true);
   });
 
   it('enters comms_lost when disconnected', async () => {

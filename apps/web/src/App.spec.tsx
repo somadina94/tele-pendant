@@ -42,7 +42,9 @@ vi.mock('./lib/api', async () => {
       }
       if (path === '/plc/connections') return [];
       if (path === '/alarms') return [];
-      if (path === '/audit') return [];
+      if (path === '/audit' || path.startsWith('/audit?')) {
+        return { items: [], total: 0, page: 1, pageSize: 25 };
+      }
       if (path.startsWith('/trends/')) return [];
       if (path === '/diagnostics') {
         return {
@@ -68,6 +70,13 @@ vi.mock('./lib/api', async () => {
 describe('App', () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  it('shows the face page without a session and the shell when signed in', async () => {
+    renderWithProviders(<App />, { route: '/face' });
+    expect(
+      await screen.findByRole('button', { name: /Face login/ }),
+    ).toBeInTheDocument();
   });
 
   it('shows login at /', () => {

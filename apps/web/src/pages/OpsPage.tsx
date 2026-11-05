@@ -15,6 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { canShelveAlarms } from '@tele-pendant/shared';
+import { getStoredUserRole } from '@/lib/user-session';
 import { toastErr, toastOk } from '@/lib/toast';
 
 interface AlarmEvent {
@@ -32,6 +34,7 @@ interface TrendPoint {
 
 export function OpsPage() {
   const { t } = useT();
+  const mayShelve = canShelveAlarms(getStoredUserRole() ?? 'operator');
   const alarms = useQuery({
     queryKey: ['alarms'],
     queryFn: () => apiGet<AlarmEvent[]>('/alarms'),
@@ -151,23 +154,43 @@ export function OpsPage() {
                             >
                               <CheckCheck /> {t('ack')}
                             </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                void apiPost(`/alarms/${a.id}/shelve`)
-                                  .then(() => {
-                                    toastOk(t('shelve'));
-                                    return alarms.refetch();
-                                  })
-                                  .catch((err: Error) => toastErr(err.message))
-                              }
-                            >
-                              <Pause /> {t('shelve')}
-                            </Button>
+                            {mayShelve ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  void apiPost(`/alarms/${a.id}/shelve`)
+                                    .then(() => {
+                                      toastOk(t('shelve'));
+                                      return alarms.refetch();
+                                    })
+                                    .catch((err: Error) =>
+                                      toastErr(err.message),
+                                    )
+                                }
+                              >
+                                <Pause /> {t('shelve')}
+                              </Button>
+                            ) : null}
                           </div>
                         </HelpTip>
+                      ) : a.state === 'shelved' && mayShelve ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            void apiPost(`/alarms/${a.id}/unshelve`)
+                              .then(() => {
+                                toastOk(t('unshelve'));
+                                return alarms.refetch();
+                              })
+                              .catch((err: Error) => toastErr(err.message))
+                          }
+                        >
+                          {t('unshelve')}
+                        </Button>
                       ) : null}
                     </TableCell>
                   </TableRow>
@@ -224,7 +247,11 @@ function TrendChart({ seriesKey }: { seriesKey: string }) {
     })
     .join(' ');
   const last = values[values.length - 1];
-  const unit = seriesKey.toLowerCase().includes('mm') ? ' mm' : '';
+  const unit = /mm/i.test(seriesKey)
+    ? ' mm'
+    : /kg/i.test(seriesKey)
+      ? ' kg'
+      : '';
   return (
     <figure>
       <figcaption className="mb-1 text-sm">

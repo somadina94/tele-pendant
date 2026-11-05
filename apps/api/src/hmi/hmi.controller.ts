@@ -23,6 +23,7 @@ import { SaveBackgroundDto } from './dtos/save-background.dto';
 import { SaveCellDto } from './dtos/save-cell.dto';
 import { SaveOverlayDto } from './dtos/save-overlay.dto';
 import { UpdateRegisterDto } from './dtos/update-register.dto';
+import { auditActorFromRequest } from '../common/audit-actor';
 import { HmiService } from './providers/hmi.service';
 
 @ApiTags('cells')
@@ -33,11 +34,7 @@ export class HmiController {
   constructor(@Inject(HmiService) private readonly hmiService: HmiService) {}
 
   private actor(req: Request & { user: JwtPayload }) {
-    return {
-      userId: req.user.sub,
-      userEmail: req.user.email,
-      ip: req.ip,
-    };
+    return auditActorFromRequest(req.user, req.ip);
   }
 
   @Get('layout')
@@ -151,6 +148,7 @@ export class HmiController {
     return this.hmiService.activateCell(id, dto.value, {
       userId: req.user.sub,
       userEmail: req.user.email,
+      userDisplayName: req.user.displayName ?? null,
       role: req.user.role,
       safeActionPin: dto.safeActionPin,
       ip: req.ip,

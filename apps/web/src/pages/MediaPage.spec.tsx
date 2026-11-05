@@ -4,6 +4,18 @@ import { MediaPage } from './MediaPage';
 import { renderWithProviders } from '../test/render';
 import * as api from '../lib/api';
 
+const zxingState = vi.hoisted(() => ({ mode: 'TP-CRANE-DEMO-01' }));
+
+vi.mock('@zxing/browser', () => ({
+  BrowserMultiFormatReader: class {
+    decodeOnceFromVideoElement() {
+      if (zxingState.mode === 'throw') throw new Error('decode failed');
+      const text = zxingState.mode;
+      return Promise.resolve({ getText: () => text });
+    }
+  },
+}));
+
 describe('MediaPage', () => {
   beforeEach(() => {
     Object.defineProperty(navigator, 'mediaDevices', {
@@ -41,7 +53,7 @@ describe('MediaPage', () => {
 
     renderWithProviders(<MediaPage />);
     expect(await screen.findByText(/Device camera notes/)).toBeInTheDocument();
-    expect(screen.getByText(/Configured RTSP/)).toBeInTheDocument();
+    expect(screen.getByText(/Plant camera configured/)).toBeInTheDocument();
 
     const codeInput = screen.getByDisplayValue('TP-CRANE-DEMO-01');
     fireEvent.change(codeInput, { target: { value: 'TP-CUSTOM' } });
@@ -86,12 +98,18 @@ describe('MediaPage', () => {
     renderWithProviders(<MediaPage />);
     expect(await screen.findByText('no cam')).toBeInTheDocument();
 
+    fireEvent.change(screen.getByLabelText('Code'), { target: { value: ' ' } });
+    expect(screen.getByRole('button', { name: 'Resolve' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Code'), { target: { value: '' } });
+    expect(screen.getByRole('button', { name: 'Resolve' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Code'), {
+      target: { value: 'TP-CRANE-DEMO-01' },
+    });
+
     fireEvent.click(
       screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
     );
-    expect(
-      await screen.findByText(/BarcodeDetector not supported/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/No code in frame/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
     expect(await screen.findByText('bad code')).toBeInTheDocument();
@@ -125,8 +143,14 @@ describe('MediaPage', () => {
     });
     renderWithProviders(<MediaPage />);
     expect(
-      await screen.findByText('Camera permission denied'),
+      await screen.findByText(/blocked for this site/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Reload page' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Allow camera again' }),
+    ).not.toBeInTheDocument();
   });
 
   it('runs speech recognition success and error paths', async () => {
@@ -176,7 +200,7 @@ describe('MediaPage', () => {
     instance()!.onresult?.({
       results: [{ isFinal: false, length: 0 }],
     });
-    expect(await screen.findByText('Heard nothing')).toBeInTheDocument();
+    expect(await screen.findByText('Nothing heard')).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
     instance()!.onresult?.({
       results: [
@@ -227,7 +251,7 @@ describe('MediaPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
     instance()!.onresult?.({ results: [[]] });
-    expect(await screen.findByText('Heard nothing')).toBeInTheDocument();
+    expect(await screen.findByText('Nothing heard')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
     instance()!.onresult?.({
@@ -268,37 +292,16 @@ describe('MediaPage', () => {
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    instance()!.onend?.();
+    expect(await screen.findByText('Nothing heard')).toBeInTheDocument();
     instance()!.onerror?.({ error: 'no-speech' });
-    expect(
-      await screen.findByText(/Voice error: no-speech/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Nothing heard/)).toBeInTheDocument();
     instance()!.onend?.();
 
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
     await vi.advanceTimersByTimeAsync(8000);
     expect(instance()!.stop).toHaveBeenCalled();
     vi.useRealTimers();
-  });
-
-  it('runs hoist from the UP and DOWN buttons', async () => {
-    vi.spyOn(api, 'apiPost')
-      .mockResolvedValueOnce({ ok: true })
-      .mockResolvedValueOnce({ ok: false })
-      .mockRejectedValueOnce('nope');
-    renderWithProviders(<MediaPage />);
-    await screen.findByText(/Device camera notes/);
-    fireEvent.click(screen.getByRole('button', { name: 'UP' }));
-    expect(
-      await screen.findByText('Heard: up. Executed: undefined'),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'DOWN' }));
-    expect(
-      await screen.findByText('Heard: down. Not executed: unknown'),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'UP' }));
-    expect(
-      await screen.findByText('Heard: up. Not executed: failed'),
-    ).toBeInTheDocument();
   });
 
   it('renders without scan codes when the list request fails', async () => {
@@ -326,6 +329,82 @@ describe('MediaPage', () => {
     ).BarcodeDetector = EmptyDetector;
     renderWithProviders(<MediaPage />);
     await screen.findByText(/Device camera notes/);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
+    );
+    expect(await screen.findByText('No code in frame')).toBeInTheDocument();
+  });
+
+  it('stops a late camera stream after leaving the page', async () => {
+    const pending: Array<
+      (stream: {
+        getTracks: () => Array<{ stop: ReturnType<typeof vi.fn> }>;
+      }) => void
+    > = [];
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(
+          () =>
+            new Promise((resolve) => {
+              pending.push(resolve);
+            }),
+        ),
+      },
+    });
+    const view = renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    view.unmount();
+    const stop = vi.fn();
+    pending[0]?.({ getTracks: () => [{ stop }] });
+    await waitFor(() => expect(stop).toHaveBeenCalled());
+  });
+
+  it('ignores a camera error that arrives after leaving the page', async () => {
+    const pending: Array<(err: Error) => void> = [];
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(
+          () =>
+            new Promise((_resolve, reject) => {
+              pending.push(reject);
+            }),
+        ),
+      },
+    });
+    const view = renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    view.unmount();
+    pending[0]?.(new Error('late'));
+    await Promise.resolve();
+  });
+
+  it('decodes with zxing when BarcodeDetector is missing', async () => {
+    delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector;
+    zxingState.mode = 'TP-CRANE-DEMO-01';
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
+    );
+    expect(await screen.findByText('No code in frame')).toBeInTheDocument();
+    const video = document.querySelector('video');
+    expect(video).toBeTruthy();
+    Object.defineProperty(video as HTMLVideoElement, 'readyState', {
+      configurable: true,
+      value: 2,
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
+    );
+    await waitFor(() => expect(api.apiPost).toHaveBeenCalled());
+    zxingState.mode = '';
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
+    );
+    expect(await screen.findByText('No code in frame')).toBeInTheDocument();
+    zxingState.mode = 'throw';
     fireEvent.click(
       screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
     );

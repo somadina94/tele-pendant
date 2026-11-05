@@ -22,14 +22,22 @@ setInterval(() => {
   const deadman = getBit(buffers.coils, DEMO_CRANE_MAP.coils.deadman);
   const up = getBit(buffers.coils, DEMO_CRANE_MAP.coils.hoistUp);
   const down = getBit(buffers.coils, DEMO_CRANE_MAP.coils.hoistDown);
+  const left = getBit(buffers.coils, DEMO_CRANE_MAP.coils.trolleyLeft);
+  const right = getBit(buffers.coils, DEMO_CRANE_MAP.coils.trolleyRight);
 
   let height = buffers.holding.readUInt16BE(
     DEMO_CRANE_MAP.holdings.hoistHeightMm * 2,
   );
 
+  let travel = buffers.holding.readUInt16BE(
+    DEMO_CRANE_MAP.holdings.trolleyPosition * 2,
+  );
+
   if (eStop) {
     setBit(buffers.coils, DEMO_CRANE_MAP.coils.hoistUp, false);
     setBit(buffers.coils, DEMO_CRANE_MAP.coils.hoistDown, false);
+    setBit(buffers.coils, DEMO_CRANE_MAP.coils.trolleyLeft, false);
+    setBit(buffers.coils, DEMO_CRANE_MAP.coils.trolleyRight, false);
     setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.motorRunning, false);
     buffers.holding.writeUInt16BE(1, DEMO_CRANE_MAP.holdings.safeState * 2);
     return;
@@ -42,6 +50,9 @@ setInterval(() => {
   } else if (canMove && down) {
     height = Math.max(0, height - 25);
     setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.motorRunning, true);
+  } else if (canMove && (left || right)) {
+    setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.motorRunning, true);
+    travel = left ? Math.max(0, travel - 10) : Math.min(5000, travel + 10);
   } else {
     setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.motorRunning, false);
   }
@@ -49,6 +60,10 @@ setInterval(() => {
   buffers.holding.writeUInt16BE(
     height,
     DEMO_CRANE_MAP.holdings.hoistHeightMm * 2,
+  );
+  buffers.holding.writeUInt16BE(
+    travel,
+    DEMO_CRANE_MAP.holdings.trolleyPosition * 2,
   );
 }, 200);
 

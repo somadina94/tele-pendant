@@ -9,6 +9,14 @@ const webRoot = fileURLToPath(new URL('.', import.meta.url));
 const apiProxyTarget =
   process.env.VITE_DEV_API_PROXY ?? 'http://127.0.0.1:3010';
 
+/** Match apps/web/nginx.conf so dev (Vite) has the same clickjacking protection. */
+const webSecurityHeaders = {
+  'X-Frame-Options': 'DENY',
+  'Content-Security-Policy': "frame-ancestors 'none'",
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+};
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -23,6 +31,7 @@ export default defineConfig({
   server: {
     host: process.env.VITE_DEV_API_PROXY ? '0.0.0.0' : '127.0.0.1',
     port: 5173,
+    headers: webSecurityHeaders,
     proxy: {
       '/api': {
         target: apiProxyTarget,
@@ -34,6 +43,9 @@ export default defineConfig({
         ws: true,
       },
     },
+  },
+  preview: {
+    headers: webSecurityHeaders,
   },
   test: {
     environment: 'jsdom',

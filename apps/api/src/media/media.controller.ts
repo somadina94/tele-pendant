@@ -2,7 +2,10 @@ import {
   Inject,
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -16,7 +19,9 @@ import { JwtAuthGuard } from '../auth/providers/jwt-auth.guard';
 import { RolesGuard } from '../auth/providers/roles.guard';
 import { UserRole } from '../users/enums/user-role.enum';
 import { ResolveCodeDto } from './dtos/resolve-code.dto';
+import { SaveScanCodeDto } from './dtos/save-scan-code.dto';
 import { VoiceCommandDto } from './dtos/voice-command.dto';
+import { auditActorFromRequest } from '../common/audit-actor';
 import { MediaService } from './providers/media.service';
 
 @ApiTags('media')
@@ -49,6 +54,27 @@ export class MediaController {
     return this.mediaService.resolveCode(dto.code);
   }
 
+  @Post('codes')
+  @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Add a QR/barcode payload mapping' })
+  createCode(@Body() dto: SaveScanCodeDto) {
+    return this.mediaService.saveCode(dto);
+  }
+
+  @Patch('codes/:id')
+  @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update a scan code mapping' })
+  updateCode(@Param('id') id: string, @Body() dto: SaveScanCodeDto) {
+    return this.mediaService.saveCode({ ...dto, id });
+  }
+
+  @Delete('codes/:id')
+  @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Remove a scan code mapping' })
+  deleteCode(@Param('id') id: string) {
+    return this.mediaService.deleteCode(id);
+  }
+
   @Post('voice')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Execute allowlisted voice command' })
@@ -56,13 +82,15 @@ export class MediaController {
     @Body() dto: VoiceCommandDto,
     @Req() req: Request & { user: JwtPayload },
   ) {
+    const actor = auditActorFromRequest(req.user, req.ip);
     return this.mediaService.voiceCommand(dto.transcript, {
-      userId: req.user.sub,
-      userEmail: req.user.email,
+      userId: actor.userId,
+      userEmail: actor.userEmail,
+      userDisplayName: actor.userDisplayName,
       role: req.user.role,
       safeActionPin: dto.safeActionPin,
       alternatives: dto.alternatives,
-      ip: req.ip,
+      ip: actor.ip,
     });
   }
 }

@@ -9,6 +9,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DEMO_CRANE_MAP } from '@tele-pendant/modbus-core';
 import { Repository } from 'typeorm';
+import { AuditActor, auditWriteFields } from '../../common/audit-actor';
+import { AuditService } from '../../audit/providers/audit.service';
 import { PlcService } from '../../plc/providers/plc.service';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
@@ -24,6 +26,7 @@ export class AlarmEngineService implements OnModuleInit {
   private readonly registers: Repository<RegisterMap>;
   private readonly plcService: PlcService;
   private readonly gateway: RealtimeGateway;
+  private readonly auditService: AuditService;
 
   constructor(
     @InjectRepository(AlarmDefinition)
@@ -34,12 +37,14 @@ export class AlarmEngineService implements OnModuleInit {
     registers: Repository<RegisterMap>,
     @Inject(PlcService) plcService: PlcService,
     @Inject(RealtimeGateway) gateway: RealtimeGateway,
+    @Inject(AuditService) auditService: AuditService,
   ) {
     this.definitions = definitions;
     this.events = events;
     this.registers = registers;
     this.plcService = plcService;
     this.gateway = gateway;
+    this.auditService = auditService;
   }
 
   async onModuleInit(): Promise<void> {
@@ -103,10 +108,34 @@ export class AlarmEngineService implements OnModuleInit {
     return this.events.save(event);
   }
 
-  async shelve(id: string) {
+  async shelve(id: string, actor?: AuditActor) {
     const event = await this.events.findOneByOrFail({ id });
     event.state = 'shelved';
-    return this.events.save(event);
+    const saved = await this.events.save(event);
+    await this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'alarm.shelve',
+      resource: id,
+      result: 'success',
+    });
+    return saved;
+  }
+
+  async unshelve(id: string, actor?: AuditActor) {
+    const event = await this.events.findOneByOrFail({ id });
+    if (event.state !== 'shelved') {
+      throw new BadRequestException('Alarm is not shelved');
+    }
+    event.state = 'active';
+    const saved = await this.events.save(event);
+    this.activeByDef.set(event.definition?.id ?? '', event.id);
+    await this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'alarm.unshelve',
+      resource: id,
+      result: 'success',
+    });
+    return saved;
   }
 
   async evaluate(): Promise<void> {
@@ -132,7 +161,7 @@ export class AlarmEngineService implements OnModuleInit {
         this.logger.warn(`Alarm active: ${def.name} value=${value}`);
       } else if (!tripped && existingId) {
         const event = await this.events.findOne({ where: { id: existingId } });
-        if (event && event.state !== 'shelved') {
+        if (event) {
           event.state = 'cleared';
           await this.events.save(event);
           this.gateway.broadcast('alarm.event', event);
@@ -189,6 +218,7 @@ export class AlarmEngineService implements OnModuleInit {
     threshold?: number;
     severity?: string;
     enabled?: boolean;
+    actor?: AuditActor;
   }) {
     const name = input.name.trim();
     if (!name) throw new BadRequestException('Name is required');
@@ -198,18 +228,28 @@ export class AlarmEngineService implements OnModuleInit {
     }
     const register = await this.registers.findOneBy({ id: input.registerId });
     if (!register) throw new NotFoundException('Register not found');
-    return this.definitions.save(
-      this.definitions.create({
-        name,
-        severity: input.severity?.trim() || 'warning',
-        compareOp,
-        threshold: Number.isFinite(input.threshold)
-          ? Number(input.threshold)
-          : 1,
-        enabled: input.enabled !== false,
-        register,
-      }),
-    );
+    return this.definitions
+      .save(
+        this.definitions.create({
+          name,
+          severity: input.severity?.trim() || 'warning',
+          compareOp,
+          threshold: Number.isFinite(input.threshold)
+            ? Number(input.threshold)
+            : 1,
+          enabled: input.enabled !== false,
+          register,
+        }),
+      )
+      .then(async (saved) => {
+        await this.auditService.write({
+          ...auditWriteFields(input.actor),
+          action: 'alarm.create',
+          resource: saved.name,
+          result: 'success',
+        });
+        return saved;
+      });
   }
 
   async updateDefinition(
@@ -221,6 +261,7 @@ export class AlarmEngineService implements OnModuleInit {
       threshold?: number;
       severity?: string;
       enabled?: boolean;
+      actor?: AuditActor;
     },
   ) {
     const row = await this.definitions.findOneBy({ id });
@@ -249,10 +290,18 @@ export class AlarmEngineService implements OnModuleInit {
       if (!register) throw new NotFoundException('Register not found');
       row.register = register;
     }
-    return this.definitions.save(row);
+    return this.definitions.save(row).then(async (saved) => {
+      await this.auditService.write({
+        ...auditWriteFields(input.actor),
+        action: 'alarm.update',
+        resource: saved.name,
+        result: 'success',
+      });
+      return saved;
+    });
   }
 
-  async deleteDefinition(id: string) {
+  async deleteDefinition(id: string, actor?: AuditActor) {
     const row = await this.definitions.findOneBy({ id });
     if (!row) throw new NotFoundException('Alarm definition not found');
     // Drop history first — alarm_events.definition_id has no ON DELETE CASCADE
@@ -264,6 +313,12 @@ export class AlarmEngineService implements OnModuleInit {
       .execute();
     await this.definitions.remove(row);
     this.activeByDef.delete(id);
+    await this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'alarm.delete',
+      resource: row.name,
+      result: 'success',
+    });
     return { ok: true as const };
   }
 }

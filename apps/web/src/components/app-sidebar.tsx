@@ -5,11 +5,12 @@ import {
   Gauge,
   LogOut,
   ScanFace,
-  Settings2,
   Siren,
 } from 'lucide-react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { canAccessAppRoute, type AppRoute } from '@tele-pendant/shared';
 import { useT } from '@/lib/i18n';
+import { getStoredUserRole } from '@/lib/user-session';
 import { clearSession } from '@/lib/session';
 import {
   Sidebar,
@@ -24,22 +25,31 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { BrandLockup } from '@/components/brand-mark';
+import { ConfigSidebarMenu } from '@/components/config-sidebar-menu';
 import { HelpTip } from '@/lib/tour';
 
-const NAV = [
-  { to: '/operator', labelKey: 'operator', icon: Gauge },
-  { to: '/media', labelKey: 'media', icon: Camera },
-  { to: '/assistant', labelKey: 'assistant', icon: BookOpen },
-  { to: '/face', labelKey: 'face', icon: ScanFace },
-  { to: '/ops', labelKey: 'ops', icon: Siren },
-  { to: '/admin', labelKey: 'config', icon: Settings2 },
-  { to: '/audit', labelKey: 'audit', icon: ClipboardList },
-] as const;
+const NAV: {
+  to: string;
+  labelKey: string;
+  icon: typeof Gauge;
+  route: AppRoute;
+}[] = [
+  { to: '/operator', labelKey: 'operator', icon: Gauge, route: 'operator' },
+  { to: '/media', labelKey: 'media', icon: Camera, route: 'media' },
+  { to: '/assistant', labelKey: 'assistant', icon: BookOpen, route: 'assistant' },
+  { to: '/face', labelKey: 'face', icon: ScanFace, route: 'face' },
+  { to: '/ops', labelKey: 'ops', icon: Siren, route: 'ops' },
+  { to: '/audit', labelKey: 'audit', icon: ClipboardList, route: 'audit' },
+];
 
 export function AppSidebar() {
   const { t } = useT();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const role = getStoredUserRole();
+  const navItems = NAV.filter(
+    (item) => role && canAccessAppRoute(role, item.route),
+  );
 
   return (
     <Sidebar collapsible="icon">
@@ -54,7 +64,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <HelpTip id="tour.operator.nav">
               <SidebarMenu>
-                {NAV.map((item) => (
+                {navItems.map((item) => (
                   <SidebarMenuItem key={item.to}>
                     <SidebarMenuButton
                       asChild
@@ -68,6 +78,7 @@ export function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+                <ConfigSidebarMenu />
               </SidebarMenu>
             </HelpTip>
           </SidebarGroupContent>

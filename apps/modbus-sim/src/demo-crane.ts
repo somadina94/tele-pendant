@@ -11,6 +11,7 @@ export function createDemoCraneBuffers() {
   holding.writeUInt16BE(1250, DEMO_CRANE_MAP.holdings.hoistHeightMm * 2);
   holding.writeUInt16BE(0, DEMO_CRANE_MAP.holdings.loadKg * 2);
   holding.writeUInt16BE(0, DEMO_CRANE_MAP.holdings.speedPct * 2);
+  holding.writeUInt16BE(0, DEMO_CRANE_MAP.holdings.trolleyPosition * 2);
   holding.writeUInt16BE(0, DEMO_CRANE_MAP.holdings.safeState * 2);
 
   input.writeUInt16BE(0, DEMO_CRANE_MAP.inputs.loadCellRaw * 2);

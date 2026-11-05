@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Mic, QrCode, ScanLine } from 'lucide-react';
+import { Loader2, Mic, QrCode, ScanLine } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { HelpTip } from '../lib/tour';
@@ -17,6 +17,9 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CameraAccessAlert } from '@/components/device-camera-panel';
+import { useDeviceCamera } from '@/lib/use-device-camera';
+import { isSupervisorOrAdmin } from '@/lib/user-session';
 import { toastErr, toastOk } from '@/lib/toast';
 
 type SpeechAlt = { transcript: string };
@@ -44,11 +47,15 @@ declare global {
 export function MediaPage() {
   const navigate = useNavigate();
   const { t } = useT();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [camError, setCamError] = useState<string | null>(null);
-  const [scanResult, setScanResult] = useState<string | null>(null);
+  const [scanFeedback, setScanFeedback] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
+  const [scanBusy, setScanBusy] = useState(false);
+  const mayEditCodes = isSupervisorOrAdmin();
   const [voiceLog, setVoiceLog] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('TP-CRANE-DEMO-01');
+  const canResolveManual = manualCode.trim().length > 0;
   const [listening, setListening] = useState(false);
 
   const camera = useQuery({
@@ -70,50 +77,55 @@ export function MediaPage() {
   });
 
   const waiting = camera.isLoading || codes.isLoading;
-
-  useEffect(() => {
-    if (waiting) return;
-    let stream: MediaStream | null = null;
-    void navigator.mediaDevices
-      .getUserMedia({
-        video: { facingMode: 'environment' },
-        audio: false,
-      })
-      .then((next) => {
-        stream = next;
-        if (videoRef.current) videoRef.current.srcObject = next;
-      })
-      .catch((err: unknown) => {
-        setCamError(
-          err instanceof Error ? err.message : 'Camera permission denied',
-        );
-      });
-    return () => {
-      stream?.getTracks().forEach((track) => track.stop());
-    };
-  }, [waiting]);
+  const deviceCamera = useDeviceCamera({
+    enabled: !waiting,
+    facingMode: 'environment',
+  });
 
   async function resolveCode(code: string) {
-    setScanResult(null);
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setScanFeedback({ ok: false, text: t('enterCode') });
+      return;
+    }
+    setScanFeedback(null);
     try {
       const row = await apiPost<{
         code: string;
         label: string;
         routeHint?: string | null;
-      }>('/media/codes/resolve', { code });
-      setScanResult(`${row.label} (${row.code})`);
+      }>('/media/codes/resolve', { code: trimmed });
+      const text = `Resolved: ${row.label} (${row.code})`;
+      setScanFeedback({ ok: true, text });
       toastOk(row.label);
       if (row.routeHint) {
         navigate(row.routeHint);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Resolve failed';
-      setScanResult(message);
+      setScanFeedback({ ok: false, text: message });
       toastErr(message);
     }
   }
 
-  async function scanWithBarcodeDetector() {
+  async function scanFrame() {
+    setScanBusy(true);
+    try {
+      await scanFrameInner();
+    } finally {
+      setScanBusy(false);
+    }
+  }
+
+  async function scanFrameInner() {
+    const video = deviceCamera.videoRef.current;
+    if (!video) {
+      setScanFeedback({
+        ok: false,
+        text: 'No camera video — allow the camera in site settings, then reload this page.',
+      });
+      return;
+    }
     const Detector = (
       window as unknown as {
         BarcodeDetector?: new (opts: { formats: string[] }) => {
@@ -123,23 +135,56 @@ export function MediaPage() {
         };
       }
     ).BarcodeDetector;
-    if (!Detector || !videoRef.current) {
-      setScanResult(
-        'BarcodeDetector not supported — use manual code or Chrome',
-      );
+    if (Detector) {
+      const detector = new Detector({
+        formats: ['qr_code', 'code_128', 'ean_13'],
+      });
+      const codesFound = await detector.detect(video);
+      const value = codesFound[0]?.rawValue;
+      if (!value) {
+        setScanFeedback({
+          ok: false,
+          text: 'No code in frame — hold a registered QR steady and try again.',
+        });
+        return;
+      }
+      await resolveCode(value);
       return;
     }
-    const detector = new Detector({
-      formats: ['qr_code', 'code_128', 'ean_13'],
-    });
-    const codesFound = await detector.detect(videoRef.current);
-    const value = codesFound[0]?.rawValue;
-    if (!value) {
-      setScanResult('No code in frame');
+    if (video.readyState < 2) {
+      setScanFeedback({
+        ok: false,
+        text: 'Camera still starting — wait a moment and scan again.',
+      });
       return;
     }
-    await resolveCode(value);
+    try {
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      const reader = new BrowserMultiFormatReader();
+      const result = await reader.decodeOnceFromVideoElement(video);
+      const value = result.getText();
+      if (!value) {
+        setScanFeedback({
+          ok: false,
+          text: 'No code in frame — hold a registered QR steady and try again.',
+        });
+        return;
+      }
+      await resolveCode(value);
+    } catch {
+      setScanFeedback({
+        ok: false,
+        text:
+          'No code in frame — use a QR whose text matches a registered code (see list). Safari and Firefox use ZXing; Chrome uses the built-in detector.',
+      });
+    }
   }
+
+  const scanFeedbackAlert = scanFeedback ? (
+    <Alert variant={scanFeedback.ok ? 'default' : 'destructive'}>
+      <AlertDescription>{scanFeedback.text}</AlertDescription>
+    </Alert>
+  ) : null;
 
   async function commandDirection(
     direction: 'up' | 'down',
@@ -150,10 +195,11 @@ export function MediaPage() {
       const res = await apiPost<{
         ok: boolean;
         label?: string;
+        message?: string;
         reason?: string;
       }>('/media/voice', { transcript: direction });
       const line = res.ok
-        ? `Heard: ${heard}. Executed: ${res.label}`
+        ? res.message || `Heard: ${heard}. Executed: ${res.label}`
         : `Heard: ${heard}. Not executed: ${res.reason ?? 'unknown'}`;
       setVoiceLog(line);
       if (res.ok) toastOk(res.label ?? direction);
@@ -180,6 +226,7 @@ export function MediaPage() {
   }
 
   function startVoice() {
+    setVoiceLog(null);
     const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Ctor) {
       setVoiceLog('SpeechRecognition not supported in this browser');
@@ -206,7 +253,7 @@ export function MediaPage() {
       const hit = directionWord(phrases);
       if (sent) return;
       if (last?.isFinal === false && !hit) {
-        setVoiceLog(heard ? `Heard: ${heard}` : 'Heard nothing');
+        setVoiceLog(heard ? `Heard: ${heard}` : t('nothingHeard'));
         return;
       }
       sent = true;
@@ -218,7 +265,7 @@ export function MediaPage() {
         return;
       }
       if (!heard) {
-        setVoiceLog('Heard nothing');
+        setVoiceLog(t('nothingHeard'));
         recognition.stop();
         setListening(false);
         return;
@@ -243,10 +290,19 @@ export function MediaPage() {
         });
     };
     recognition.onerror = (event) => {
-      if (event.error === 'aborted' || sent) return;
-      setVoiceLog(`Voice error: ${event.error}`);
+      if (event.error === 'aborted') return;
+      sent = true;
+      setVoiceLog(
+        event.error === 'no-speech'
+          ? t('nothingHeard')
+          : `Microphone error: ${event.error}`,
+      );
+      setListening(false);
     };
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      if (!sent) setVoiceLog(t('nothingHeard'));
+    };
     setListening(true);
     recognition.start();
     window.setTimeout(() => {
@@ -266,7 +322,7 @@ export function MediaPage() {
         <p className="text-sm text-muted-foreground">{camera.data?.notes}</p>
         {camera.data?.rtspUrl ? (
           <p className="text-xs text-muted-foreground">
-            Configured RTSP: {camera.data.rtspUrl}
+            Plant camera configured
           </p>
         ) : null}
       </div>
@@ -280,13 +336,11 @@ export function MediaPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {camError ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{camError}</AlertDescription>
-                </Alert>
+              {deviceCamera.camError ? (
+                <CameraAccessAlert {...deviceCamera} />
               ) : (
                 <video
-                  ref={videoRef}
+                  ref={deviceCamera.videoRef}
                   className="aspect-video w-full rounded-md border bg-black object-cover"
                   autoPlay
                   playsInline
@@ -295,10 +349,17 @@ export function MediaPage() {
               )}
               <Button
                 type="button"
-                onClick={() => void scanWithBarcodeDetector()}
+                disabled={scanBusy}
+                onClick={() => void scanFrame()}
               >
-                <QrCode /> Scan QR / barcode in frame
+                {scanBusy ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <QrCode />
+                )}
+                Scan QR / barcode in frame
               </Button>
+              {scanFeedbackAlert}
             </CardContent>
           </Card>
         </HelpTip>
@@ -308,6 +369,22 @@ export function MediaPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Manual / known codes</CardTitle>
+                <CardDescription>
+                  Demo payloads: <strong>TP-CRANE-DEMO-01</strong>,{' '}
+                  <strong>TP-OPS</strong>.
+                  {mayEditCodes ? (
+                    <>
+                      {' '}
+                      <Link
+                        to="/admin?section=codes"
+                        className="text-primary underline-offset-4 hover:underline"
+                      >
+                        Add or edit codes in Config
+                      </Link>
+                      .
+                    </>
+                  ) : null}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="grid gap-2">
@@ -320,13 +397,12 @@ export function MediaPage() {
                 </div>
                 <Button
                   type="button"
+                  disabled={!canResolveManual}
                   onClick={() => void resolveCode(manualCode)}
                 >
                   Resolve
                 </Button>
-                {scanResult ? (
-                  <p className="text-sm text-primary">{scanResult}</p>
-                ) : null}
+                {scanFeedbackAlert}
                 <ul className="space-y-1 text-sm">
                   {(codes.data ?? []).map((c) => (
                     <li key={c.code}>
@@ -351,9 +427,9 @@ export function MediaPage() {
               <CardHeader>
                 <CardTitle>Voice commands</CardTitle>
                 <CardDescription>
-                  Press UP or DOWN. Each runs the hoist for about 2 seconds. You
-                  can also say those words, or trolley left, trolley right, or
-                  stop.
+                  Use Listen for allowlisted commands. Say stop anytime. Hoist and
+                  trolley motion by voice follow the Allow timed media motion
+                  switch in Config; otherwise hold motion on Operator.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -366,20 +442,6 @@ export function MediaPage() {
                 ) : null}
               </CardContent>
             </Card>
-          </HelpTip>
-
-          <HelpTip id="tour.media.upDown">
-            <div className="flex gap-2">
-              <Button type="button" onClick={() => void commandDirection('up')}>
-                <ArrowUp /> UP
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void commandDirection('down')}
-              >
-                <ArrowDown /> DOWN
-              </Button>
-            </div>
           </HelpTip>
         </div>
       </div>

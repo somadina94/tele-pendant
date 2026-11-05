@@ -6,11 +6,11 @@
     "hash": "placeholder",
     "key": "bundle.js",
     "contentType": "application/javascript",
-    "url": "http://localhost:3010/ota/assets/bundle.js"
+    "url": "https://api.tele-pendant.jahbyte.com/ota/assets/bundle.js"
   },
   "assets": [],
   "metadata": {},
   "extra": {
-    "note": "Replace manifest.json and assets/bundle.js in this folder to publish a JS update. Native modules such as the camera still need a binary rebuild."
+    "note": "Placeholder until ota:export. launchAsset.url must be https. Camera and speech still need a new binary."
   }
 }

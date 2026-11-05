@@ -23,16 +23,25 @@ describe('OpsPage', () => {
             definition: { name: 'Overload', severity: 'warn' },
             createdAt: new Date().toISOString(),
           },
+          {
+            id: 'a3',
+            state: 'acked',
+            value: 0,
+            definition: { name: 'Seen', severity: 'info' },
+            createdAt: new Date().toISOString(),
+          },
         ];
       }
-      if (path === '/trends') return ['hoistHeightMm', 'loadKg', 'speed'];
+      if (path === '/trends')
+        return ['hoistHeightMm', 'loadKg', 'speed', 'raw'];
       if (path.startsWith('/trends/loadKg')) {
         return [
           { value: 4, createdAt: new Date().toISOString() },
           { value: 4, createdAt: new Date().toISOString() },
         ];
       }
-      if (path.startsWith('/trends/speed')) return { nope: true };
+      if (path.startsWith('/trends/speed')) return [{ t: '1', value: 3 }];
+      if (path.startsWith('/trends/raw')) return { nope: true };
       if (path.startsWith('/trends/')) {
         return [
           { value: 10, createdAt: new Date().toISOString() },
@@ -55,7 +64,9 @@ describe('OpsPage', () => {
     expect(screen.getAllByRole('button', { name: 'Ack' })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Ack' }));
     fireEvent.click(screen.getByRole('button', { name: 'Shelve' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Unshelve' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/alarms/a1/shelve'));
+    expect(post).toHaveBeenCalledWith('/alarms/a2/unshelve');
     expect(post).toHaveBeenCalledWith('/alarms/a1/ack');
     expect(get).toHaveBeenCalled();
   });
@@ -114,6 +125,13 @@ describe('OpsPage', () => {
             definition: { name: 'E-Stop', severity: 'critical' },
             createdAt: new Date().toISOString(),
           },
+          {
+            id: 'a2',
+            state: 'shelved',
+            value: 1,
+            definition: { name: 'Parked', severity: 'warn' },
+            createdAt: new Date().toISOString(),
+          },
         ];
       }
       if (path === '/trends') return [];
@@ -125,11 +143,13 @@ describe('OpsPage', () => {
     });
     vi.spyOn(api, 'apiPost')
       .mockRejectedValueOnce(new Error('ack failed'))
-      .mockRejectedValueOnce(new Error('shelve failed'));
+      .mockRejectedValueOnce(new Error('shelve failed'))
+      .mockRejectedValueOnce(new Error('unshelve failed'));
     renderWithProviders(<OpsPage />);
     await screen.findByText(/E-Stop/);
     fireEvent.click(screen.getByRole('button', { name: 'Ack' }));
     fireEvent.click(screen.getByRole('button', { name: 'Shelve' }));
-    await waitFor(() => expect(api.apiPost).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Unshelve' }));
+    await waitFor(() => expect(api.apiPost).toHaveBeenCalledTimes(3));
   });
 });

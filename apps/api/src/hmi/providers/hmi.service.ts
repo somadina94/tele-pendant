@@ -14,9 +14,10 @@ import { OverlayLabel } from '../../overlays/entities/overlay-label.entity';
 import { PlcService } from '../../plc/providers/plc.service';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { SafetyStateService } from '../../safety/providers/safety-state.service';
+import { AuditActor, auditWriteFields } from '../../common/audit-actor';
 import { UserRole } from '../../users/enums/user-role.enum';
 
-type Actor = { userId?: string; userEmail?: string; ip?: string };
+type Actor = AuditActor;
 
 @Injectable()
 export class HmiService {
@@ -111,11 +112,7 @@ export class HmiService {
   }
 
   private actorFields(actor?: Actor) {
-    return {
-      userId: actor?.userId,
-      userEmail: actor?.userEmail,
-      ip: actor?.ip,
-    };
+    return auditWriteFields(actor);
   }
 
   async activateCell(
@@ -124,6 +121,7 @@ export class HmiService {
     opts: {
       userId?: string;
       userEmail?: string;
+      userDisplayName?: string | null;
       role?: UserRole;
       safeActionPin?: string;
       ip?: string;
@@ -134,37 +132,19 @@ export class HmiService {
       throw new NotFoundException('Cell or primary register not found');
     }
 
-    if (cell.isMotion && !this.safetyState.canIssueMotion()) {
+    if (cell.isMotion && value && !this.safetyState.canIssueMotion()) {
       throw new ForbiddenException(
         'Motion blocked: hold deadman and ensure normal safety mode',
       );
     }
 
-    if (cell.requiresSafeAction) {
-      const expected = (
-        process.env.SAFE_ACTION_PIN ||
-        process.env.ADMIN_PASSWORD ||
-        ''
-      ).trim();
-      const provided = opts.safeActionPin?.trim() ?? '';
-      if (!provided || provided !== expected) {
-        await this.auditService.write({
-          userId: opts.userId,
-          userEmail: opts.userEmail,
-          action: 'cell.safe_action_denied',
-          resource: cell.id,
-          ip: opts.ip,
-          result: 'failure',
-        });
-        throw new ForbiddenException(
-          'SAFE_ACTION_PIN does not match. Type the value from .env (this demo uses the admin password), not the name SAFE_ACTION_PIN.',
-        );
-      }
-      if (opts.role === UserRole.OPERATOR) {
-        throw new ForbiddenException(
-          'Operator cannot authorize independent safe actions',
-        );
-      }
+    // STOP is one press. The PIN is only required to reset e-stop.
+    const isEStopCell =
+      cell.requiresSafeAction ||
+      cell.style === 'estop' ||
+      cell.primaryRegister.name === 'coil.eStop';
+    if (isEStopCell && !value) {
+      return { ok: true, cellId: cell.id, value: false, latched: true };
     }
 
     const reg = cell.primaryRegister;
@@ -179,12 +159,17 @@ export class HmiService {
     await this.auditService.write({
       userId: opts.userId,
       userEmail: opts.userEmail,
+      userDisplayName: opts.userDisplayName ?? null,
       action: 'cell.activate',
-      resource: cell.id,
+      resource: cell.label,
       details: `${cell.label}=${value}`,
       ip: opts.ip,
       result: 'success',
     });
+
+    if (isEStopCell && value) {
+      await this.safetyState.latchOperatorEStop(`STOP: ${cell.label}`);
+    }
 
     return { ok: true, cellId: cell.id, value };
   }
@@ -219,13 +204,23 @@ export class HmiService {
   }
 
   async deleteCell(id: string, actor?: Actor): Promise<{ ok: true }> {
-    const row = await this.cells.findOneBy({ id });
+    const row = await this.cells.findOne({
+      where: { id },
+      relations: { primaryRegister: true },
+    });
     if (!row) throw new NotFoundException('Cell not found');
+    if (
+      row.requiresSafeAction ||
+      row.primaryRegister?.name === 'coil.eStop' ||
+      row.style === 'estop'
+    ) {
+      throw new ForbiddenException('The STOP cell cannot be deleted');
+    }
     await this.cells.delete({ id });
     await this.auditService.write({
       ...this.actorFields(actor),
       action: 'cell.delete',
-      resource: id,
+      resource: row.label,
       details: row.label,
       result: 'success',
     });

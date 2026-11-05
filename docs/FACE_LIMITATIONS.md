@@ -18,7 +18,7 @@ Tele-Pendant face enroll/login is **local on-prem production biometrics**, not a
 - Not ISO/IEC certified biometrics
 - Not a lab PAD report or certified presentation-attack detection product
 - Not a SIEM/SOC product
-- **Never** authorizes e-stop, SAFE_ACTION_PIN, or other safety actions — password/PIN remain the hard path
+- **Never** authorizes e-stop or the reset PIN. **STOP** is one press. The reset PIN clears e-stop. Face auth does neither.
 - Not suitable as the only plant access control
 
 ## Policy
@@ -26,6 +26,6 @@ Tele-Pendant face enroll/login is **local on-prem production biometrics**, not a
 - Enroll only after password login.
 - Prefer the 3-step challenge; single-frame is legacy fallback for tests only.
 - If match or liveness fails, use the password.
-- Prefer supervisor password/PIN for e-stop and safe-action flows.
+- Prefer the operator **STOP** button for e-stop, and the reset PIN only to clear it.
 - Set a strong `FACE_TEMPLATE_KEY` (32+ chars) in production `.env`.
 - A classroom training session is still a person, outside this repository. See `TRAINING.md`.

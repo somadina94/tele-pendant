@@ -1,4 +1,8 @@
-import { NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { MediaService } from './media.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 
@@ -7,8 +11,10 @@ describe('MediaService', () => {
     count: jest.fn().mockResolvedValue(1),
     find: jest.fn().mockResolvedValue([{ code: 'TP-OPS' }]),
     findOne: jest.fn(),
-    save: jest.fn(),
+    findOneBy: jest.fn(),
+    save: jest.fn((x) => x),
     create: jest.fn((x) => x),
+    remove: jest.fn(),
   };
   const hmiService = {
     getLayout: jest.fn().mockResolvedValue({
@@ -32,6 +38,7 @@ describe('MediaService', () => {
   const safetyState = {
     pulseDeadman: jest.fn(),
     releaseDeadman: jest.fn(),
+    allowTimedMediaMotion: jest.fn().mockResolvedValue(true),
   };
   const auditService = { write: jest.fn().mockResolvedValue({}) };
 
@@ -57,7 +64,7 @@ describe('MediaService', () => {
         },
       ],
     });
-    delete process.env.CAMERA_RTSP_URL;
+    safetyState.allowTimedMediaMotion.mockResolvedValue(true);
     service = new MediaService(
       codes as never,
       hmiService as never,
@@ -84,6 +91,46 @@ describe('MediaService', () => {
     codes.count.mockResolvedValue(0);
     await service.onModuleInit();
     expect(codes.save).toHaveBeenCalled();
+  });
+
+  it('creates, updates, and deletes scan codes', async () => {
+    codes.findOneBy.mockResolvedValue(null);
+    codes.findOne.mockResolvedValue(null);
+    const created = await service.saveCode({
+      code: 'NEW-1',
+      label: 'New bay',
+      routeHint: '/operator',
+    });
+    expect(created.code).toBe('NEW-1');
+    expect(codes.save).toHaveBeenCalled();
+
+    codes.findOneBy.mockResolvedValue({ id: 'id-1', code: 'OLD' });
+    codes.findOne.mockResolvedValue(null);
+    await service.saveCode({
+      id: 'id-1',
+      code: 'OLD',
+      label: 'Updated',
+    });
+    expect(codes.save).toHaveBeenCalledWith(
+      expect.objectContaining({ label: 'Updated' }),
+    );
+
+    codes.findOne.mockResolvedValue({ id: 'id-1', code: 'X' });
+    await expect(
+      service.saveCode({ id: 'id-1', code: 'DUP', label: 'Y' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    await expect(
+      service.saveCode({ code: '', label: 'x' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    codes.findOneBy.mockResolvedValue({ id: 'id-1' });
+    await service.deleteCode('id-1');
+    expect(codes.remove).toHaveBeenCalled();
+    codes.findOneBy.mockResolvedValue(null);
+    await expect(service.deleteCode('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('resolves known codes and lists them', async () => {
@@ -236,6 +283,21 @@ describe('MediaService', () => {
     expect(result).toEqual(
       expect.objectContaining({ ok: false, reason: 'cell_not_found' }),
     );
+  });
+
+  it('refuses timed motion unless Config allows it', async () => {
+    safetyState.allowTimedMediaMotion.mockResolvedValueOnce(false);
+    const blocked = await service.voiceCommand('hoist up', {
+      role: UserRole.OPERATOR,
+    });
+    expect(blocked).toEqual(
+      expect.objectContaining({ ok: false, reason: 'timed_motion_disabled' }),
+    );
+    const stop = await service.voiceCommand('stop', {
+      role: UserRole.OPERATOR,
+    });
+    expect(stop.ok).toBe(true);
+    expect(String(stop.message)).toMatch(/commanded to stop/i);
   });
 
   it('exposes camera config with and without RTSP', () => {

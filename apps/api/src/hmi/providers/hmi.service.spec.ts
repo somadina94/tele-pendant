@@ -57,6 +57,7 @@ describe('HmiService', () => {
   const safetyState = {
     canIssueMotion: jest.fn().mockReturnValue(false),
     snapshot: jest.fn().mockReturnValue({ mode: 'normal' }),
+    latchOperatorEStop: jest.fn().mockResolvedValue({ mode: 'e_stop' }),
   };
   const auditService = { write: jest.fn().mockResolvedValue({}) };
 
@@ -134,66 +135,33 @@ describe('HmiService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('requires safe-action PIN and rejects operators', async () => {
-    const stop = {
+  it('asserts STOP in one press without a PIN', async () => {
+    cells.findOne.mockResolvedValue({
       ...motionCell,
       id: 'stop',
       isMotion: false,
       requiresSafeAction: true,
       label: 'STOP',
-    };
-    cells.findOne.mockResolvedValue(stop);
-
-    await expect(
-      service.activateCell('stop', true, { role: UserRole.SUPERVISOR }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+      style: 'estop',
+    });
+    await service.activateCell('stop', true, { role: UserRole.OPERATOR });
+    expect(plcService.writeCoil).toHaveBeenCalled();
+    expect(safetyState.latchOperatorEStop).toHaveBeenCalledWith('STOP: STOP');
     expect(auditService.write).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'cell.safe_action_denied' }),
+      expect.objectContaining({
+        action: 'cell.activate',
+        resource: 'STOP',
+      }),
     );
 
-    await expect(
-      service.activateCell('stop', true, {
-        role: UserRole.OPERATOR,
-        safeActionPin: '1234',
-      }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-
-    await service.activateCell('stop', true, {
-      role: UserRole.SUPERVISOR,
-      safeActionPin: '1234',
+    plcService.writeCoil.mockClear();
+    const release = await service.activateCell('stop', false, {
+      role: UserRole.OPERATOR,
     });
-    expect(plcService.writeCoil).toHaveBeenCalled();
-  });
-
-  it('falls back to ADMIN_PASSWORD for safe action', async () => {
-    delete process.env.SAFE_ACTION_PIN;
-    process.env.ADMIN_PASSWORD = 'admin-pin';
-    cells.findOne.mockResolvedValue({
-      ...motionCell,
-      isMotion: false,
-      requiresSafeAction: true,
-    });
-    await service.activateCell('c1', true, {
-      role: UserRole.ADMIN,
-      safeActionPin: 'admin-pin',
-    });
-    expect(plcService.writeCoil).toHaveBeenCalled();
-  });
-
-  it('uses empty expected pin when env unset', async () => {
-    delete process.env.SAFE_ACTION_PIN;
-    delete process.env.ADMIN_PASSWORD;
-    cells.findOne.mockResolvedValue({
-      ...motionCell,
-      isMotion: false,
-      requiresSafeAction: true,
-    });
-    await expect(
-      service.activateCell('c1', true, {
-        role: UserRole.ADMIN,
-        safeActionPin: '',
-      }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(release).toEqual(
+      expect.objectContaining({ latched: true, value: false }),
+    );
+    expect(plcService.writeCoil).not.toHaveBeenCalled();
   });
 
   it('writes holding on/off and rejects read-only kinds', async () => {
@@ -337,13 +305,51 @@ describe('HmiService', () => {
     await expect(
       service.updateCell('missing', cellInput),
     ).rejects.toBeInstanceOf(NotFoundException);
+    cells.findOne.mockResolvedValue(null);
     await expect(service.deleteCell('missing')).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
 
+  it('refuses to delete the STOP cell', async () => {
+    cells.findOne.mockResolvedValueOnce({
+      id: 'stop',
+      label: 'STOP',
+      requiresSafeAction: true,
+      style: 'motion',
+      primaryRegister: { name: 'coil.hoistUp' },
+    });
+    await expect(service.deleteCell('stop')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    cells.findOne.mockResolvedValueOnce({
+      id: 'stop',
+      label: 'Halt',
+      requiresSafeAction: false,
+      style: 'motion',
+      primaryRegister: { name: 'coil.eStop' },
+    });
+    await expect(service.deleteCell('stop')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    cells.findOne.mockResolvedValueOnce({
+      id: 'stop',
+      label: 'Halt',
+      requiresSafeAction: false,
+      style: 'estop',
+      primaryRegister: { name: 'coil.other' },
+    });
+    await expect(service.deleteCell('stop')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
   it('deletes a cell and writes an overlay on the active background', async () => {
-    cells.findOneBy.mockResolvedValue({ id: 'c9', label: 'Spare' });
+    cells.findOne.mockResolvedValue({
+      id: 'c9',
+      label: 'Spare',
+      style: 'motion',
+    });
     await expect(service.deleteCell('c9')).resolves.toEqual({ ok: true });
 
     registers.findOneBy.mockResolvedValue({ id: 'r', name: 'coil.eStop' });

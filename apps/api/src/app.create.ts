@@ -127,8 +127,8 @@ export function appCreate(app: INestApplication): void {
       },
       'oauth2',
     )
-    .addServer(localSwaggerUrl, 'Localhost')
     .addServer(liveSwaggerUrl, 'Live')
+    .addServer(localSwaggerUrl, 'Localhost')
     .addTag('health', 'Service health')
     .addTag('auth', 'Authentication')
     .addTag('audit', 'Security audit logs')
@@ -141,8 +141,10 @@ export function appCreate(app: INestApplication): void {
     .addTag('media', 'Camera, QR/barcode, voice commands')
     .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api', app, document);
+  if (process.env.NODE_ENV !== 'production') {
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api', app, document);
+  }
 
   app.enableCors({
     origin: true,

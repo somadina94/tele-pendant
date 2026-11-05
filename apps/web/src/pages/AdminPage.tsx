@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useId, useState } from 'react';
+import { FormEvent, useEffect, useId, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Plus, Save, Trash2 } from 'lucide-react';
+import { AlertCircle, Loader2, Plus, Save, Trash2 } from 'lucide-react';
 import {
   apiDelete,
   apiGet,
@@ -29,6 +30,19 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { ConfigScanCodesSection } from '@/components/config-scan-codes-section';
+import { ConfigUsersSection } from '@/components/config-users-section';
+import {
+  canManageUsers,
+  configSectionIdsForRole,
+} from '@tele-pendant/shared';
+import {
+  parseConfigSection,
+  type ConfigSectionId,
+} from '@/lib/config-sections';
+import { useConfirmDialog } from '@/lib/confirm-dialog';
+import { useDeleteConfirmDialog } from '@/lib/delete-confirm';
+import { getStoredUserRole } from '@/lib/user-session';
 
 interface PlcConnectionRow {
   id: string;
@@ -39,6 +53,15 @@ interface PlcConnectionRow {
   enabled: boolean;
   isSimulator: boolean;
   protocol?: 'modbus-tcp' | 'opcua';
+}
+
+interface PlcHealth {
+  connected: boolean;
+  connectionId: string | null;
+  label: string | null;
+  host: string | null;
+  port: number | null;
+  lastError: string | null;
 }
 
 interface ConnectionInput {
@@ -65,6 +88,7 @@ interface SafetyRoleRow {
   deadmanRegisterId?: string | null;
   heartbeatRegisterId?: string | null;
   safeStateRegisterId?: string | null;
+  allowTimedMediaMotion?: boolean;
 }
 
 interface Note {
@@ -76,6 +100,10 @@ function noteText(err: unknown): string {
   return err instanceof Error ? err.message : 'Save failed';
 }
 
+function isProtectedStopCell(style: string, label: string): boolean {
+  return style === 'estop' || label.trim().toUpperCase() === 'STOP';
+}
+
 function StatusNote({ note }: { note?: Note | null }) {
   if (!note) return null;
   return (
@@ -83,6 +111,50 @@ function StatusNote({ note }: { note?: Note | null }) {
       {!note.ok ? <AlertCircle className="h-4 w-4" /> : null}
       <AlertDescription>{note.text}</AlertDescription>
     </Alert>
+  );
+}
+
+function PlcConnectionStatus({
+  connectionId,
+  inUse,
+  health,
+}: {
+  connectionId: string;
+  inUse: boolean;
+  health?: PlcHealth | null;
+}) {
+  if (!inUse) return null;
+  const wrap = (node: ReactNode) => (
+    <div className="w-fit max-w-full justify-self-start">{node}</div>
+  );
+
+  if (!health) {
+    return wrap(
+      <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 shrink-0 animate-spin" />
+        Checking connection…
+      </span>,
+    );
+  }
+  if (health.connectionId !== connectionId) {
+    return wrap(
+      <Badge variant="secondary" className="w-fit">
+        Standby — another PLC is active
+      </Badge>,
+    );
+  }
+  if (health.connected) {
+    return wrap(
+      <Badge className="w-fit border-transparent bg-emerald-600 text-white hover:bg-emerald-600">
+        Connected
+      </Badge>,
+    );
+  }
+  return wrap(
+    <span className="block text-sm text-destructive">
+      Not connected
+      {health.lastError ? `: ${health.lastError}` : ''}
+    </span>,
   );
 }
 
@@ -135,7 +207,9 @@ function AdminSelect({
 export function AdminPage() {
   const queryClient = useQueryClient();
   const { t } = useT();
+  const [searchParams] = useSearchParams();
   const [notes, setNotes] = useState<Record<string, Note>>({});
+  const [labelFormKey, setLabelFormKey] = useState(0);
   const layoutQuery = useQuery({
     queryKey: ['hmi-layout'],
     queryFn: () => apiGet<HmiLayout>('/hmi/layout'),
@@ -143,6 +217,11 @@ export function AdminPage() {
   const connections = useQuery({
     queryKey: ['plc-connections'],
     queryFn: () => apiGet<PlcConnectionRow[]>('/plc/connections'),
+  });
+  const plcHealth = useQuery({
+    queryKey: ['plc-health'],
+    queryFn: () => apiGet<PlcHealth>('/plc/health'),
+    refetchInterval: 2000,
   });
   const alarmDefs = useQuery({
     queryKey: ['alarm-definitions'],
@@ -170,6 +249,7 @@ export function AdminPage() {
       await apiPost('/plc/connections', value);
     }
     await queryClient.invalidateQueries({ queryKey: ['plc-connections'] });
+    await queryClient.invalidateQueries({ queryKey: ['plc-health'] });
   }
 
   async function saveRegister(
@@ -195,14 +275,41 @@ export function AdminPage() {
   const overlays = layout?.overlays ?? [];
   const alarms = alarmDefs.data ?? [];
 
-  return (
-    <div className="flex flex-col gap-6">
-      <p className="text-sm text-muted-foreground">
-        These fields are saved in SQLite. Check <strong>Use this PLC</strong>{' '}
-        and press <strong>Save</strong> to connect. Each register address is the
-        Modbus number the buttons and safety checks use.
-      </p>
+  const role = getStoredUserRole() ?? 'supervisor';
+  const showUsers = canManageUsers(role);
+  const allowedSections = new Set(
+    configSectionIdsForRole(role),
+  ) as Set<ConfigSectionId>;
+  const section = parseConfigSection(
+    searchParams.get('section'),
+    showUsers,
+    allowedSections,
+  );
 
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+        {section === 'plc' ? (
+          <p className="text-sm text-muted-foreground">
+            These fields are saved in SQLite. Check{' '}
+            <strong>Use this PLC</strong> and press <strong>Save</strong> to
+            connect. Each register address is the Modbus number the buttons and
+            safety checks use.
+          </p>
+        ) : null}
+        {section === 'codes' ? (
+          <p className="text-sm text-muted-foreground">
+            QR and barcodes must match the <strong>Code</strong> text exactly
+            (not a URL unless you register that URL). Operators resolve codes on{' '}
+            <strong>Media</strong>; optional <strong>Route hint</strong> sends
+            them to a screen after a successful scan.
+          </p>
+        ) : null}
+
+        <div className={cn(section !== 'users' && 'hidden')}>
+          {showUsers ? <ConfigUsersSection /> : null}
+        </div>
+
+        <div className={cn(section !== 'plc' && 'hidden')}>
       <HelpTip id="tour.config.plc">
         <Card>
           <CardHeader>
@@ -212,6 +319,8 @@ export function AdminPage() {
             {plcRows.map((row) => (
               <ConnectionEditor
                 key={row.id}
+                connectionId={row.id}
+                plcHealth={plcHealth.data}
                 noteKey={row.id}
                 initial={{
                   label: row.label,
@@ -232,13 +341,14 @@ export function AdminPage() {
             <div className="space-y-2">
               <h3 className="text-sm font-medium">Add a PLC</h3>
               <ConnectionEditor
+                plcHealth={plcHealth.data}
                 noteKey="new"
                 initial={{
                   label: '',
                   host: '',
                   port: 502,
                   unitId: 1,
-                  enabled: true,
+                  enabled: false,
                   protocol: 'modbus-tcp',
                   isSimulator: false,
                 }}
@@ -251,7 +361,9 @@ export function AdminPage() {
           </CardContent>
         </Card>
       </HelpTip>
+        </div>
 
+        <div className={cn(section !== 'registers' && 'hidden')}>
       <HelpTip id="tour.config.registers">
         <Card>
           <CardHeader>
@@ -275,7 +387,9 @@ export function AdminPage() {
           </CardContent>
         </Card>
       </HelpTip>
+        </div>
 
+        <div className={cn(section !== 'cells' && 'hidden')}>
       <HelpTip id="tour.config.cells">
         <Card>
           <CardHeader>
@@ -339,7 +453,9 @@ export function AdminPage() {
           </CardContent>
         </Card>
       </HelpTip>
+        </div>
 
+        <div className={cn(section !== 'labels' && 'hidden')}>
       <HelpTip id="tour.config.labels">
         <Card>
           <CardHeader>
@@ -377,6 +493,7 @@ export function AdminPage() {
             <div className="space-y-2">
               <h3 className="text-sm font-medium">Add a label</h3>
               <OverlayEditor
+                key={labelFormKey}
                 noteKey="new-label"
                 registers={registers}
                 initial={{
@@ -390,14 +507,19 @@ export function AdminPage() {
                 note={notes['new-label']}
                 onNote={(note) => remember('new-label', note)}
                 onSubmit={(value) =>
-                  apiPost('/hmi/overlays', value).then(() => refreshLayout())
+                  apiPost('/hmi/overlays', value).then(() => {
+                    setLabelFormKey((current) => current + 1);
+                    return refreshLayout();
+                  })
                 }
               />
             </div>
           </CardContent>
         </Card>
       </HelpTip>
+        </div>
 
+        <div className={cn(section !== 'background' && 'hidden')}>
       <HelpTip id="tour.config.background">
         <Card>
           <CardHeader>
@@ -425,14 +547,25 @@ export function AdminPage() {
           </CardContent>
         </Card>
       </HelpTip>
+        </div>
 
+        <div className={cn(section !== 'codes' && 'hidden')}>
+          <HelpTip id="tour.config.codes">
+            <ConfigScanCodesSection />
+          </HelpTip>
+        </div>
+
+        <div className={cn(section !== 'alarms' && 'hidden')}>
       <HelpTip id="tour.config.alarms">
         <AlarmSection registers={registers} definitions={alarms} />
       </HelpTip>
+        </div>
 
+        <div className={cn(section !== 'safety' && 'hidden')}>
       <HelpTip id="tour.config.safety">
         <SafetySection registers={registers} roles={safetyRoles.data ?? null} />
       </HelpTip>
+        </div>
     </div>
   );
 }
@@ -452,24 +585,42 @@ function AlarmSection({
   const [threshold, setThreshold] = useState('1');
   const [severity, setSeverity] = useState('warning');
   const [enabled, setEnabled] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [note, setNote] = useState<Note | null>(null);
   const enabledId = useId();
+  const { askDelete, deleteConfirmDialog } = useDeleteConfirmDialog();
+
+  function resetForm() {
+    setName('');
+    setCompareOp('gt');
+    setThreshold('1');
+    setSeverity('warning');
+    setEnabled(true);
+    setEditingId(null);
+    setRegisterId(registers[0]?.id ?? '');
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const body = {
+      name,
+      registerId,
+      compareOp,
+      threshold: Number(threshold),
+      severity,
+      enabled,
+    };
     try {
-      await apiPost('/alarms/definitions', {
-        name,
-        registerId,
-        compareOp,
-        threshold: Number(threshold),
-        severity,
-        enabled,
-      });
+      if (editingId) {
+        await apiPatch(`/alarms/definitions/${editingId}`, body);
+      } else {
+        await apiPost('/alarms/definitions', body);
+      }
       await queryClient.invalidateQueries({ queryKey: ['alarm-definitions'] });
       const success = { ok: true as const, text: 'Saved alarm.' };
       setNote(success);
       toastOk(success.text);
+      resetForm();
     } catch (err) {
       const failure = { ok: false as const, text: noteText(err) };
       setNote(failure);
@@ -477,13 +628,14 @@ function AlarmSection({
     }
   }
 
-  async function remove(id: string) {
+  async function remove(id: string, name: string) {
     try {
       await apiDelete(`/alarms/definitions/${id}`);
       await queryClient.invalidateQueries({ queryKey: ['alarm-definitions'] });
       const success = { ok: true as const, text: 'Deleted alarm.' };
       setNote(success);
       toastOk(success.text);
+      if (editingId === id) resetForm();
     } catch (err) {
       const failure = { ok: false as const, text: noteText(err) };
       setNote(failure);
@@ -507,20 +659,39 @@ function AlarmSection({
           >
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="font-medium">{row.name}</span>
-              <Badge variant="secondary">{row.compareOp}</Badge>
+              <Badge variant="secondary">
+                {row.register?.name ?? row.compareOp}
+              </Badge>
               <span>{row.threshold}</span>
             </div>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void remove(row.id)}
+              onClick={() => {
+                setEditingId(row.id);
+                setName(row.name);
+                setRegisterId(row.register?.id ?? registers[0]?.id ?? '');
+                setCompareOp(row.compareOp);
+                setThreshold(String(row.threshold));
+                setSeverity(row.severity || 'warning');
+                setEnabled(row.enabled);
+              }}
+            >
+              Edit {row.name}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => askDelete(row.name, () => remove(row.id, row.name))}
             >
               <Trash2 />
               {t('delete')} {row.name}
             </Button>
           </div>
         ))}
+        {deleteConfirmDialog}
         <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
           <div className="grid gap-2">
             <Label htmlFor="alarm-name">Name</Label>
@@ -562,15 +733,17 @@ function AlarmSection({
               onChange={(event) => setThreshold(event.target.value)}
             />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="alarm-severity">Severity</Label>
-            <Input
-              id="alarm-severity"
-              aria-label="alarm severity"
-              value={severity}
-              onChange={(event) => setSeverity(event.target.value)}
-            />
-          </div>
+          <AdminSelect
+            label="Severity"
+            ariaLabel="alarm severity"
+            value={severity}
+            onChange={setSeverity}
+            options={[
+              { value: 'info', label: 'info' },
+              { value: 'warning', label: 'warning' },
+              { value: 'critical', label: 'critical' },
+            ]}
+          />
           <div className="flex items-center gap-2">
             <Checkbox
               id={enabledId}
@@ -608,6 +781,9 @@ function SafetySection({
     draft.heartbeatRegisterId ?? roles?.heartbeatRegisterId ?? '';
   const safeStateRegisterId =
     draft.safeStateRegisterId ?? roles?.safeStateRegisterId ?? '';
+  const allowTimedMediaMotion =
+    draft.allowTimedMediaMotion ?? roles?.allowTimedMediaMotion ?? false;
+  const timedId = useId();
   const [note, setNote] = useState<Note | null>(null);
 
   async function submit(event: FormEvent) {
@@ -618,6 +794,7 @@ function SafetySection({
         deadmanRegisterId,
         heartbeatRegisterId,
         safeStateRegisterId,
+        allowTimedMediaMotion,
       });
       await queryClient.invalidateQueries({ queryKey: ['safety-roles'] });
       const success = { ok: true as const, text: 'Saved safety roles.' };
@@ -675,6 +852,20 @@ function SafetySection({
               }))
             }
           />
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id={timedId}
+              aria-label="allow timed media motion"
+              checked={allowTimedMediaMotion}
+              onCheckedChange={(checked) =>
+                setDraft((current) => ({
+                  ...current,
+                  allowTimedMediaMotion: checked === true,
+                }))
+              }
+            />
+            <Label htmlFor={timedId}>{t('allowTimedMedia')}</Label>
+          </div>
           <Button type="submit">
             <Save />
             {t('saveSafety')}
@@ -710,19 +901,23 @@ function RoleSelect({
 }
 
 function ConnectionEditor({
+  connectionId,
   noteKey,
   initial,
   submitLabel,
   note,
   onNote,
   onSubmit,
+  plcHealth,
 }: {
+  connectionId?: string;
   noteKey: string;
   initial: ConnectionInput & { isSimulator: boolean };
   submitLabel: string;
   note?: Note;
   onNote: (note: Note) => void;
   onSubmit: (value: ConnectionInput) => Promise<void>;
+  plcHealth?: PlcHealth | null;
 }) {
   const [label, setLabel] = useState(initial.label);
   const [host, setHost] = useState(initial.host);
@@ -733,9 +928,15 @@ function ConnectionEditor({
   );
   const [enabled, setEnabled] = useState(initial.enabled);
   const usePlcId = useId();
+  const { askConfirm, confirmDialog } = useConfirmDialog();
+  const [busy, setBusy] = useState(false);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  useEffect(() => {
+    setEnabled(initial.enabled);
+  }, [initial.enabled]);
+
+  async function saveConnection() {
+    setBusy(true);
     try {
       await onSubmit({
         label,
@@ -745,24 +946,38 @@ function ConnectionEditor({
         enabled,
         protocol,
       });
-      const success = {
-        ok: true as const,
-        text: enabled ? 'Saved and connecting.' : 'Saved.',
-      };
+      const success = { ok: true as const, text: 'Saved.' };
       onNote(success);
-      toastOk(success.text);
+      toastOk(enabled ? 'Saved. PLC connected.' : 'Saved.');
     } catch (err) {
       const failure = { ok: false as const, text: noteText(err) };
       onNote(failure);
       toastErr(failure.text);
+    } finally {
+      setBusy(false);
     }
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (enabled) {
+      askConfirm(
+        'Use this PLC now?',
+        'Any other connection will be turned off.',
+        'Use this PLC',
+        () => void saveConnection(),
+      );
+      return;
+    }
+    void saveConnection();
   }
 
   return (
     <form
       className="grid gap-4 rounded-lg border p-4"
-      onSubmit={(event) => void submit(event)}
+      onSubmit={submit}
     >
+      {confirmDialog}
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{label || 'New connection'}</span>
         {initial.isSimulator ? (
@@ -830,9 +1045,16 @@ function ConnectionEditor({
         />
         <Label htmlFor={usePlcId}>Use this PLC</Label>
       </div>
+      {connectionId ? (
+        <PlcConnectionStatus
+          connectionId={connectionId}
+          inUse={initial.enabled}
+          health={plcHealth}
+        />
+      ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit">
-          <Save />
+        <Button type="submit" disabled={busy}>
+          {busy ? <Loader2 className="animate-spin" /> : <Save />}
           {submitLabel}
         </Button>
       </div>
@@ -1023,6 +1245,7 @@ function CellEditor({
   );
   const motionId = useId();
   const safeId = useId();
+  const { askDelete, deleteConfirmDialog } = useDeleteConfirmDialog();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -1051,15 +1274,18 @@ function CellEditor({
     }
   }
 
-  async function handleDelete() {
-    try {
-      await onDelete!();
-      toastOk(`Deleted ${label || 'cell'}.`);
-    } catch (err) {
-      const failure = { ok: false as const, text: noteText(err) };
-      onNote(failure);
-      toastErr(failure.text);
-    }
+  function handleDelete() {
+    const target = label || 'cell';
+    askDelete(target, async () => {
+      try {
+        await onDelete!();
+        toastOk(`Deleted ${target}.`);
+      } catch (err) {
+        const failure = { ok: false as const, text: noteText(err) };
+        onNote(failure);
+        toastErr(failure.text);
+      }
+    });
   }
 
   return (
@@ -1153,17 +1379,18 @@ function CellEditor({
           {submitLabel === 'Add cell' ? <Plus /> : <Save />}
           {submitLabel}
         </Button>
-        {onDelete ? (
+        {onDelete && !isProtectedStopCell(style, label) ? (
           <Button
             type="button"
             variant="outline"
-            onClick={() => void handleDelete()}
+            onClick={() => handleDelete()}
           >
             <Trash2 />
             Delete {label || 'cell'}
           </Button>
         ) : null}
       </div>
+      {deleteConfirmDialog}
       <StatusNote note={note} />
     </form>
   );
@@ -1201,6 +1428,7 @@ function OverlayEditor({
   const [yPct, setYPct] = useState(String(initial.yPct));
   const [format, setFormat] = useState(initial.format);
   const [registerId, setRegisterId] = useState(initial.registerId);
+  const { askDelete, deleteConfirmDialog } = useDeleteConfirmDialog();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -1225,15 +1453,18 @@ function OverlayEditor({
     }
   }
 
-  async function handleDelete() {
-    try {
-      await onDelete!();
-      toastOk(`Deleted ${label || 'label'}.`);
-    } catch (err) {
-      const failure = { ok: false as const, text: noteText(err) };
-      onNote(failure);
-      toastErr(failure.text);
-    }
+  function handleDelete() {
+    const target = label || 'label';
+    askDelete(target, async () => {
+      try {
+        await onDelete!();
+        toastOk(`Deleted ${target}.`);
+      } catch (err) {
+        const failure = { ok: false as const, text: noteText(err) };
+        onNote(failure);
+        toastErr(failure.text);
+      }
+    });
   }
 
   return (
@@ -1295,13 +1526,14 @@ function OverlayEditor({
           <Button
             type="button"
             variant="outline"
-            onClick={() => void handleDelete()}
+            onClick={() => handleDelete()}
           >
             <Trash2 />
             Delete {label || 'label'}
           </Button>
         ) : null}
       </div>
+      {deleteConfirmDialog}
       <StatusNote note={note} />
     </form>
   );

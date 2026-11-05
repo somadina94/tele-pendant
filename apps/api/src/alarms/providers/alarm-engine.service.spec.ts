@@ -74,6 +74,7 @@ describe('AlarmEngineService', () => {
       registers as never,
       plcService as never,
       gateway as never,
+      { write: jest.fn().mockResolvedValue({}) } as never,
     );
   });
 
@@ -147,17 +148,40 @@ describe('AlarmEngineService', () => {
     );
   });
 
-  it('does not clear shelved alarms on recover', async () => {
+  it('unshelves a shelved alarm and rejects others', async () => {
+    events.findOneByOrFail.mockResolvedValueOnce({
+      id: 'e1',
+      state: 'active',
+      definition: { id: 'd1' },
+    });
+    await expect(service.unshelve('e1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    events.findOneByOrFail.mockResolvedValueOnce({
+      id: 'e1',
+      state: 'shelved',
+      definition: { id: 'd1' },
+    });
+    await expect(
+      service.unshelve('e1', { userEmail: 'a@b.c' }),
+    ).resolves.toEqual(expect.objectContaining({ state: 'active' }));
+    events.findOneByOrFail.mockResolvedValueOnce({
+      id: 'e2',
+      state: 'shelved',
+    });
+    await service.unshelve('e2');
+    expect(events.save).toHaveBeenCalled();
+  });
+
+  it('clears shelved alarms when the condition recovers', async () => {
     driver.readCoils.mockResolvedValue([true]);
     await service.evaluate();
-    const savesBefore = events.save.mock.calls.length;
     driver.readCoils.mockResolvedValue([false]);
     events.findOne.mockResolvedValue({ id: 'e1', state: 'shelved' });
     await service.evaluate();
-    const cleared = events.save.mock.calls
-      .slice(savesBefore)
-      .some((c) => c[0]?.state === 'cleared');
-    expect(cleared).toBe(false);
+    expect(events.save).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'cleared' }),
+    );
   });
 
   it('ignores missing event rows when recovering', async () => {

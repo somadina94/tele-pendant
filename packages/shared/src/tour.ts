@@ -34,7 +34,6 @@ export function tourStepsFor(screen: TourScreen): string[] {
         'tour.media.camera',
         'tour.media.qr',
         'tour.media.voice',
-        'tour.media.upDown',
       ];
     case 'ops':
       return [
@@ -56,6 +55,7 @@ export function tourStepsFor(screen: TourScreen): string[] {
         'tour.config.cells',
         'tour.config.labels',
         'tour.config.background',
+        'tour.config.codes',
         'tour.config.alarms',
         'tour.config.safety',
       ];

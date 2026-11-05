@@ -31,6 +31,18 @@ export { tourStepsFor } from './tour';
 export type { TourScreen } from './tour';
 export { ASSISTANT_SUGGESTION_GROUPS } from './assistant-suggestions';
 export type { SuggestionGroup } from './assistant-suggestions';
+export {
+  OPERATOR_ROUTES,
+  SUPERVISOR_ROUTES,
+  canAccessAppRoute,
+  canEditAssistantSettings,
+  canManageScanCodes,
+  canManageUsers,
+  canShelveAlarms,
+  configSectionIdsForRole,
+  isUserRole,
+} from './roles';
+export type { AppRoute, OperatorRoute, SupervisorRoute } from './roles';
 
 export const WS_EVENTS = {
   TAGS_UPDATE: 'tags.update',

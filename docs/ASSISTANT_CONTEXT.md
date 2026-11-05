@@ -6,7 +6,7 @@ Advisory only — never issue PLC writes, motion, e-stop, or safe-state commands
 
 - Operator screen: NxM cell matrix. Each cell can bind primary / feedback / status PLC registers (read/write coils or holdings via Modbus TCP).
 - Motion cells need an active deadman hold; release stops motion (**software supervision of the HMI path — not a SIL/PL replacement**).
-- Safe-action cells (e.g. e-stop) need the supervisor safe-action PIN (never face auth).
+- **STOP** is one press and does not ask for a PIN. The reset PIN clears e-stop only. Face auth never authorizes either.
 - Plant graphic: static background with overlay labels showing live tag values (same register model as cells).
 
 ## Safety supervision

@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DEMO_CRANE_MAP } from '@tele-pendant/modbus-core';
 import { Repository } from 'typeorm';
@@ -6,6 +6,7 @@ import { AuditService } from '../../audit/providers/audit.service';
 import { Cell } from '../../cells/entities/cell.entity';
 import { PlcService } from '../../plc/providers/plc.service';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
+import { AuditActor, auditWriteFields } from '../../common/audit-actor';
 import { SafetyRoles } from '../entities/safety-roles.entity';
 
 export type SafetyMode = 'normal' | 'safe_state' | 'e_stop' | 'comms_lost';
@@ -15,6 +16,7 @@ export interface SafetySnapshot {
   deadmanActive: boolean;
   eStopActive: boolean;
   watchdogOk: boolean;
+  allowTimedMediaMotion: boolean;
   lastHeartbeatAt: string | null;
   lastClientPulseAt: string | null;
 }
@@ -33,6 +35,7 @@ export class SafetyStateService {
   private lastClientPulseAt: Date | null = null;
   private readonly watchdogTimeoutMs = 2000;
   private readonly deadmanTimeoutMs = 1500;
+  private allowTimedMedia = false;
 
   private readonly plcService: PlcService;
   private readonly auditService: AuditService;
@@ -65,13 +68,63 @@ export class SafetyStateService {
     deadmanRegisterId?: string | null;
     heartbeatRegisterId?: string | null;
     safeStateRegisterId?: string | null;
+    allowTimedMediaMotion?: boolean;
   }): Promise<SafetyRoles> {
     const row = await this.getRoles();
     row.eStopRegisterId = input.eStopRegisterId || null;
     row.deadmanRegisterId = input.deadmanRegisterId || null;
     row.heartbeatRegisterId = input.heartbeatRegisterId || null;
     row.safeStateRegisterId = input.safeStateRegisterId || null;
+    if (input.allowTimedMediaMotion !== undefined) {
+      row.allowTimedMediaMotion = input.allowTimedMediaMotion;
+      this.allowTimedMedia = input.allowTimedMediaMotion;
+    }
     return this.roles.save(row);
+  }
+
+  async allowTimedMediaMotion(): Promise<boolean> {
+    const row = await this.getRoles();
+    this.allowTimedMedia = Boolean(row.allowTimedMediaMotion);
+    return this.allowTimedMedia;
+  }
+
+  /**
+   * Drop the software e-stop coil. Requires the plant PIN.
+   * Asserting STOP itself does not use the PIN.
+   */
+  async resetEStop(
+    pin: string,
+    actor?: AuditActor,
+  ): Promise<SafetySnapshot> {
+    const expected = (process.env.SAFE_ACTION_PIN || '').trim();
+    const provided = pin.trim();
+    if (!expected || !provided || provided !== expected) {
+      await this.auditService.write({
+        ...auditWriteFields(actor),
+        action: 'safety.reset_denied',
+        resource: 'e-stop',
+        result: 'failure',
+      });
+      throw new ForbiddenException('PIN does not match');
+    }
+    const driver = this.plcService.getDriver();
+    const address = await this.roleAddress(
+      'eStopRegisterId',
+      'coil.eStop',
+      DEMO_CRANE_MAP.coils.eStop,
+    );
+    if (driver.isConnected()) {
+      await driver.writeCoil(address, false);
+    }
+    this.eStopActive = false;
+    if (this.mode === 'e_stop') this.mode = 'normal';
+    await this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'safety.reset',
+      resource: 'e-stop',
+      result: 'success',
+    });
+    return this.snapshot();
   }
 
   private async roleAddress(
@@ -98,6 +151,7 @@ export class SafetyStateService {
       deadmanActive: this.deadmanActive,
       eStopActive: this.eStopActive,
       watchdogOk: this.watchdogOk,
+      allowTimedMediaMotion: this.allowTimedMedia,
       lastHeartbeatAt: this.lastHeartbeatAt?.toISOString() ?? null,
       lastClientPulseAt: this.lastClientPulseAt?.toISOString() ?? null,
     };
@@ -123,6 +177,13 @@ export class SafetyStateService {
     );
   }
 
+  /** Latch software e-stop after operator STOP until resetEStop(). */
+  async latchOperatorEStop(reason = 'Operator STOP'): Promise<SafetySnapshot> {
+    this.eStopActive = true;
+    await this.enterMode('e_stop', reason);
+    return this.snapshot();
+  }
+
   async tick(): Promise<SafetySnapshot> {
     const driver = this.plcService.getDriver();
     if (!driver.isConnected()) {
@@ -132,15 +193,21 @@ export class SafetyStateService {
     }
 
     try {
+      const roles = await this.getRoles();
+      this.allowTimedMedia = Boolean(roles.allowTimedMediaMotion);
       const eStopAddress = await this.roleAddress(
         'eStopRegisterId',
         'coil.eStop',
         DEMO_CRANE_MAP.coils.eStop,
       );
       const coils = await driver.readCoils(eStopAddress, 1);
-      this.eStopActive = Boolean(coils[0]);
-      if (this.eStopActive) {
+      const coilHigh = Boolean(coils[0]);
+      this.eStopActive = coilHigh || this.mode === 'e_stop';
+      if (coilHigh) {
         await this.enterMode('e_stop', 'E-stop coil asserted');
+        return this.snapshot();
+      }
+      if (this.mode === 'e_stop') {
         return this.snapshot();
       }
 

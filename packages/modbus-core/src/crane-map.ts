@@ -17,6 +17,7 @@ export const DEMO_CRANE_MAP = {
     hoistHeightMm: 0,
     loadKg: 1,
     speedPct: 2,
+    trolleyPosition: 3,
     heartbeat: 10,
     safeState: 11,
   },

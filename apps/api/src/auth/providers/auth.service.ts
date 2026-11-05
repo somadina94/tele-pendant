@@ -34,6 +34,7 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: UserRole;
+  displayName?: string | null;
 }
 
 /**
@@ -107,6 +108,7 @@ export class AuthService implements OnModuleInit {
       sub: user.id,
       email: user.email,
       role: user.role,
+      displayName: user.displayName ?? null,
     };
     return this.jwtService.signAsync(payload);
   }
@@ -130,6 +132,7 @@ export class AuthService implements OnModuleInit {
       await this.auditService.write({
         userId: user.id,
         userEmail: user.email,
+        userDisplayName: user.displayName ?? null,
         action: 'auth.login',
         ip,
         result: 'success',
@@ -175,6 +178,7 @@ export class AuthService implements OnModuleInit {
     await this.auditService.write({
       userId: user.id,
       userEmail: user.email,
+      userDisplayName: user.displayName ?? null,
       action: 'auth.face_enroll',
       details: input.frames?.length
         ? `challenge_frames=${input.frames.length}`
@@ -229,6 +233,7 @@ export class AuthService implements OnModuleInit {
       await this.auditService.write({
         userId: best.user.id,
         userEmail: best.user.email,
+        userDisplayName: best.user.displayName ?? null,
         action: 'auth.face_login',
         details: `score=${best.score.toFixed(3)};challenge=${Boolean(input.frames?.length)}`,
         ip,

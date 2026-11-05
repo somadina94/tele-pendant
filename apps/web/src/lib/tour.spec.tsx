@@ -180,7 +180,10 @@ describe('tour helpers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'prev' }));
     expect(screen.getByTestId('index')).toHaveTextContent('0');
     fireEvent.click(screen.getByRole('button', { name: 'next' }));
-    fireEvent.click(screen.getByRole('button', { name: 'stop' }));
+    const steps = tourStepsFor('operator');
+    for (let i = 0; i < steps.length; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'next' }));
+    }
     expect(screen.getByTestId('active')).toHaveTextContent('false');
   });
 

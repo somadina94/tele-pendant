@@ -143,14 +143,18 @@ export function TourToggle() {
   const { enabled, setEnabled } = useTour();
   const { t } = useT();
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5 md:gap-2">
       <Switch
         id="tour-toggle"
         checked={enabled}
         onCheckedChange={setEnabled}
         aria-label={t('tour.toggle')}
+        className="scale-90 md:scale-100"
       />
-      <Label htmlFor="tour-toggle" className="text-xs text-muted-foreground">
+      <Label
+        htmlFor="tour-toggle"
+        className="hidden text-xs text-muted-foreground md:inline"
+      >
         {t('tour.toggle')}
       </Label>
     </div>
@@ -161,16 +165,19 @@ export function PageTourBar({ screen }: { screen: TourScreen }) {
   const { enabled, startWalkthrough } = useTour();
   const { t } = useT();
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex items-center gap-0.5 sm:gap-1.5 md:gap-2">
       <TourToggle />
       {enabled ? (
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="size-8 shrink-0 p-0 sm:h-9 sm:w-auto sm:px-3"
+          aria-label={t('tour.start')}
           onClick={() => startWalkthrough(screen)}
         >
-          {t('tour.start')}
+          <CircleHelp className="size-4 sm:hidden" aria-hidden />
+          <span className="hidden sm:inline">{t('tour.start')}</span>
         </Button>
       ) : null}
       <WalkthroughOverlay screen={screen} />
@@ -196,13 +203,13 @@ export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
     >
       <div>{children}</div>
       <TooltipProvider>
-        <Tooltip open={open || highlighted} onOpenChange={setOpen}>
+        <Tooltip open={highlighted ? false : open} onOpenChange={setOpen}>
           <TooltipTrigger asChild>
             <Button
               type="button"
               variant="secondary"
               size="icon"
-              className="absolute -right-2 -top-2 z-10 size-6 rounded-full"
+              className="absolute -right-1 -top-1 z-10 size-8 min-h-8 min-w-8 rounded-full md:-right-2 md:-top-2 md:size-6 md:min-h-0 md:min-w-0"
               aria-label={`Help: ${id}`}
               onClick={() => setOpen((v) => !v)}
             >
@@ -261,26 +268,24 @@ export function WalkthroughOverlay({ screen }: { screen: TourScreen }) {
           <p className="text-sm leading-relaxed">{t(currentStepId)}</p>
         </CardContent>
         <CardFooter className="justify-end gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={prevStep}
-            disabled={stepIndex === 0}
-          >
-            {t('tour.back')}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={stopWalkthrough}
-          >
+          {stepIndex > 0 ? (
+            <Button type="button" variant="ghost" size="sm" onClick={prevStep}>
+              {t('tour.back')}
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" onClick={stopWalkthrough}>
             {t('tour.done')}
           </Button>
-          <Button type="button" size="sm" onClick={nextStep}>
-            {last ? t('tour.done') : t('tour.next')}
-          </Button>
+          {last ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={nextStep}
+            >
+              {t('tour.next')}
+            </Button>
+          )}
         </CardFooter>
       </Card>
     </div>

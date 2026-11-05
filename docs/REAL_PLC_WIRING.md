@@ -96,7 +96,7 @@ For each row: set **Address** → **Save**. Success: **Saved** plus that name.
 7. Open **Operator**. With the machine in a safe state and permission to move:
    - Confirm banners / height tags update.
    - Hold **Hoist Up** only when allowed; release should drop deadman.
-   - **STOP** still needs **SAFE_ACTION_PIN** (env value), then latches software e-stop supervision.
+   - **STOP** is one press and latches software e-stop. **Reset e-stop** asks for `SAFE_ACTION_PIN`.
 
 8. **Hardwired e-stop** on the real crane clears when the safety system resets (mushroom out + machine reset). Docker restart only clears the **simulator**.
 

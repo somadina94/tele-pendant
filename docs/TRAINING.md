@@ -8,7 +8,7 @@ Live demo hosts: web https://tele-pendant.jahbyte.com · API/Swagger https://api
 2. Login + roles (operator / supervisor / admin)
 3. Operator matrix + deadman hold practice
 4. Overlays and safety banner meanings
-5. E-stop / safe-action PIN (supervisor)
+5. E-stop is one press; the reset PIN only clears it
 
 ## Session 2 (30 min)
 

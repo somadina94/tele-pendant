@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert } from 'lucide-react';
 import { apiGet, apiPost, CellDto, HmiLayout, LiveTags } from '../lib/api';
@@ -19,12 +19,40 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
+function pointerLeftElement(
+  element: Element,
+  clientX: number,
+  clientY: number,
+): boolean {
+  const rect = element.getBoundingClientRect();
+  return (
+    clientX < rect.left ||
+    clientX > rect.right ||
+    clientY < rect.top ||
+    clientY > rect.bottom
+  );
+}
+
+function releasePointerIfCaptured(
+  target: HTMLElement,
+  pointerId: number,
+): void {
+  if (
+    typeof target.releasePointerCapture === 'function' &&
+    typeof target.hasPointerCapture === 'function' &&
+    target.hasPointerCapture(pointerId)
+  ) {
+    target.releasePointerCapture(pointerId);
+  }
+}
+
 export function OperatorPage() {
   const queryClient = useQueryClient();
   const { t, terror } = useT();
   const [tags, setTags] = useState<LiveTags | null>(null);
   const [safety, setSafety] = useState<HmiLayout['safety'] | null>(null);
   const [holdingCellId, setHoldingCellId] = useState<string | null>(null);
+  const heldRef = useRef<string | null>(null);
   const [safePin, setSafePin] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [photoOk, setPhotoOk] = useState(true);
@@ -36,7 +64,12 @@ export function OperatorPage() {
 
   useEffect(() => {
     const socket = getRealtimeSocket();
-    const onTags = (payload: LiveTags) => setTags(payload);
+    const onTags = (payload: LiveTags) =>
+      setTags((prev) => ({
+        ...prev,
+        ...payload,
+        values: { ...prev?.values, ...payload.values },
+      }));
     const onSafety = (payload: HmiLayout['safety']) => setSafety(payload);
     socket.on('tags.update', onTags);
     socket.on('safety.state', onSafety);
@@ -99,31 +132,84 @@ export function OperatorPage() {
   async function pressCell(cell: CellDto) {
     setMessage(null);
     if (cell.isMotion) {
-      pulseDeadman();
+      heldRef.current = cell.id;
       setHoldingCellId(cell.id);
+      pulseDeadman();
     }
     try {
-      await activate.mutateAsync({
-        id: cell.id,
-        value: true,
-        safeActionPin: cell.requiresSafeAction
-          ? safePin || undefined
-          : undefined,
-      });
+      await activate.mutateAsync({ id: cell.id, value: true });
     } catch {
-      setHoldingCellId(null);
-      releaseDeadman();
+      if (heldRef.current === cell.id) {
+        heldRef.current = null;
+        setHoldingCellId(null);
+        releaseDeadman();
+      }
     }
   }
 
   async function releaseCell(cell: CellDto) {
-    if (cell.isMotion) {
-      try {
-        await activate.mutateAsync({ id: cell.id, value: false });
-      } finally {
-        setHoldingCellId(null);
-        releaseDeadman();
-      }
+    if (!cell.isMotion) return;
+    const mine = heldRef.current === cell.id;
+    if (heldRef.current === cell.id) heldRef.current = null;
+    setHoldingCellId((current) => (current === cell.id ? null : current));
+    if (!mine) return;
+    releaseDeadman();
+    try {
+      await activate.mutateAsync({ id: cell.id, value: false });
+    } catch {
+      // The coil drop is best-effort. The hold indicator is already clear.
+    }
+  }
+
+  function finishCellPointer(
+    cell: CellDto,
+    target: HTMLElement,
+    pointerId: number,
+  ) {
+    releasePointerIfCaptured(target, pointerId);
+    void releaseCell(cell);
+  }
+
+  useEffect(() => {
+    const dropHeld = () => {
+      const id = heldRef.current;
+      if (!id) return;
+      const cell = layoutQuery.data?.cells.find((row) => row.id === id);
+      heldRef.current = null;
+      setHoldingCellId(null);
+      releaseDeadman();
+      if (!cell?.isMotion) return;
+      void apiPost(`/hmi/cells/${id}/activate`, { value: false }).catch(
+        () => undefined,
+      );
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') dropHeld();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', dropHeld);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', dropHeld);
+    };
+  }, [layoutQuery.data?.cells, releaseDeadman]);
+
+  useEffect(() => {
+    const modeNow = safety?.mode ?? layoutQuery.data?.safety.mode;
+    if (heldRef.current) return;
+    if (modeNow === 'normal' && !safety?.eStopActive) {
+      setMessage((current) =>
+        current && /motion blocked/i.test(current) ? null : current,
+      );
+    }
+  }, [safety, layoutQuery.data]);
+
+  async function resetEStop() {
+    setMessage(null);
+    try {
+      await apiPost('/safety/reset', { pin: safePin });
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'PIN does not match');
     }
   }
 
@@ -141,9 +227,9 @@ export function OperatorPage() {
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col gap-2 md:gap-3">
+    <div className="operator-shell mx-auto flex w-full max-w-5xl flex-col gap-1.5 md:h-full md:min-h-0 md:gap-3">
       <HelpTip id="tour.operator.banner">
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-1.5">
           <ShieldAlert className="size-4 text-muted-foreground" />
           <span className="text-sm">
             {t('safety')}: <strong>{mode}</strong>
@@ -152,7 +238,9 @@ export function OperatorPage() {
             <Badge variant="secondary">{t('deadmanHold')}</Badge>
           ) : null}
           {safety?.eStopActive ? (
-            <Badge variant="destructive">{t('estop')}</Badge>
+            <Badge variant="destructive" className="estop-mark">
+              {t('estop')}
+            </Badge>
           ) : null}
         </div>
       </HelpTip>
@@ -179,7 +267,12 @@ export function OperatorPage() {
             <h2 className="plant-cluster-title">
               {layout?.background?.name ?? t('plantGraphic')}
             </h2>
-            <div className="plant-cluster-status">
+            <div
+              className={cn(
+                'plant-cluster-status',
+                safety?.eStopActive && 'estop-mark',
+              )}
+            >
               <span
                 className={cn(
                   'plant-cluster-status-dot',
@@ -226,7 +319,7 @@ export function OperatorPage() {
               <span className="plant-metric-unit">kg</span>
             </div>
             <div className="plant-metric">
-              <span className="plant-metric-label">Drive</span>
+              <span className="plant-metric-label">Motor</span>
               <span className="plant-metric-value">
                 {tags?.motorRunning ? 'RUN' : 'IDLE'}
               </span>
@@ -236,22 +329,37 @@ export function OperatorPage() {
         </div>
       </HelpTip>
 
-      <Card className="min-h-0 flex-1 overflow-auto">
-        <CardHeader className="space-y-1 px-4 py-3">
+      <Card className="min-h-0 shrink overflow-visible md:flex-1 md:overflow-auto">
+        <CardHeader className="hidden space-y-0 px-4 py-2 md:block md:space-y-1 md:py-3">
           <CardTitle className="text-base">{t('controlMatrix')}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 px-4 pb-4 pt-0">
+        <CardContent className="space-y-1 px-2 pb-2 pt-2 md:space-y-2 md:px-4 md:pb-4 md:pt-0">
           <HelpTip id="tour.operator.safePin">
-            <div className="grid max-w-xs gap-1.5">
-              <Label htmlFor="safe-pin">{t('safePin')}</Label>
+            <div className="grid max-w-md grid-cols-1 gap-1 max-md:grid-cols-[1fr_auto] max-md:items-center md:max-w-xs md:gap-1.5">
+              <Label
+                htmlFor="safe-pin"
+                className="text-xs max-md:col-span-2 md:text-base"
+              >
+                {t('safePin')}
+              </Label>
               <Input
                 id="safe-pin"
+                className="h-12 min-h-12 md:h-10 md:min-h-10"
                 value={safePin}
                 onChange={(e) => setSafePin(e.target.value)}
                 type="password"
-                placeholder="SAFE_ACTION_PIN"
+                placeholder={t('safePin')}
                 autoComplete="off"
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-12 min-h-12 shrink-0 px-2 text-xs md:h-10 md:min-h-10 md:px-4 md:text-sm"
+                onClick={() => void resetEStop()}
+              >
+                {t('resetEstop')}
+              </Button>
             </div>
           </HelpTip>
           <HelpTip id="tour.operator.matrix">
@@ -270,26 +378,66 @@ export function OperatorPage() {
                       cell.style === 'estop' ? 'destructive' : 'secondary'
                     }
                     className={cn(
-                      'matrix-cell h-auto whitespace-normal',
+                      'matrix-cell h-auto',
                       holdingCellId === cell.id && 'holding',
                       cell.style === 'estop' && 'estop',
                     )}
                     onPointerDown={(e) => {
                       e.preventDefault();
+                      if (
+                        typeof e.currentTarget.setPointerCapture === 'function'
+                      ) {
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                      }
                       void pressCell(cell);
                     }}
-                    onPointerUp={() => void releaseCell(cell)}
-                    onPointerLeave={() => {
-                      if (holdingCellId === cell.id) void releaseCell(cell);
+                    onPointerMove={(e) => {
+                      if (heldRef.current !== cell.id || !cell.isMotion) return;
+                      if (
+                        pointerLeftElement(
+                          e.currentTarget,
+                          e.clientX,
+                          e.clientY,
+                        )
+                      ) {
+                        finishCellPointer(
+                          cell,
+                          e.currentTarget,
+                          e.pointerId,
+                        );
+                      }
                     }}
-                    onPointerCancel={() => {
-                      if (holdingCellId === cell.id) void releaseCell(cell);
+                    onPointerUp={(e) =>
+                      finishCellPointer(
+                        cell,
+                        e.currentTarget,
+                        e.pointerId,
+                      )
+                    }
+                    onPointerLeave={(e) =>
+                      finishCellPointer(
+                        cell,
+                        e.currentTarget,
+                        e.pointerId,
+                      )
+                    }
+                    onPointerCancel={(e) =>
+                      finishCellPointer(
+                        cell,
+                        e.currentTarget,
+                        e.pointerId,
+                      )
+                    }
+                    onLostPointerCapture={() => {
+                      if (heldRef.current === cell.id && cell.isMotion) {
+                        void releaseCell(cell);
+                      }
                     }}
                     aria-label={cell.label}
                   >
-                    <span className="block font-semibold">{cell.label}</span>
+                    <span className="matrix-cell-label">{cell.label}</span>
                     {(cell.feedbackRegister || cell.statusRegister) && (
-                      <span className="mt-1 block text-[10px] font-normal leading-tight opacity-80">
+                      <span className="matrix-cell-meta">
                         {cell.feedbackRegister
                           ? `F ${String(
                               tagValueForRegister(
@@ -313,13 +461,19 @@ export function OperatorPage() {
                     )}
                   </Button>
                 ) : (
-                  <div key={`empty-${idx}`} className="min-h-14 md:min-h-16" />
+                  <div
+                    key={`empty-${idx}`}
+                    className="matrix-grid-hole min-h-11 md:min-h-16"
+                    aria-hidden
+                  />
                 ),
               )}
             </div>
           </HelpTip>
           <HelpTip id="tour.operator.holdHint">
-            <p className="text-xs text-muted-foreground">{t('holdHint')}</p>
+            <p className="hidden text-xs text-muted-foreground md:block">
+              {t('holdHint')}
+            </p>
           </HelpTip>
         </CardContent>
       </Card>

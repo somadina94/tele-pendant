@@ -1,5 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class SaveSafetyRolesDto {
   @ApiPropertyOptional()
@@ -21,4 +21,15 @@ export class SaveSafetyRolesDto {
   @IsOptional()
   @IsString()
   safeStateRegisterId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowTimedMediaMotion?: boolean;
+}
+
+export class ResetEStopDto {
+  @ApiProperty()
+  @IsString()
+  pin!: string;
 }

@@ -242,7 +242,7 @@ export class AssistantService implements OnModuleInit {
       answer: ftsAnswer,
       hits,
       mode: 'local-fts' as const,
-      note: 'FTS retrieval only — set CURSOR_API_KEY for Cursor Agent answers.',
+      note: 'Answers are from the local manuals.',
     };
 
     const apiKey = this.cursorApiKey();

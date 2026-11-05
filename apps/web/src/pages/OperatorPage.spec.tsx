@@ -183,6 +183,7 @@ describe('OperatorPage', () => {
       fault: false,
       commsOk: true,
       at: '',
+      values: { 'holding.hoistHeightMm': 100 },
     });
     safetyHandler({
       mode: 'normal',
@@ -192,12 +193,30 @@ describe('OperatorPage', () => {
     });
     expect(await screen.findByText(/E-STOP/)).toBeInTheDocument();
     expect(await screen.findByText(/F 100/)).toBeInTheDocument();
+    tagsHandler({
+      hoistHeightMm: 110,
+      loadKg: 5,
+      speedPct: 1,
+      motorRunning: true,
+      fault: false,
+      commsOk: true,
+      at: '',
+      values: { 'holding.hoistHeightMm': 110 },
+    });
+    expect(await screen.findByText(/F 110/)).toBeInTheDocument();
     expect(screen.getByText(/S RUN/)).toBeInTheDocument();
     expect(screen.getByText(/F 5/)).toBeInTheDocument();
     expect(screen.getByText(/S —/)).toBeInTheDocument();
 
     const hoist = screen.getByRole('button', { name: 'Hoist Up' });
+    HTMLElement.prototype.setPointerCapture = vi.fn();
     fireEvent.pointerDown(hoist);
+    safetyHandler({
+      mode: 'safe_state',
+      deadmanActive: true,
+      eStopActive: false,
+      watchdogOk: true,
+    });
     await waitFor(() => expect(api.apiPost).toHaveBeenCalled());
     // holding interval path + cleanup on release
     await new Promise((r) => setTimeout(r, 450));
@@ -207,22 +226,42 @@ describe('OperatorPage', () => {
     expect(socket.emit).toHaveBeenCalledWith('deadman.pulse');
 
     fireEvent.pointerDown(screen.getByRole('button', { name: 'STOP' }));
+    fireEvent.pointerUp(screen.getByRole('button', { name: 'STOP' }));
     await waitFor(() =>
       expect(api.apiPost).toHaveBeenCalledWith(
         '/hmi/cells/s1/activate',
         expect.objectContaining({ safeActionPin: undefined }),
       ),
     );
-    fireEvent.change(screen.getByPlaceholderText('SAFE_ACTION_PIN'), {
+    fireEvent.change(screen.getByPlaceholderText('Reset PIN'), {
       target: { value: '1234' },
     });
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'STOP' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset e-stop' }));
     await waitFor(() =>
-      expect(api.apiPost).toHaveBeenCalledWith(
-        '/hmi/cells/s1/activate',
-        expect.objectContaining({ safeActionPin: '1234' }),
-      ),
+      expect(api.apiPost).toHaveBeenCalledWith('/safety/reset', {
+        pin: '1234',
+      }),
     );
+    vi.spyOn(api, 'apiPost').mockRejectedValueOnce(new Error('bad pin'));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset e-stop' }));
+    expect(await screen.findByText('bad pin')).toBeInTheDocument();
+    safetyHandler({
+      mode: 'normal',
+      deadmanActive: false,
+      eStopActive: false,
+      watchdogOk: true,
+    });
+    expect(screen.getByText('bad pin')).toBeInTheDocument();
+    vi.spyOn(api, 'apiPost').mockRejectedValueOnce('nope');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset e-stop' }));
+    expect(await screen.findByText('PIN does not match')).toBeInTheDocument();
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    fireEvent.pointerDown(hoist);
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('pagehide'));
   });
 
   it('handles activate failure and logout', async () => {
@@ -235,7 +274,7 @@ describe('OperatorPage', () => {
     });
     vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
       if (String(path).includes('/hmi/cells/')) {
-        throw new Error('blocked');
+        throw new Error('Motion blocked');
       }
       return { ok: true };
     });
@@ -250,7 +289,19 @@ describe('OperatorPage', () => {
       screen.queryByRole('img', { name: 'Plant background' }),
     ).not.toBeInTheDocument();
     fireEvent.pointerDown(hoist);
-    expect(await screen.findByText('blocked')).toBeInTheDocument();
+    expect(await screen.findByText('Motion blocked')).toBeInTheDocument();
+    const safetyHandler = socket.on.mock.calls.find(
+      (c) => c[0] === 'safety.state',
+    )?.[1] as (p: unknown) => void;
+    safetyHandler({
+      mode: 'normal',
+      deadmanActive: false,
+      eStopActive: false,
+      watchdogOk: true,
+    });
+    await waitFor(() =>
+      expect(screen.queryByText('Motion blocked')).not.toBeInTheDocument(),
+    );
     await waitFor(() =>
       expect(socket.emit).toHaveBeenCalledWith('deadman.release'),
     );
@@ -283,7 +334,87 @@ describe('OperatorPage', () => {
     expect(await screen.findByText('Plant graphic')).toBeInTheDocument();
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
     await waitFor(() =>
-      expect(container.querySelectorAll('.min-h-14').length).toBeGreaterThan(0),
+      expect(container.querySelectorAll('.min-h-11').length).toBeGreaterThan(0),
     );
+  });
+
+  it('releases a motion cell if the pointer is up before the press returns', async () => {
+    let finishPress: (value: unknown) => void = () => undefined;
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path, body) => {
+      const value = (body as { value?: boolean } | undefined)?.value;
+      if (String(path).includes('/activate') && value) {
+        return new Promise((resolve) => {
+          finishPress = resolve;
+        });
+      }
+      if (String(path).includes('/activate')) {
+        return { ok: false };
+      }
+      return { ok: true };
+    });
+    renderWithProviders(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist);
+    fireEvent.pointerUp(hoist);
+    finishPress({ ok: true });
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: false }),
+      ),
+    );
+  });
+
+  it('stops motion when the pointer leaves the button while captured', async () => {
+    vi.spyOn(api, 'apiPost').mockResolvedValue({ ok: true });
+    renderWithProviders(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+    HTMLElement.prototype.hasPointerCapture = vi.fn().mockReturnValue(true);
+    hoist.getBoundingClientRect = () =>
+      ({
+        left: 100,
+        top: 100,
+        right: 200,
+        bottom: 200,
+        width: 100,
+        height: 100,
+      }) as DOMRect;
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: true }),
+      ),
+    );
+    fireEvent.pointerMove(hoist, { clientX: 250, clientY: 150 });
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: false }),
+      ),
+    );
+  });
+
+  it('keeps the screen calm when releasing a coil fails', async () => {
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path, body) => {
+      const value = (body as { value?: boolean } | undefined)?.value;
+      if (String(path).includes('/activate') && value === false) {
+        throw new Error('release failed');
+      }
+      return { ok: true };
+    });
+    renderWithProviders(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist);
+    fireEvent.pointerUp(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: false }),
+      ),
+    );
+    expect(hoist).toHaveTextContent('Hoist Up');
   });
 });

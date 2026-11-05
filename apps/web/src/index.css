@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import 'react-day-picker/style.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -132,7 +133,7 @@
 
 /* HMI plant graphic — digital instrument cluster */
 .plant-graphic {
-  @apply relative isolate h-[30svh] max-h-[280px] min-h-[160px] w-full overflow-hidden rounded-2xl border border-white/10 md:h-[36svh] md:max-h-[340px];
+  @apply relative isolate h-[9.5rem] max-h-[9.5rem] min-h-0 w-full overflow-hidden rounded-xl border border-white/10 md:h-[36svh] md:max-h-[340px] md:min-h-[160px] md:rounded-2xl;
   background:
     radial-gradient(120% 80% at 50% 110%, rgba(120, 160, 190, 0.18), transparent 55%),
     radial-gradient(90% 70% at 50% -10%, rgba(255, 255, 255, 0.08), transparent 50%),
@@ -190,7 +191,7 @@
   box-shadow: 0 0 8px rgba(251, 113, 133, 0.75);
 }
 .plant-overlay-stage {
-  @apply absolute inset-x-0 bottom-[5.75rem] top-11 z-[10] overflow-hidden md:bottom-[6.25rem] md:top-12;
+  @apply absolute inset-x-0 bottom-[5.75rem] top-11 z-[10] hidden overflow-hidden md:bottom-[6.25rem] md:top-12 md:block;
 }
 .plant-overlay {
   @apply absolute z-10 flex min-w-[4.5rem] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-white/18 bg-black/70 px-2.5 py-1.5 text-center shadow-[0_8px_20px_rgba(0,0,0,0.35)];
@@ -202,10 +203,10 @@
   @apply font-mono text-sm font-semibold tabular-nums tracking-wide text-white md:text-base;
 }
 .plant-readout {
-  @apply absolute inset-x-0 bottom-0 z-20 grid grid-cols-3 gap-px border-t border-white/10 bg-[#07090c]/95 px-1 pb-2.5 pt-2 md:px-2 md:pb-3 md:pt-2.5;
+  @apply absolute inset-x-0 bottom-0 z-20 grid grid-cols-3 gap-px border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1 md:px-2 md:pb-3 md:pt-2.5;
 }
 .plant-metric {
-  @apply flex flex-col items-center justify-center gap-0.5 px-1 py-1;
+  @apply flex flex-col items-center justify-center gap-0 px-0.5 py-0.5 md:gap-0.5 md:px-1 md:py-1;
 }
 .plant-metric + .plant-metric {
   border-left: 1px solid rgba(255, 255, 255, 0.1);
@@ -214,20 +215,39 @@
   @apply text-[9px] font-medium uppercase tracking-[0.24em] text-white/45 md:text-[10px];
 }
 .plant-metric-value {
-  @apply font-mono text-xl font-semibold tabular-nums tracking-tight text-white md:text-2xl;
+  @apply font-mono text-base font-semibold tabular-nums tracking-tight text-white md:text-2xl;
 }
 .plant-metric-unit {
   @apply text-[10px] uppercase tracking-[0.16em] text-white/40;
 }
 .matrix-grid {
-  @apply grid gap-2;
+  @apply grid gap-[22px] md:gap-2;
+}
+@media (max-width: 767px) {
+  .matrix-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+.matrix-grid-hole {
+  @apply max-md:hidden;
 }
 .matrix-cell {
-  @apply min-h-14 touch-none select-none md:min-h-16;
+  @apply flex min-h-12 w-full touch-none select-none flex-row flex-nowrap items-center justify-between gap-2 px-3 py-2.5 text-sm md:min-h-16 md:w-auto md:justify-center md:gap-2 md:px-2 md:py-2 md:text-base lg:px-3;
+}
+.matrix-cell-label {
+  @apply shrink-0 whitespace-nowrap text-left font-semibold leading-none md:text-left;
+}
+.matrix-cell-meta {
+  @apply shrink-0 whitespace-nowrap text-right text-[10px] font-normal leading-none opacity-80 md:text-left md:text-[10px];
 }
 .matrix-cell.holding {
   @apply ring-2 ring-emerald-500;
 }
-.matrix-cell.estop {
-  @apply bg-destructive text-white hover:bg-destructive/90;
+.matrix-cell.estop,
+.dark .matrix-cell.estop,
+.estop-mark,
+.dark .estop-mark {
+  background-color: #e10600 !important;
+  border-color: #e10600 !important;
+  color: #fff !important;
 }

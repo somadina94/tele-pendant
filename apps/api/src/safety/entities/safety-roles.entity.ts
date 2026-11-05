@@ -16,4 +16,8 @@ export class SafetyRoles {
 
   @Column({ name: 'safe_state_register_id', type: 'varchar', nullable: true })
   safeStateRegisterId?: string | null;
+
+  /** One-tap Media UP/DOWN and spoken jogs. Default off (hold-to-run only). */
+  @Column({ name: 'allow_timed_media_motion', type: 'boolean', default: false })
+  allowTimedMediaMotion!: boolean;
 }

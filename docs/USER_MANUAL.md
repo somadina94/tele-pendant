@@ -53,7 +53,7 @@ Stay on http://localhost:8080/operator.
 - Three overlays on the graphic: **Height** (about `1250 mm` at a fresh simulator), **Load** (`0 kg`), **Motor** (`IDLE`).
 - Strip under the graphic: `H … mm`, `Load … kg`, and `IDLE`.
 - Right panel title **Control matrix**.
-- Field labeled **SAFE_ACTION_PIN**. The hint under it shows the demo value `change-me-admin-password` (same as the admin password). Type that value, not the words SAFE_ACTION_PIN.
+- Field labeled **Reset PIN**. It is used only by **Reset e-stop**, not by **STOP**.
 - Five buttons in a 3×3 grid (corners are empty):
 
   |        | left          | center         | right         |
@@ -87,13 +87,15 @@ Numbers on Height and the `H` strip should match and tick together (live tags ov
 
 1. Press and hold **Trolley L**, then release.
 2. Press and hold **Trolley R**, then release.
-3. **Success:** banner shows **deadman HOLD** only while the button is down, then clears. No red error. Height does not have to change — the demo graphic has no trolley position overlay. Motor stays `IDLE` for trolley moves (the simulator sets `RUN` only for hoist up/down).
+3. **Success:** banner shows **deadman HOLD** only while the button is down, then clears. No red error. **Trolley L** and **Trolley R** show motor feedback and a trolley position number while held. The simulator may coast one poll after release.
 
-## 5. STOP without a PIN (must fail)
+## 5. STOP is one press
 
-1. Leave **Safe-action PIN** empty.
+1. Leave **Reset PIN** empty.
 2. Click **STOP**.
-3. **Success:** a red error that includes **SAFE_ACTION_PIN does not match**. Banner stays **Safety: normal**. No **E-STOP** on the banner.
+3. **Success:** banner becomes **Safety: e_stop** and includes **E-STOP**. No PIN error.
+4. Type the reset PIN (`SAFE_ACTION_PIN` from the server environment) and click **Reset e-stop**.
+5. **Success:** banner returns to **normal**. A wrong PIN shows **PIN does not match** and leaves e-stop latched.
 
 ## 6. Media — camera, codes, voice
 
@@ -103,14 +105,14 @@ Click **Media** in the top nav (or open http://localhost:8080/media).
 
 - Heading **Camera · QR · Voice**.
 - Links **Operator** and **Ops**.
-- Note: **Browser/device camera for demo. Set CAMERA_RTSP_URL for plant CCTV later.**
-- Section **Device camera** with button **Scan QR / barcode in frame**.
-- Section **Manual / known codes**.
+- Camera card explains that the QR must match a **registered code** text (Chrome uses the built-in detector; Safari and Firefox use ZXing on the live frame).
+- Section **Device camera** with **Scan QR / barcode in frame**. If the camera is blocked, a red alert and **Reload page** appear (same pattern as Face). Scan feedback appears under the buttons (success or error).
+- Section **Manual / known codes**. Supervisors and admins see a link to **Add or edit codes in Config**.
 - Code field already contains `TP-CRANE-DEMO-01`, button **Resolve**.
 - Two code buttons:
   - **TP-CRANE-DEMO-01** — Demo crane bay A
   - **TP-OPS** — Ops dashboard
-- Section **Voice commands**. Hint: **Say UP or DOWN**. Trolley is left or right. Or say stop.
+- Section **Voice commands**. Timed **UP** / **DOWN** stay disabled until Config turns on **Allow timed media motion**. **stop** still commands a stop.
 - Button **Listen (8s)**.
 
 ### 6a. Resolve the crane code
@@ -131,27 +133,35 @@ Return to **Media** via the address bar http://localhost:8080/media (the ops pag
 
 1. Replace the code field with `NOT-A-CODE`.
 2. Click **Resolve**.
-3. **Success:** you stay on Media and see an error that includes **Unknown code**.
+3. **Success:** you stay on Media and see a red alert that includes **Unknown code** (under the camera and manual sections).
 
 Put `TP-CRANE-DEMO-01` back in the field if you want.
 
 ### 6d. Scan button
 
-1. Click **Scan QR / barcode in frame**.
-2. **Success in this desktop browser (no QR in front of the camera):** either **No code in frame**, or **BarcodeDetector not supported — use manual code or Chrome**. A red camera message (**Camera permission denied** or a browser permission string) is success for a blocked camera; allow the camera and the video panel appears instead.
+1. Click **Scan QR / barcode in frame** (a spinner shows while decoding).
+2. **Success in this desktop browser (no QR in front of the camera):** a red alert such as **No code in frame — hold a registered QR steady and try again.** If the camera is blocked, a red alert tells you to allow Camera in the browser’s site settings (lock/controls icon in the address bar), then **Reload page**.
+3. **Success with a demo QR:** encode plain text **TP-CRANE-DEMO-01** (not a random URL). After scan or **Resolve**, you see **Resolved: Demo crane bay A (TP-CRANE-DEMO-01)** and the app opens **Operator** when that code’s route is set.
+
+### 6d-b. Manage codes (supervisor / admin)
+
+1. Open **Config** → **QR / scan codes**.
+2. Edit an existing row or use **Add code** (payload, label, optional **Open screen after scan**).
+3. **Success:** the new code appears in the list and on **Media** under known codes; scanning or resolving it behaves like the demo codes.
 
 ### 6e. Voice
 
-Hoist commands are the **UP** and **DOWN** buttons under Voice commands. Each runs the hoist for about 2 seconds. Saying those words does the same thing. The status line keeps what was heard.
+Hoist commands are the **UP** and **DOWN** buttons under Voice commands. They stay disabled until Config turns on **Allow timed media motion**. With that switch on, each runs the hoist for about 2 seconds. Saying those words does the same thing. The status line keeps what was heard.
 
-1. Click **UP**.
-2. **Success:** **Heard: up. Executed: Hoist Up**. On **Operator**, height climbs for about 2 seconds, then stops.
-3. Click **DOWN**.
-4. **Success:** **Heard: down. Executed: Hoist Down**, and height falls for about 2 seconds.
-5. Optional: click **Listen (8s)** and say **up** or **down**. **Success** is the same status line as the buttons.
-6. Repeat and say a nonsense phrase.
-7. **Success:** **Heard: … Not executed: command_not_allowlisted**.
-8. **stop** is allowlisted, but this page does not send the supervisor PIN, so **stop** must not show **Executed**. Use the operator **STOP** button in step 11 for the real e-stop test.
+1. In Config, turn on **Allow timed media motion** and save the safety roles. Return to Media.
+2. Click **UP**.
+3. **Success:** **Heard: up. Executed: Hoist Up**. On **Operator**, height climbs for about 2 seconds, then stops.
+4. Click **DOWN**.
+5. **Success:** **Heard: down. Executed: Hoist Down**, and height falls for about 2 seconds.
+6. Optional: click **Listen (8s)** and say **up** or **down**. **Success** is the same status line as the buttons. With no microphone, the line is **Nothing heard** or **Microphone error: …**.
+7. Repeat and say a nonsense phrase.
+8. **Success:** **Heard: … Not executed: command_not_allowlisted**.
+9. Say **stop**. **Success:** the reply says the crane was commanded to stop, and Operator shows **e_stop**. Clear it with **Reset e-stop**.
 
 If the browser has no speech API, **success** is the line **SpeechRecognition not supported in this browser**.
 
@@ -270,44 +280,35 @@ From Operator, click **Face** (http://localhost:8080/face). You must already be 
 
 Click **Enroll** while logged out. **Success:** **Sign in with password first, then enroll**.
 
-## 11. STOP with PIN (do this last)
+## 11. STOP, then reset
 
-1. On http://localhost:8080/operator, click the **SAFE_ACTION_PIN** field.
-2. Type `change-me-admin-password`. That is the value of `SAFE_ACTION_PIN` in `.env`, and it is the same as the admin password. Do not type the name `SAFE_ACTION_PIN`.
-3. Click **STOP**.
+1. On the operator screen, click **STOP**.
+2. **Success:** banner becomes **Safety: e_stop** and includes **E-STOP**.
+3. Open **Ops**.
 4. **Success:**
-   - Banner becomes **Safety: e_stop** and includes **E-STOP**.
-   - Red safe-action error is gone.
-5. Open **Ops**.
-6. **Success:**
    - **Safety mode: e_stop**
    - **Alarms** shows **[critical] E-Stop asserted — active**
    - **Ack** and **Shelve** sit on that row
-7. Click **Ack** (leave **Shelve** for the later fresh STOP).
-8. **Success:** that row’s state changes from **active** to **acked**. **Ack** and **Shelve** disappear. The banner on Operator stays **e_stop** (ack does not clear the coil).
-9. Back on Operator, hold **Hoist Up**.
-10. **Success:** motion is rejected. Red text includes **Motion blocked: hold deadman and ensure normal safety mode**. Height does not climb.
+5. Click **Ack** (leave **Shelve** for the later fresh STOP).
+6. **Success:** that row’s state changes from **active** to **acked**. The banner on Operator stays **e_stop** (ack does not clear the coil).
+7. Back on Operator, hold **Hoist Up**.
+8. **Success:** motion is rejected. Red text includes **Motion blocked: hold deadman and ensure normal safety mode**. Height does not climb.
 
 ### Clear e-stop so you can move again
 
-There is no reset button on the HMI. The simulator latches the e-stop coil.
-
-```bash
-docker restart tele-pendant-modbus-sim-dev
-```
-
-Wait a few seconds. The API opens a new Modbus connection on its own. **Success:** Operator banner returns to **Safety: normal**, Ops **PLC connected: true**, and holding **Hoist Up** moves height again. You may see **comms_lost** for a moment while the simulator restarts. **E-STOP** on that same banner means the API still has the old socket; refresh the operator page after the banner changes.
+1. Type the reset PIN in **Reset PIN**.
+2. Click **Reset e-stop**.
+3. **Success:** banner returns to **Safety: normal** and holding **Hoist Up** can move height again. A wrong PIN shows **PIN does not match** and leaves the stop latched.
 
 ### Shelve a fresh STOP
 
 Do this only after the banner is **normal** again. One alarm cannot be both acked and shelved.
 
-1. Type `change-me-admin-password` in **SAFE_ACTION_PIN** and click **STOP**.
+1. Click **STOP**.
 2. Open **Ops** while the alarm is still **active**. **Shelve** is beside **Ack**.
 3. Click **Shelve**. Do not click **Ack**.
 4. **Success:** the state text is **shelved**.
-
-Clear the coil again with `docker restart tele-pendant-modbus-sim-dev` if you still need hoist motion.
+5. Click **Unshelve** to bring it back, or reset e-stop. When the e-stop coil clears, a shelved alarm clears too.
 
 ## 12. Logout
 
@@ -330,14 +331,14 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 1. On the phone, set **API base** to `https://api.tele-pendant.jahbyte.com/api/v1` for the live API, or your computer’s LAN URL ending in `/api/v1` for a local stack (not `localhost` on a physical phone).
 2. Email and password are the same as step 0.
 3. Tap **Sign in**.
-4. **Success:** title **Tele-Pendant**, **Logout**, and the six header buttons. Operator shows banner `Safety: normal · H … mm`, a **SAFE_ACTION_PIN** field, and the same five cells.
+4. **Success:** title **Tele-Pendant**, **Logout**, and the six header buttons. Operator shows banner `Safety: normal · H … mm`, a **Reset PIN** field, and the same five cells.
 5. Press and hold **Hoist Up**. **Success:** banner includes **DEADMAN** and the held cell gets a green border. Height in the banner increases. Release: **DEADMAN** clears.
 6. Open **Media**. Tap **Listen** (Expo Go explains that speech needs `npx expo run:android`). Tap **UP**, then **DOWN**. **Success:** **Heard: up. Executed: Hoist Up**, then the same line for **down** / **Hoist Down**. Type a known code or scan a QR with the camera and tap **Resolve**. **Success:** the code’s label.
 7. Open **Face**. **Success:** the sentence **Convenience match only — not certified biometrics. Fail closed to password.**
 8. Open **Ops**. **Success:** diagnostics, alarms (**Ack** and **Shelve** when one is active), and the height trend.
 9. Open **Config**. Change a register address or a cell label and save, then set it back. **Success:** a saved line.
 10. Open **Audit**. **Success:** the same list as the web (email, action, resource, result, time).
-11. Last, type `change-me-admin-password` in **SAFE_ACTION_PIN** and press **STOP**. **Success:** the banner shows **e_stop**. This latches the simulator the same way as the web STOP.
+11. Last, press **STOP** once. **Success:** the banner shows **e_stop**. Type the reset PIN and tap **Reset e-stop** to return to **normal**.
 
 ## Tour help (web and phone)
 
@@ -349,7 +350,7 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 ## Languages, alarms, trends, safety roles, and OPC UA
 
 - The **Language** menu on the sign-in page follows the browser until you pick English, Español, Français, or Deutsch. That choice is saved on your user and then wins over the browser. The phone uses the device language the same way. To add a language: copy `packages/shared/i18n/en.json` to a new code, translate keys, register it in `packages/shared/src/i18n.ts`, and add it to the web/mobile pickers.
-- **Config** can create, edit, and delete alarm definitions (register, operator, threshold, severity). **Ops** still only acknowledges and shelves active alarms.
+- **Config** can create, edit, and delete alarm definitions (register, operator, threshold, severity). **Ops** acknowledges, shelves, and unshelves alarms. A shelved alarm clears when the condition recovers.
 - Mark a register **Trend**. **Ops** draws an SVG line for each trended series. Height and load start trended.
 - **Safety roles** bind E-stop, deadman, heartbeat, and safe-state to registers. Losing the deadman, the link, or e-stop clears the primary coil of every motion cell.
 - **Protocol** is Modbus TCP by default (simulator port 1502). OPC UA is optional: `docker compose -f docker-compose.dev.yml --profile opcua up opcua-sim`, then set the connection to OPC UA and fill each register’s node id (`ns=1;s=HoistUp` and the matching names).
@@ -362,7 +363,7 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 - Prefer **HTTPS** in production (`COOKIE_SECURE=true`, TLS on the reverse proxy). See `INSTALLATION.md`.
 - Keep `JWT_SECRET`, `ADMIN_PASSWORD`, `SAFE_ACTION_PIN`, and `FACE_TEMPLATE_KEY` strong and unique per environment (never commit real secrets).
 - Login and face endpoints are **rate-limited**. Face templates stay on the server (never returned to clients).
-- PIN policy: supervisors enter `SAFE_ACTION_PIN` for e-stop / safe actions. Face auth must never replace that PIN.
+- PIN policy: **STOP** is one press. `SAFE_ACTION_PIN` is only for **Reset e-stop**. Face auth must never replace that PIN.
 - Roles (operator / supervisor / admin) gate Config, Audit, and safety actions via JWT.
 
 ## What this software does not do

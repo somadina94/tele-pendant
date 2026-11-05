@@ -16,6 +16,9 @@ export class AuditLog {
   @Column({ name: 'user_email', type: 'varchar', nullable: true })
   userEmail?: string | null;
 
+  @Column({ name: 'user_display_name', type: 'varchar', nullable: true })
+  userDisplayName?: string | null;
+
   @Column({ type: 'varchar' })
   action!: string;
 

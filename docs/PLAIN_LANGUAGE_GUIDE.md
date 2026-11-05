@@ -34,8 +34,8 @@ Think of it as: **sign in → see a picture of the plant → press buttons → n
 | **Discrete input** | A register type that reports **status bits** from the field (motor running yes/no). |
 | **Simulator** | Fake PLC for demos and training (`demo-simulator` in Config). |
 | **Deadman** | Safety idea: motion only while you **keep holding** the button. Let go → motion stops. |
-| **E-stop / emergency stop** | Stop everything urgently. Here, the **STOP** button with a supervisor **PIN**. |
-| **Safe-action PIN** | Secret code (not your login password unless configured that way) required for dangerous actions like STOP. Shown on screen as `SAFE_ACTION_PIN`. |
+| **E-stop / emergency stop** | Stop everything urgently. **STOP** is one press. The **Reset PIN** only clears that stop. |
+| **Safe-action PIN** | Secret used only to **reset** e-stop. Pressing **STOP** does not ask for it. The field is labeled **Reset PIN**. |
 | **Safety mode** | Overall state: usually **normal**, or **e_stop** after an emergency stop, or problems like lost communications. |
 | **Watchdog** | “Is the link still alive?” check. If the app stops hearing from the PLC, it treats that as unsafe. |
 | **Heartbeat** | A register the system expects to see changing; proves the PLC link is healthy. |
@@ -61,11 +61,11 @@ Think of it as: **sign in → see a picture of the plant → press buttons → n
 
 | Role | Typical person | Operator screen | STOP / safe PIN | Config (save) | Audit list |
 | ---- | -------------- | --------------- | --------------- | ------------- | ---------- |
-| **Operator** | Line operator | Yes | Needs correct PIN on STOP | Can open; **Save** may be denied | May be denied |
+| **Operator** | Line operator | Yes | **STOP** is one press. **Reset PIN** clears it | Can open; **Save** may be denied | May be denied |
 | **Supervisor** | Shift lead | Yes | Yes | Yes | Yes |
 | **Admin** | IT / integrator | Yes | Yes | Yes | Yes |
 
-The demo admin account is set in the server `.env` file (`ADMIN_EMAIL` / `ADMIN_PASSWORD`). The default safe-action PIN is `SAFE_ACTION_PIN` in the same file (in the demo it often matches the admin password).
+The demo admin account is set in the server environment (`ADMIN_EMAIL` / `ADMIN_PASSWORD`). The reset PIN is `SAFE_ACTION_PIN` in that same file.
 
 ---
 
@@ -86,7 +86,7 @@ After sign-in, the top menu on the **Operator** page links to:
 
 On the **phone app**, the same areas appear as tabs/buttons in the header after you set **API base** to your server (e.g. `https://api.tele-pendant.jahbyte.com/api/v1`).
 
-**Language:** On the login page you can pick **English** or **Español**. That choice is saved on your user profile and overrides the browser language.
+**Language:** The interface is available in **English, Spanish, French, and German** (en, es, fr, de). On the login page the menu offers the installed languages. That choice is saved on your user profile and overrides the browser language.
 
 **Tour help (optional):** Off by default on web and phone. Turn on **Tour help** to show a small **?** on each annotated control — tap or click it for a plain-language tip. While Tour help is on, **Start tour** runs a short Next / Back / Done walkthrough for the **current screen** only. Turning Tour help off again hides tips and ends any walkthrough. The preference stays on this device (`tourEnabled` in browser storage or phone AsyncStorage); it is not stored on the server.
 
@@ -129,16 +129,16 @@ Default demo layout (empty corners):
 
 **STOP button**
 
-1. Type the **safe-action PIN** in the password field above the grid (label `SAFE_ACTION_PIN`). In the demo, this is usually the same secret as in the server `.env`, **not** the word “SAFE_ACTION_PIN”.
-2. Click **STOP**.
-3. Without the PIN, STOP **must fail** with an error — that is intentional.
-4. With the correct PIN, safety mode becomes **e_stop**, an alarm appears on Ops, and motion should block.
+**STOP button**
 
-There is **no “reset e-stop” button** on the demo HMI; the training simulator may need a restart to clear a latched stop (see USER_MANUAL).
+1. Click **STOP**. No PIN.
+2. The banner changes to **e_stop** and shows **E-STOP**. Motion buttons will not run.
+3. To run again, type the **Reset PIN** and click **Reset e-stop**. A wrong PIN shows **PIN does not match** and leaves the stop latched.
+4. With the correct PIN, and the e-stop coil clear, safety mode returns to **normal**.
 
 **Safe-action PIN field**
 
-- Used only for buttons marked as requiring a safe action (STOP in the demo).
+- Used only to **reset** e-stop. It is not required to press **STOP**.
 - Hidden like a password field.
 - Hint text under the field explains the demo value.
 
@@ -151,12 +151,12 @@ There is **no “reset e-stop” button** on the demo HMI; the training simulato
 | **Device camera** | Shows live video; **Scan QR / barcode in frame** tries to read a code from the image. Needs camera permission. |
 | **Manual code field + Resolve** | Type a known code (demo: `TP-CRANE-DEMO-01`) and jump to the linked screen. |
 | **Code shortcut buttons** | Same as Resolve for preset codes (crane → Operator, `TP-OPS` → Ops). |
-| **UP / DOWN** | Runs hoist up/down for about two seconds (same as voice). |
+| **UP / DOWN** | Runs hoist up/down for about two seconds when **Allow timed media motion** is on. Off by default. |
 | **Listen (8s)** | Uses browser speech recognition; say **up** or **down** if supported. |
 
-**Plant CCTV later:** If an integrator sets `CAMERA_RTSP_URL` on the server, the system can be aimed at a fixed camera stream instead of only the device webcam (demo note on the page).
+**Plant CCTV later:** The Media screen uses the device camera. An administrator can connect a plant camera on the server. The screen then says **Plant camera configured**.
 
-**Voice security:** Only allowlisted words run motion. Random speech shows “not executed.” **stop** is allowlisted on Media but does **not** send the supervisor PIN — use Operator **STOP** for a real e-stop test.
+**Voice security:** Only allowlisted words run motion. Random speech shows “not executed.” Saying **stop** commands the crane to stop without a PIN. Timed hoist words stay off until Config enables **Allow timed media motion**.
 
 ---
 
@@ -241,9 +241,9 @@ Each button is a **cell** with grid position and up to three PLC links:
 | ----- | ------- |
 | **Row / Col** | Position in the matrix (0-based). |
 | **Cell label** | Text on the button (“Hoist Up”). |
-| **Style** | Visual style class (demo uses `default` / `danger` for STOP). |
+| **Style** | Visual style class. STOP uses `estop` (saturated red). |
 | **Is motion** | If checked, button uses **deadman** (hold to run). |
-| **Requires safe action** | If checked, needs **safe-action PIN** when pressed (STOP). |
+| **Requires safe action** | Marks the STOP cell so it cannot be deleted. Pressing it does not ask for a PIN. |
 | **Primary register** | Main coil/command sent to PLC. |
 | **Feedback register** (optional) | e.g. motor running. |
 | **Status register** (optional) | e.g. height value shown under the button. |
@@ -314,7 +314,7 @@ These live in the project `.env` file (copy from `.env.example`). Integrators se
 | `JWT_SECRET` | Secret used to sign login tokens — change in production. |
 | `JWT_ACCESS_TOKEN_TTL` | How long login lasts (seconds). |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | First admin user seeded into the database. |
-| `SAFE_ACTION_PIN` | Expected PIN for STOP and similar safe actions. |
+| `SAFE_ACTION_PIN` | PIN required to **reset** e-stop. Not required to press STOP. |
 | `MODBUS_HOST` / `MODBUS_PORT` / `MODBUS_UNIT_ID` | Default PLC target when not using Config UI. |
 | `CAMERA_RTSP_URL` | Optional fixed camera stream for Media. |
 
@@ -353,14 +353,14 @@ Always follow your site’s real safety program. Software STOP is not a substitu
 | Raise hook | Operator | Hold **Hoist Up** |
 | Lower hook | Operator | Hold **Hoist Down** |
 | Move trolley | Operator | Hold **Trolley L** or **Trolley R** |
-| Emergency stop | Operator | Enter PIN → **STOP** |
+| Emergency stop | Operator | Click **STOP** (no PIN). Reset with **Reset PIN** |
 | See why motion failed | Operator | Read red error + banner mode |
 | Check connection | Ops | **PLC connected**, **Safety mode** |
 | Clear alarm from my list | Ops | **Ack** or **Shelve** |
 | Jump to crane screen | Media | Resolve `TP-CRANE-DEMO-01` |
 | Change button text | Config | Edit cell label → Save |
 | Point at real PLC | Config | New connection → **Use this PLC** → Save |
-| Change language | Login | Language menu → English / Español |
+| Change language | Login | Language menu → English, Spanish, French, or German |
 | Explain every control | Any | Turn on **Tour help**, tap **?** |
 | Guided walkthrough | Any (tour on) | **Start tour** → Next / Back / Done |
 

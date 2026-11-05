@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AdminPage } from './pages/AdminPage';
 import { AuditPage } from './pages/AuditPage';
 import { AssistantPage } from './pages/AssistantPage';
@@ -8,8 +8,9 @@ import { LoginPage } from './pages/LoginPage';
 import { MediaPage } from './pages/MediaPage';
 import { OperatorPage } from './pages/OperatorPage';
 import { OpsPage } from './pages/OpsPage';
+import { RequireRole } from '@/components/require-role';
 import { AppShell } from './layouts/AppShell';
-import { apiGet } from './lib/api';
+import { apiGet, type PublicUser } from './lib/api';
 import { clearSession } from './lib/session';
 import { PageSpinner } from '@/components/page-spinner';
 
@@ -23,8 +24,9 @@ function RequireAuth({ children }: { children: ReactNode }) {
       setState('out');
       return;
     }
-    void apiGet('/auth/me')
-      .then(() => {
+    void apiGet<PublicUser>('/auth/me')
+      .then((user) => {
+        localStorage.setItem('user', JSON.stringify(user));
         if (!cancelled) setState('ok');
       })
       .catch(() => {
@@ -43,11 +45,23 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return children;
 }
 
+function FaceEntry() {
+  const token = localStorage.getItem('accessToken');
+  if (!token) return <Outlet />;
+  return (
+    <RequireAuth>
+      <AppShell />
+    </RequireAuth>
+  );
+}
+
 export function App() {
   return (
     <Routes>
       <Route path="/" element={<LoginPage />} />
-      <Route path="/face" element={<FacePage />} />
+      <Route element={<FaceEntry />}>
+        <Route path="/face" element={<FacePage />} />
+      </Route>
       <Route
         element={
           <RequireAuth>
@@ -56,10 +70,30 @@ export function App() {
         }
       >
         <Route path="/operator" element={<OperatorPage />} />
-        <Route path="/admin" element={<AdminPage />} />
+        <Route
+          path="/admin"
+          element={
+            <RequireRole
+              allow={['supervisor', 'admin']}
+              detail="Config is for supervisors and administrators. Operators use the Operator, Media, and Ops screens."
+            >
+              <AdminPage />
+            </RequireRole>
+          }
+        />
         <Route path="/ops" element={<OpsPage />} />
         <Route path="/media" element={<MediaPage />} />
-        <Route path="/audit" element={<AuditPage />} />
+        <Route
+          path="/audit"
+          element={
+            <RequireRole
+              allow={['supervisor', 'admin']}
+              detail="The audit log is limited to supervisors and administrators."
+            >
+              <AuditPage />
+            </RequireRole>
+          }
+        />
         <Route path="/assistant" element={<AssistantPage />} />
       </Route>
     </Routes>

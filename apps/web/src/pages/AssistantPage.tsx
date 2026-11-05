@@ -28,10 +28,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { canEditAssistantSettings } from '@tele-pendant/shared';
+import { getStoredUserRole } from '@/lib/user-session';
 import { toastErr, toastOk } from '@/lib/toast';
 
 /** Strip markdown asterisks so the answer reads as plain operator text. */
-export function toPlainAnswer(raw: string): string {
+function toPlainAnswer(raw: string): string {
   return raw.replace(/\*/g, '').trim();
 }
 
@@ -44,6 +46,9 @@ interface AssistantSettings {
 
 export function AssistantPage() {
   const { t } = useT();
+  const mayEditDocs = canEditAssistantSettings(
+    getStoredUserRole() ?? 'operator',
+  );
   const [question, setQuestion] = useState('What happens on lost Modbus?');
   const [answer, setAnswer] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -136,83 +141,91 @@ export function AssistantPage() {
               {t('tour.assistant.title')}{' '}
               {cursorConfigured
                 ? 'Cursor Agent is configured on the server.'
-                : 'Running on local document search until CURSOR_API_KEY is set.'}
+                : 'Running on local document search.'}
             </CardDescription>
           </CardHeader>
         </Card>
       </HelpTip>
 
-      <Card>
-        <CardContent className="pt-2">
-          <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="docs-settings" className="border-b-0">
-              <AccordionTrigger>
-                <span className="flex flex-col items-start gap-0.5 text-left">
-                  <span className="text-base font-semibold">Docs settings</span>
-                  <span className="text-sm font-normal text-muted-foreground">
-                    Indexed documents: {indexed}
+      {mayEditDocs ? (
+        <Card>
+          <CardContent className="pt-2">
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="docs-settings" className="border-b-0">
+                <AccordionTrigger>
+                  <span className="flex flex-col items-start gap-0.5 text-left">
+                    <span className="text-base font-semibold">
+                      Docs settings
+                    </span>
+                    <span className="text-sm font-normal text-muted-foreground">
+                      Indexed documents: {indexed}
+                    </span>
                   </span>
-                </span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <p className="mb-3 text-sm text-muted-foreground">
-                  Admins can change the docs folder and public docs link.
-                </p>
-                <form
-                  className="grid gap-3"
-                  onSubmit={(e) => void saveSettings(e)}
-                >
-                  <div className="grid gap-2">
-                    <Label htmlFor="docs-root">Docs root path</Label>
-                    <Input
-                      id="docs-root"
-                      value={docsRoot}
-                      onChange={(e) => setDocsRoot(e.target.value)}
-                      placeholder="docs"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="docs-link">Docs link (URL)</Label>
-                    <Input
-                      id="docs-link"
-                      value={docsLink}
-                      onChange={(e) => setDocsLink(e.target.value)}
-                      placeholder="https://…/USER_MANUAL.md"
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit" disabled={settingsBusy}>
-                      {settingsBusy ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <Save />
-                      )}
-                      Save settings
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={settingsBusy}
-                      onClick={() => void reindex()}
-                    >
-                      <RefreshCw />
-                      Reindex
-                    </Button>
-                    {docsLink ? (
-                      <Button type="button" variant="ghost" asChild>
-                        <a href={docsLink} target="_blank" rel="noreferrer">
-                          <ExternalLink />
-                          Open docs
-                        </a>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    Admins can change the docs folder and public docs link.
+                  </p>
+                  <form
+                    className="grid gap-3"
+                    onSubmit={(e) => void saveSettings(e)}
+                  >
+                    <div className="grid gap-2">
+                      <Label htmlFor="docs-root">Docs root path</Label>
+                      <Input
+                        id="docs-root"
+                        value={docsRoot}
+                        onChange={(e) => setDocsRoot(e.target.value)}
+                        placeholder="docs"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="docs-link">Docs link (URL)</Label>
+                      <Input
+                        id="docs-link"
+                        value={docsLink}
+                        onChange={(e) => setDocsLink(e.target.value)}
+                        placeholder="https://…/USER_MANUAL.md"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="submit" disabled={settingsBusy}>
+                        {settingsBusy ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <Save />
+                        )}
+                        Save settings
                       </Button>
-                    ) : null}
-                  </div>
-                </form>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </CardContent>
-      </Card>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={settingsBusy}
+                        onClick={() => void reindex()}
+                      >
+                        <RefreshCw />
+                        Reindex
+                      </Button>
+                      {docsLink ? (
+                        <Button type="button" variant="ghost" asChild>
+                          <a href={docsLink} target="_blank" rel="noreferrer">
+                            <ExternalLink />
+                            Open docs
+                          </a>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </form>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Indexed documents: {indexed}. Docs settings are admin-only.
+        </p>
+      )}
 
       <Card>
         <CardHeader className="pb-2">

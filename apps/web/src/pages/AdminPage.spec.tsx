@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { AdminPage } from './AdminPage';
 import { renderWithProviders } from '../test/render';
 import * as api from '../lib/api';
@@ -62,9 +62,92 @@ const layout = {
   },
 };
 
+const plcHealthMock = {
+  connected: true,
+  connectionId: '1',
+  label: 'sim',
+  host: '127.0.0.1',
+  port: 1502,
+  lastError: null,
+};
+
+function confirmDeleteDialog() {
+  fireEvent.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: 'Delete',
+    }),
+  );
+}
+
+function cancelDeleteDialog() {
+  fireEvent.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: 'Cancel',
+    }),
+  );
+}
+
+function confirmPlcEnableDialog() {
+  fireEvent.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: 'Use this PLC',
+    }),
+  );
+}
+
+function cancelPlcEnableDialog() {
+  fireEvent.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: 'Cancel',
+    }),
+  );
+}
+
+const SECTION_BY_LABEL: Record<string, string> = {
+  'PLC connections': 'plc',
+  'Register maps': 'registers',
+  'Matrix cells': 'cells',
+  'Live labels': 'labels',
+  Background: 'background',
+  'QR / scan codes': 'codes',
+  'Alarm definitions': 'alarms',
+  'Safety roles': 'safety',
+  Users: 'users',
+};
+
+let unmountAdmin: () => void = () => {};
+
+function showAdminSection(section: string) {
+  unmountAdmin();
+  const view = renderWithProviders(<AdminPage />, {
+    route: `/admin?section=${section}`,
+  });
+  unmountAdmin = view.unmount;
+  return view;
+}
+
+function goConfigSection(label: string) {
+  showAdminSection(SECTION_BY_LABEL[label] ?? 'plc');
+}
+
 describe('AdminPage', () => {
+  beforeEach(() => {
+    unmountAdmin = () => {};
+  });
   it('renders connections registers and cells', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/media/codes') {
+        return [
+          {
+            id: 'sc1',
+            code: 'TP-OPS',
+            label: 'Ops dashboard',
+            kind: 'shortcut',
+            routeHint: '/ops',
+          },
+        ];
+      }
       if (path === '/plc/connections') {
         return [
           {
@@ -88,21 +171,30 @@ describe('AdminPage', () => {
       }
       return layout;
     });
-    renderWithProviders(<AdminPage />);
+    showAdminSection('plc');
     await waitFor(() =>
       expect(screen.getAllByText(/simulator/).length).toBeGreaterThan(0),
     );
     expect(screen.getByDisplayValue('sim')).toBeInTheDocument();
+    goConfigSection('Register maps');
     expect(screen.getAllByText(/coil\.up/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/coil\.fb/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/coil\.st/).length).toBeGreaterThan(0);
+    goConfigSection('Matrix cells');
     expect(screen.getByDisplayValue('Up')).toBeInTheDocument();
+    goConfigSection('Background');
     expect(screen.getByText('No active background')).toBeInTheDocument();
     expect(screen.getAllByText(/—/).length).toBeGreaterThan(0);
+    goConfigSection('QR / scan codes');
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('TP-OPS')).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('heading', { name: /Add code/i })).toBeInTheDocument();
   });
 
   it('saves a PLC, a register, and a new connection', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
       if (path === '/plc/connections') {
         return [
           {
@@ -120,7 +212,7 @@ describe('AdminPage', () => {
     });
     const patch = vi.spyOn(api, 'apiPatch').mockResolvedValue({});
     const post = vi.spyOn(api, 'apiPost').mockResolvedValue({});
-    renderWithProviders(<AdminPage />);
+    showAdminSection('plc');
     await screen.findByDisplayValue('sim');
 
     fireEvent.change(screen.getByLabelText('1 label'), {
@@ -136,7 +228,7 @@ describe('AdminPage', () => {
       target: { value: '2' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save sim' }));
-    await screen.findByText('Saved and connecting.');
+    await screen.findByText('Saved.');
     expect(patch).toHaveBeenCalledWith('/plc/connections/1', {
       label: 'sim',
       host: '10.1.1.1',
@@ -150,6 +242,7 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save sim' }));
     await screen.findByText('Saved.');
 
+    goConfigSection('Register maps');
     fireEvent.change(screen.getByLabelText('coil.up address'), {
       target: { value: '11' },
     });
@@ -173,8 +266,16 @@ describe('AdminPage', () => {
       target: { value: '1' },
     });
     fireEvent.click(screen.getByLabelText('new use'));
-    fireEvent.click(screen.getByLabelText('new use'));
     fireEvent.click(screen.getByRole('button', { name: 'Add PLC' }));
+    await screen.findByRole('alertdialog');
+    cancelPlcEnableDialog();
+    expect(post).not.toHaveBeenCalledWith(
+      '/plc/connections',
+      expect.anything(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add PLC' }));
+    await screen.findByRole('alertdialog');
+    confirmPlcEnableDialog();
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith('/plc/connections', {
         label: 'plant',
@@ -189,6 +290,7 @@ describe('AdminPage', () => {
 
   it('shows save failures from the API', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
       if (path === '/plc/connections') {
         return [
           {
@@ -207,12 +309,13 @@ describe('AdminPage', () => {
       .mockRejectedValueOnce(new Error('no route'))
       .mockRejectedValueOnce('x');
     vi.spyOn(api, 'apiPost').mockRejectedValueOnce(new Error('duplicate'));
-    renderWithProviders(<AdminPage />);
+    showAdminSection('plc');
     await screen.findByDisplayValue('sim');
 
     fireEvent.click(screen.getByRole('button', { name: 'Save sim' }));
     await screen.findByText('no route');
 
+    goConfigSection('Register maps');
     fireEvent.click(screen.getByRole('button', { name: 'Save coil.up' }));
     await screen.findByText('Save failed');
 
@@ -222,6 +325,7 @@ describe('AdminPage', () => {
 
   it('saves cells, labels, and the background', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
       if (path === '/plc/connections') return [];
       return {
         ...layout,
@@ -255,7 +359,7 @@ describe('AdminPage', () => {
       .mockResolvedValueOnce({})
       .mockRejectedValueOnce(new Error('busy'))
       .mockResolvedValueOnce({});
-    renderWithProviders(<AdminPage />);
+    showAdminSection('cells');
     await screen.findByDisplayValue('Up');
 
     fireEvent.change(screen.getByLabelText('c1 row'), {
@@ -327,6 +431,7 @@ describe('AdminPage', () => {
       expect.objectContaining({ label: 'Extra' }),
     );
 
+    goConfigSection('Live labels');
     fireEvent.change(screen.getByLabelText('o1 overlay-label'), {
       target: { value: 'Load' },
     });
@@ -369,6 +474,7 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add label' }));
     await screen.findByText('Saved Motor.');
 
+    goConfigSection('Background');
     fireEvent.change(screen.getByLabelText('background name'), {
       target: { value: 'yard' },
     });
@@ -409,6 +515,7 @@ describe('AdminPage', () => {
 
   it('renders a picture background and a label with no register', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
       if (path === '/plc/connections') return [];
       if (path === '/safety/roles') return null;
       return {
@@ -447,16 +554,44 @@ describe('AdminPage', () => {
       };
     });
     const del = vi.spyOn(api, 'apiDelete').mockResolvedValue({});
-    renderWithProviders(<AdminPage />);
+    showAdminSection('cells');
     expect(await screen.findByDisplayValue('bay')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('blank style'), {
+      target: { value: 'estop' },
+    });
+    expect(
+      screen.queryByRole('button', { name: /Delete/i }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('blank style'), {
+      target: { value: 'default' },
+    });
+    fireEvent.change(screen.getByLabelText('blank cell-label'), {
+      target: { value: ' stop ' },
+    });
+    expect(
+      screen.queryByRole('button', { name: /Delete/i }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('blank cell-label'), {
+      target: { value: '' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Delete cell' }));
+    cancelDeleteDialog();
+    expect(del).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete cell' }));
+    confirmDeleteDialog();
     await waitFor(() => expect(del).toHaveBeenCalledWith('/hmi/cells/blank'));
+    goConfigSection('Live labels');
     fireEvent.click(screen.getByRole('button', { name: 'Delete label' }));
+    cancelDeleteDialog();
+    expect(del).not.toHaveBeenCalledWith('/hmi/overlays/o9');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete label' }));
+    confirmDeleteDialog();
     await waitFor(() => expect(del).toHaveBeenCalledWith('/hmi/overlays/o9'));
   });
 
   it('saves opc ua, a trend, an alarm, and safety roles', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
       if (path === '/plc/connections') {
         return [
           {
@@ -481,6 +616,14 @@ describe('AdminPage', () => {
             threshold: 10,
             enabled: true,
             register: { id: 'r1', name: 'coil.up' },
+          },
+          {
+            id: 'a2',
+            name: 'Bare',
+            severity: '',
+            compareOp: 'eq',
+            threshold: 1,
+            enabled: false,
           },
         ];
       }
@@ -511,9 +654,13 @@ describe('AdminPage', () => {
     const post = vi.spyOn(api, 'apiPost').mockResolvedValue({});
     const put = vi.spyOn(api, 'apiPut').mockResolvedValue({});
     const del = vi.spyOn(api, 'apiDelete').mockResolvedValue({});
-    renderWithProviders(<AdminPage />);
+    showAdminSection('plc');
     await screen.findByDisplayValue('sim');
+    goConfigSection('Safety roles');
+    fireEvent.click(screen.getByLabelText('allow timed media motion'));
+    fireEvent.click(screen.getByLabelText('allow timed media motion'));
 
+    goConfigSection('PLC connections');
     fireEvent.change(screen.getByLabelText('1 protocol'), {
       target: { value: 'modbus-tcp' },
     });
@@ -521,8 +668,9 @@ describe('AdminPage', () => {
       target: { value: 'opcua' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save sim' }));
-    await screen.findByText('Saved and connecting.');
+    await screen.findByText('Saved.');
 
+    goConfigSection('Register maps');
     fireEvent.change(screen.getByLabelText('holding.height node'), {
       target: { value: 'ns=1;s=Moved' },
     });
@@ -536,6 +684,7 @@ describe('AdminPage', () => {
       expect.objectContaining({ trended: false, nodeId: 'ns=1;s=Moved' }),
     );
 
+    goConfigSection('Alarm definitions');
     fireEvent.change(screen.getByLabelText('alarm name'), {
       target: { value: 'Hot' },
     });
@@ -554,26 +703,45 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByLabelText('alarm enabled'));
     fireEvent.click(screen.getByRole('button', { name: 'Save alarm' }));
     await screen.findByText('Saved alarm.');
-    expect(post).toHaveBeenCalledWith('/alarms/definitions', {
-      name: 'Hot',
-      registerId: 'r2',
-      compareOp: 'lt',
-      threshold: 3,
-      severity: 'critical',
-      enabled: false,
-    });
+    expect(post).toHaveBeenCalledWith(
+      '/alarms/definitions',
+      expect.objectContaining({
+        name: 'Hot',
+        registerId: 'r2',
+        compareOp: 'lt',
+        threshold: 3,
+        severity: 'critical',
+      }),
+    );
+    expect(screen.getByLabelText('alarm name')).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Overload' }));
+    cancelDeleteDialog();
+    expect(del).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Overload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Bare' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save alarm' }));
+    await screen.findByText('Saved alarm.');
+    expect(patch).toHaveBeenCalledWith(
+      '/alarms/definitions/a2',
+      expect.objectContaining({ name: 'Bare' }),
+    );
+    expect(screen.getByLabelText('alarm name')).toHaveValue('');
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete Overload' }));
+    confirmDeleteDialog();
     await screen.findByText('Deleted alarm.');
     expect(del).toHaveBeenCalledWith('/alarms/definitions/a1');
 
-    post.mockRejectedValueOnce(new Error('alarm'));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Bare' }));
+    patch.mockRejectedValueOnce(new Error('alarm'));
     fireEvent.click(screen.getByRole('button', { name: 'Save alarm' }));
     await screen.findByText('alarm');
     del.mockRejectedValueOnce('nope');
     fireEvent.click(screen.getByRole('button', { name: 'Delete Overload' }));
+    confirmDeleteDialog();
     await screen.findByText('Save failed');
 
+    goConfigSection('Safety roles');
     fireEvent.change(screen.getByLabelText('E-stop'), {
       target: { value: 'r1' },
     });
@@ -597,6 +765,7 @@ describe('AdminPage', () => {
 
   it('renders empty sections when layout and plc queries fail', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
       if (
         path === '/plc/connections' ||
         path === '/hmi/layout' ||
@@ -607,11 +776,42 @@ describe('AdminPage', () => {
       }
       return [];
     });
-    renderWithProviders(<AdminPage />);
+    showAdminSection('plc');
     expect(
       await screen.findByText(/These fields are saved in SQLite/),
     ).toBeInTheDocument();
     expect(screen.getByText('Add a PLC')).toBeInTheDocument();
+    goConfigSection('Background');
     expect(screen.getByText('No active background')).toBeInTheDocument();
+  });
+
+  it('edits an alarm that has no register while the plant has none', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') return [];
+      if (path === '/alarms/definitions') {
+        return [
+          {
+            id: 'a9',
+            name: 'Lonely',
+            register: null,
+            compareOp: 'gt',
+            threshold: 1,
+            severity: '',
+            enabled: true,
+          },
+        ];
+      }
+      if (path === '/hmi/layout') return { ...layout, registers: [] };
+      if (path === '/safety/roles') return { roles: [] };
+      return [];
+    });
+    vi.spyOn(api, 'apiPost').mockResolvedValue({});
+    showAdminSection('alarms');
+    await screen.findByRole('button', { name: 'Save alarm' });
+    fireEvent.click(screen.getByRole('button', { name: 'Save alarm' }));
+    expect(await screen.findByText('Saved alarm.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Lonely' }));
+    expect(screen.getByLabelText('alarm name')).toHaveValue('Lonely');
   });
 });
