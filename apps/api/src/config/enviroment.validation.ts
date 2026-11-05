@@ -29,5 +29,5 @@ export default Joi.object({
 
   CURSOR_API_KEY: Joi.string().allow('').optional(),
   CURSOR_AGENT_CWD: Joi.string().allow('').optional(),
-  CURSOR_MODEL: Joi.string().default('auto'),
+  CURSOR_MODEL: Joi.string().default('composer-2.5'),
 });

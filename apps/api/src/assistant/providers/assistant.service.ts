@@ -254,7 +254,8 @@ export class AssistantService implements OnModuleInit {
       const prompt = this.buildPrompt(question, hits);
       const cwd = this.agentCwd();
       const model =
-        this.configService.get<string>('appConfig.cursor.model') || 'auto';
+        this.configService.get<string>('appConfig.cursor.model') ||
+        'composer-2.5';
       const result = await Agent.prompt(prompt, {
         apiKey,
         model: { id: model },

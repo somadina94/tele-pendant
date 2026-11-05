@@ -264,6 +264,9 @@ describe('AssistantService', () => {
     expect(result.answer).toBe('ok from fallback handbook');
     const prompt = (Agent.prompt as jest.Mock).mock.calls[0][0] as string;
     expect(prompt).toMatch(/Advisory only|NxM cells/i);
+    expect((Agent.prompt as jest.Mock).mock.calls[0]?.[1]?.model).toEqual({
+      id: 'composer-2.5',
+    });
     renameSync(`${handbook}.bak`, handbook);
   });
 

@@ -25,7 +25,7 @@ export default registerAs('appConfig', () => ({
   cursor: {
     apiKey: process.env.CURSOR_API_KEY?.trim() || '',
     agentCwd: process.env.CURSOR_AGENT_CWD?.trim() || '',
-    model: process.env.CURSOR_MODEL?.trim() || 'auto',
+    model: process.env.CURSOR_MODEL?.trim() || 'composer-2.5',
   },
   faceTemplateKey: process.env.FACE_TEMPLATE_KEY?.trim() || '',
 }));

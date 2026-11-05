@@ -238,7 +238,7 @@ From Operator, open **Assistant** (http://localhost:8080/assistant).
 - Optional **Open docs** when a docs link is saved (admin).
 - **Question** prefilled with **What happens on lost Modbus?** and button **Ask**.
 
-**Acceptance default:** leave `CURSOR_API_KEY` unset. Answers use local SQLite FTS over manuals. Optional Cursor Agent: set `CURSOR_API_KEY` in the API `.env` (never commit the key). Optional `CURSOR_AGENT_CWD` (repo root) and `CURSOR_MODEL` (default `auto`).
+**Acceptance default:** leave `CURSOR_API_KEY` unset. Answers use local SQLite FTS over manuals. Optional Cursor Agent: set `CURSOR_API_KEY` in the API `.env` (never commit the key). Optional `CURSOR_AGENT_CWD` (repo root) and `CURSOR_MODEL` (default `composer-2.5`, not `auto`).
 
 1. Click **Ask**.
 2. **Success (FTS — required for acceptance):** bullet lines including **Lost communications** / `comms_lost`. Note mentions FTS or that `CURSOR_API_KEY` is unset.
