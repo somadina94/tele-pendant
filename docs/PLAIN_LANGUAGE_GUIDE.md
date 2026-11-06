@@ -105,6 +105,8 @@ Shows **Safety:** followed by a mode, for example:
 
 Treat the banner as your first glance before pressing anything.
 
+**First load:** After sign-in, the operator page waits until the saved HMI layout and (when needed) the first live tag update are ready before showing the matrix. You may see a short **Operator** loading state instead of empty buttons. A layout error shows a message rather than placeholder cells.
+
 ### Plant graphic (left side)
 
 - **Background** — Gradient or photo from Config (photo URL wins if set).
@@ -129,18 +131,27 @@ Default demo layout (empty corners):
 
 **STOP button**
 
-**STOP button**
-
 1. Click **STOP**. No PIN.
 2. The banner changes to **e_stop** and shows **E-STOP**. Motion buttons will not run.
 3. To run again, type the **Reset PIN** and click **Reset e-stop**. A wrong PIN shows **PIN does not match** and leaves the stop latched.
 4. With the correct PIN, and the e-stop coil clear, safety mode returns to **normal**.
 
-**Safe-action PIN field**
+**Safe-action PIN row**
 
+- Label **Reset PIN**, password field, and **Reset e-stop** on **one horizontal row** (desktop and mobile) to save vertical space.
 - Used only to **reset** e-stop. It is not required to press **STOP**.
-- Hidden like a password field.
-- Hint text under the field explains the demo value.
+- Hidden like a password field (`SAFE_ACTION_PIN` on the server — not your login password).
+
+---
+
+## Account menu (web header)
+
+| Item | Who | What it does |
+| ---- | --- | ------------ |
+| **Change password** | Any signed-in user | Updates **login** password (current + new + confirm, min 8 chars). Does not change `SAFE_ACTION_PIN`. |
+| **Add operator** / **Add supervisor** / **Manage users** | Admin only | Opens Config **Users** (`/admin?section=users`) to create or manage accounts. |
+
+**Logout** stays in the sidebar footer. Suspended accounts see **Account suspended — contact an administrator** at sign-in.
 
 ---
 
@@ -296,6 +307,18 @@ Tells the supervision logic which registers mean what:
 
 If deadman is lost, communications fail, or e-stop asserts, the system **clears motion coils** for safety.
 
+### Users (admin only)
+
+| Control | Meaning |
+| ------- | ------- |
+| **Table** | All accounts: display name, email, role, **Active** / **Suspended**. |
+| **Edit** | Change name, email, role, suspension, or set a new password for that user. |
+| **Suspend** / **Activate** | Block or restore sign-in without deleting the row. |
+| **Remove** | Delete operator/supervisor accounts (admin row is protected). |
+| **Add user** | Create operator or supervisor with email and password. |
+
+Display names appear on audit rows when set.
+
 ---
 
 ## Server configuration (.env) — in plain language
@@ -327,6 +350,7 @@ Production example URLs are listed in [README.md](../README.md) and [docs/README
 | Topic | Plain explanation |
 | ----- | ----------------- |
 | **API base** | Must point to your server’s `/api/v1` URL. `localhost` only works on the same machine, not from a physical phone on Wi‑Fi. |
+| **Change password** | Drawer item at the bottom — same flow as web **Account menu** → **Change password**. |
 | **Listen (voice)** | Full speech on device may need a **development build** (`npx expo run:android`); Expo Go still supports UP/DOWN buttons. |
 | **OTA manifest** | Server URL `/ota/manifest` tells the app where to download JS updates. |
 

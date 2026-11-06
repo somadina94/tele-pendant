@@ -53,6 +53,17 @@ cp .env.example .env
 # fallback: DEPLOY_BUILD_LOCAL=1 ./deploy.sh
 ```
 
+## Database migrations (upgrades)
+
+TypeORM migrations live in `apps/api/src/database/migrations/`. `DATABASE_SYNC` stays off in production. After pulling a release that adds migrations (for example `1762380000000-AddUserSuspended` for account suspension), run:
+
+```bash
+pnpm --filter @tele-pendant/api build
+pnpm --filter @tele-pendant/api migration:run
+```
+
+Restart the API container or process. Fresh installs seed the admin user; existing SQLite files need `migration:run` when the repo adds columns.
+
 ## GitHub secrets
 
 `SERVER_HOST`, `SERVER_USERNAME`, `SERVER_PORT`, `SERVER_PASSWORD` and/or `SERVER_SSH_KEY`, optional `SERVER_DEPLOY_PATH`.

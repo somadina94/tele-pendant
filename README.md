@@ -77,8 +77,8 @@ Images pushed on main: `tele-pendant-api`, `tele-pendant-sim`, `tele-pendant-web
 - Web: http://localhost:5173 (host) or http://localhost:8080 (Docker `WEB_PORT`) — `/operator`, `/ops`, `/media`, `/admin`, `/assistant`, `/face`
 - Expo: `pnpm --filter @tele-pendant/mobile dev` (set API base to LAN or the live API URL on the phone)
 - Release APK (local, no EAS): `pnpm --filter @tele-pendant/mobile apk:release` → `apps/mobile/dist/tele-pendant-release.apk`
-- Default admin: `admin@example.com` / `change-me-admin-password` (from `.env`)
-- Safe-action PIN (e-stop cell): `SAFE_ACTION_PIN`
+- Default admin: `admin@example.com` / `change-me-admin-password` (from `.env`); admins manage operator/supervisor accounts in Config **Users**; all roles change login password via the web **Account menu** or phone drawer
+- Safe-action PIN (reset e-stop only, not login): `SAFE_ACTION_PIN`
 - Seed QR: `TP-CRANE-DEMO-01`
 - Face auth: local challenge liveness (not ISO-certified) — [`docs/FACE_LIMITATIONS.md`](./docs/FACE_LIMITATIONS.md)
 - Assistant: **acceptance = local SQLite FTS** (Cursor Agent only if `CURSOR_API_KEY` is set)

@@ -370,16 +370,16 @@ export function OperatorPage() {
         </CardHeader>
         <CardContent className="space-y-1 px-2 pb-2 pt-2 md:space-y-2 md:px-4 md:pb-4 md:pt-0">
           <HelpTip id="tour.operator.safePin">
-            <div className="grid max-w-md grid-cols-1 gap-1 max-md:grid-cols-[1fr_auto] max-md:items-center md:max-w-xs md:gap-1.5">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <Label
                 htmlFor="safe-pin"
-                className="text-xs max-md:col-span-2 md:text-base"
+                className="shrink-0 whitespace-nowrap text-xs md:text-sm"
               >
                 {t('safePin')}
               </Label>
               <Input
                 id="safe-pin"
-                className="h-12 min-h-12 md:h-10 md:min-h-10"
+                className="h-12 min-h-12 min-w-[5rem] max-w-[11rem] flex-1 basis-28 md:h-10 md:min-h-10 md:max-w-[9rem]"
                 value={safePin}
                 onChange={(e) => setSafePin(e.target.value)}
                 type="password"

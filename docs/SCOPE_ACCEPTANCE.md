@@ -12,6 +12,7 @@ Evidence map for tomorrow’s review. Tick each row with the linked screen, API,
 | OTA | `OTA.md` — JS/asset OTA; native camera/speech need APK rebuild | Software delivered (honest native limit) |
 | Assistant | Local FTS default; Cursor only if `CURSOR_API_KEY` set | **Acceptance = FTS without Cursor key** |
 | i18n | `en` / `es` / `fr` / `de` in `packages/shared/i18n`; language pickers | Software delivered |
+| User accounts | Config **Users** (admin); suspend/edit/remove; **Change password** (all roles); migration `AddUserSuspended` | Software delivered |
 | Manuals / test plan | USER_MANUAL, MANUAL_TEST_PLAN, INSTALLATION, TRAINING outline | Software delivered |
 | Live classroom training | `TRAINING.md` outline only | **Vendor-led live session** — not automated in repo |
 | Certified biometrics / PAD lab | — | **Out of scope** |

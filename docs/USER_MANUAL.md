@@ -38,13 +38,15 @@ Sign-in values if you get logged out (from `.env`):
 1. Open http://localhost:8080.
 2. **Success:** heading **Tele-Pendant**, text **Sign in to operate the demo crane**, fields **Email** and **Password** already filled, button **Sign in**, link **Face login (basic)**.
 3. Click **Sign in**.
-4. **Success:** the address becomes `/operator`. You see **Demo crane operator HMI** and the top links **Media**, **Assistant**, **Face**, **Ops**, **Config**, **Audit**, **Logout**.
+4. **Success:** the address becomes `/operator`. The sidebar lists **Operator**, **Media**, **Assistant**, **Face**, **Ops**, **Audit**, and **Config** (role permitting). The header shows an **Account menu** button (your display name or email prefix), **Tour help**, and theme toggle. **Logout** is at the bottom of the sidebar.
 
-Wrong password shows a red error and you stay on the login page.
+Wrong password shows a red error and you stay on the login page. A **suspended** account shows **Account suspended — contact an administrator** and does not sign in.
 
 ## 1. Operator screen — layout
 
 Stay on http://localhost:8080/operator.
+
+After sign-in, the operator page may show a short **Operator** loading state until the HMI layout and live tag snapshot are ready (or until a brief fallback timeout). If layout load fails, a red message appears instead of an empty matrix — refresh or fix the API connection.
 
 **Success, top to bottom:**
 
@@ -53,7 +55,7 @@ Stay on http://localhost:8080/operator.
 - Three overlays on the graphic: **Height** (about `1250 mm` at a fresh simulator), **Load** (`0 kg`), **Motor** (`IDLE`).
 - Strip under the graphic: `H … mm`, `Load … kg`, and `IDLE`.
 - Right panel title **Control matrix**.
-- Field labeled **Reset PIN**. It is used only by **Reset e-stop**, not by **STOP**.
+- One horizontal row: label **Reset PIN**, password field, and **Reset e-stop** button. The PIN is used only for **Reset e-stop**, not for **STOP**.
 - Five buttons in a 3×3 grid (corners are empty):
 
   |        | left          | center         | right         |
@@ -214,6 +216,9 @@ From Operator, click **Config** (http://localhost:8080/admin). Sign in as the ad
 - **Add a cell** is an empty form. Pick a primary register, fill the label, and click **Add cell**.
 - **Live labels** lists **Height**, **Load**, and **Motor** with **X**, **Y**, **Format**, and a register. Those three feed the fixed **cluster readout** on Operator (they do not float on the graphic). **Add a label** posts a free-position overlay (use X/Y for placement).
 - **Background** has **Name**, a CSS background, and an image URL. If the image URL is filled, Operator uses that picture. If it is empty, Operator uses the CSS background.
+- **Users** (admin only): table of accounts with **Name**, **Email**, **Role**, **Status** (**Active** / **Suspended**), and **Edit** / **Suspend** or **Activate** / **Remove** on operator and supervisor rows. The seeded **admin** row shows **Protected**; you cannot suspend or remove yourself. Below the table, **Add user** creates an operator or supervisor (display name, email, password at least 8 characters, role). **Success:** toast **Added** with the name or email. Suspended users cannot sign in until an admin **Activate**s them. Removing a user deletes the account.
+
+Admins can open **Users** from Config’s sidebar section, from the **Account menu** (**Manage users**, **Add operator**, **Add supervisor** — each jumps to Config with the **Users** section open), or directly at http://localhost:8080/admin?section=users.
 
 ### Edit a cell, a label, and the background, then put them back
 
@@ -310,13 +315,24 @@ Do this only after the banner is **normal** again. One alarm cannot be both acke
 4. **Success:** the state text is **shelved**.
 5. Click **Unshelve** to bring it back, or reset e-stop. When the e-stop coil clears, a shelved alarm clears too.
 
-## 12. Logout
+## 12. Account menu — change password
 
-1. On Operator, click **Logout**.
+Any signed-in role can change its own password (not the plant **Reset PIN**).
+
+1. On any app screen, click the header **Account menu** button.
+2. Click **Change password**.
+3. Fill **Current password**, **New password**, and **Confirm new password** (new password at least 8 characters). Click **Save password**.
+4. **Success:** toast **Password updated.** Wrong current password shows an error and leaves the sheet open.
+
+On the phone, open the drawer and tap **Change password** at the bottom (same three fields and **Save password**).
+
+## 13. Logout
+
+1. On Operator, open the sidebar and click **Logout**.
 2. **Success:** you are on `/` (the sign-in form). Opening http://localhost:8080/operator sends you back to sign-in.
 3. Sign in again with **Sign in** if you want to keep testing.
 
-## 13. OTA folder
+## 14. OTA folder
 
 The API serves `apps/api/ota` with no login.
 
@@ -324,14 +340,14 @@ The API serves `apps/api/ota` with no login.
 2. **Success:** JSON with `runtimeVersion` `0.0.1`, and the header `expo-protocol-version: 1`.
 3. Point the phone `updates.url` at `https://api.tele-pendant.jahbyte.com/ota/manifest` for production builds. Replacing `manifest.json` and `assets/bundle.js` in that folder is the JavaScript update. The camera is a native module, so it still needs a binary rebuild.
 
-## 14. Expo handheld
+## 15. Expo handheld
 
 Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit**.
 
 1. On the phone, set **API base** to `https://api.tele-pendant.jahbyte.com/api/v1` for the live API, or your computer’s LAN URL ending in `/api/v1` for a local stack (not `localhost` on a physical phone).
 2. Email and password are the same as step 0.
 3. Tap **Sign in**.
-4. **Success:** title **Tele-Pendant**, **Logout**, and the six header buttons. Operator shows banner `Safety: normal · H … mm`, a **Reset PIN** field, and the same five cells.
+4. **Success:** title **Tele-Pendant**, drawer navigation, **Change password**, and **Logout**. Operator may show a brief loading indicator, then banner `Safety: normal · H … mm`, **Reset PIN** and **Reset e-stop** on one row, and the same five cells.
 5. Press and hold **Hoist Up**. **Success:** banner includes **DEADMAN** and the held cell gets a green border. Height in the banner increases. Release: **DEADMAN** clears.
 6. Open **Media**. Tap **Listen** (Expo Go explains that speech needs `npx expo run:android`). Tap **UP**, then **DOWN**. **Success:** **Heard: up. Executed: Hoist Up**, then the same line for **down** / **Hoist Down**. Type a known code or scan a QR with the camera and tap **Resolve**. **Success:** the code’s label.
 7. Open **Face**. **Success:** the sentence **Convenience match only — not certified biometrics. Fail closed to password.**
@@ -364,7 +380,7 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 - Keep `JWT_SECRET`, `ADMIN_PASSWORD`, `SAFE_ACTION_PIN`, and `FACE_TEMPLATE_KEY` strong and unique per environment (never commit real secrets).
 - Login and face endpoints are **rate-limited**. Face templates stay on the server (never returned to clients).
 - PIN policy: **STOP** is one press. `SAFE_ACTION_PIN` is only for **Reset e-stop**. Face auth must never replace that PIN.
-- Roles (operator / supervisor / admin) gate Config, Audit, and safety actions via JWT.
+- Roles (operator / supervisor / admin) gate Config, Audit, and safety actions via JWT. Admins manage operator/supervisor accounts (suspend, edit, remove); every role changes its own login password via **Account menu** / phone drawer — not via `SAFE_ACTION_PIN`.
 
 ## What this software does not do
 

@@ -19,10 +19,11 @@ Live demo hosts: web https://tele-pendant.jahbyte.com · API/Swagger https://api
 
 ## Session 3 (30 min)
 
-1. Admin: connections, register maps, cells
-2. Switch from simulator to real PLC checklist
-3. Docker deploy / OTA overview
-4. Manual test plan dry-run
+1. Admin: connections, register maps, cells, **Users** (add / suspend / remove)
+2. **Account menu**: change login password vs plant **Reset PIN**
+3. Switch from simulator to real PLC checklist
+4. Docker deploy / OTA overview
+5. Manual test plan dry-run
 
 Hand out `USER_MANUAL.md`, `REAL_PLC_WIRING.md`, and `SCOPE_ACCEPTANCE.md`.
 

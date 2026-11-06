@@ -23,6 +23,7 @@ pnpm --filter @tele-pendant/modbus-core test:integration
 - Runtime DB: `DATABASE_PATH` / Docker volume `/app/data/tele-pendant.sqlite`
 - Assistant FTS: `data/assistant-fts.sqlite`
 - Backup: copy `data/` while API is stopped
+- Schema upgrades: `pnpm --filter @tele-pendant/api build && pnpm --filter @tele-pendant/api migration:run` (see `INSTALLATION.md`). Check pending migrations with `migration:show`.
 
 ## Reindex assistant docs
 
