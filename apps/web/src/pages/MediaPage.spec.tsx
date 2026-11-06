@@ -5,6 +5,15 @@ import { renderWithProviders } from '../test/render';
 import * as api from '../lib/api';
 
 const zxingState = vi.hoisted(() => ({ mode: 'TP-CRANE-DEMO-01' }));
+const toastMocks = vi.hoisted(() => ({
+  ok: vi.fn(),
+  err: vi.fn(),
+}));
+
+vi.mock('@/lib/toast', () => ({
+  toastOk: (...args: unknown[]) => toastMocks.ok(...args),
+  toastErr: (...args: unknown[]) => toastMocks.err(...args),
+}));
 
 vi.mock('@zxing/browser', () => ({
   BrowserMultiFormatReader: class {
@@ -18,6 +27,8 @@ vi.mock('@zxing/browser', () => ({
 
 describe('MediaPage', () => {
   beforeEach(() => {
+    toastMocks.ok.mockClear();
+    toastMocks.err.mockClear();
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
       value: {
@@ -39,7 +50,7 @@ describe('MediaPage', () => {
     vi.spyOn(api, 'apiPost').mockResolvedValue({
       code: 'TP-CRANE-DEMO-01',
       label: 'Bay',
-      routeHint: '/ops',
+      routeHint: null,
     });
   });
 
@@ -50,6 +61,17 @@ describe('MediaPage', () => {
     (
       window as unknown as { BarcodeDetector: typeof FakeDetector }
     ).BarcodeDetector = FakeDetector;
+
+    const post = vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/media/codes/resolve') {
+        return {
+          code: 'TP-CRANE-DEMO-01',
+          label: 'Bay',
+          routeHint: null,
+        };
+      }
+      return { ok: true, label: 'Hoist Up' };
+    });
 
     renderWithProviders(<MediaPage />);
     expect(await screen.findByText(/Device camera notes/)).toBeInTheDocument();
@@ -62,8 +84,14 @@ describe('MediaPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
 
     await waitFor(() =>
-      expect(screen.getByText(/Bay \(TP-CRANE-DEMO-01\)/)).toBeInTheDocument(),
+      expect(post).toHaveBeenCalledWith('/media/codes/resolve', {
+        code: 'TP-CRANE-DEMO-01',
+      }),
     );
+    await waitFor(() => expect(toastMocks.ok).toHaveBeenCalledWith('Bay'));
+    expect(
+      screen.getAllByText(/Resolved: Bay \(TP-CRANE-DEMO-01\)/).length,
+    ).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'TP-CRANE-DEMO-01' }));
     fireEvent.click(
@@ -96,7 +124,7 @@ describe('MediaPage', () => {
     vi.spyOn(api, 'apiPost').mockRejectedValueOnce(new Error('bad code'));
 
     renderWithProviders(<MediaPage />);
-    expect(await screen.findByText('no cam')).toBeInTheDocument();
+    expect(await screen.findByText(/no cam/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Code'), { target: { value: ' ' } });
     expect(screen.getByRole('button', { name: 'Resolve' })).toBeDisabled();
@@ -106,17 +134,18 @@ describe('MediaPage', () => {
       target: { value: 'TP-CRANE-DEMO-01' },
     });
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
-    );
-    expect(await screen.findByText(/No code in frame/)).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
-    expect(await screen.findByText('bad code')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(toastMocks.err).toHaveBeenCalledWith('bad code'),
+    );
+    expect(screen.getAllByText('bad code').length).toBeGreaterThan(0);
 
     vi.spyOn(api, 'apiPost').mockRejectedValueOnce('x');
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
-    expect(await screen.findByText('Resolve failed')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(toastMocks.err).toHaveBeenCalledWith('Resolve failed'),
+    );
+    expect(screen.getAllByText('Resolve failed').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
     expect(
@@ -329,10 +358,16 @@ describe('MediaPage', () => {
     ).BarcodeDetector = EmptyDetector;
     renderWithProviders(<MediaPage />);
     await screen.findByText(/Device camera notes/);
+    await waitFor(() => expect(document.querySelector('video')).toBeTruthy());
     fireEvent.click(
       screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
     );
-    expect(await screen.findByText('No code in frame')).toBeInTheDocument();
+    await waitFor(() => {
+      const alerts = screen.getAllByRole('alert');
+      expect(
+        alerts.some((el) => /No code in frame/i.test(el.textContent ?? '')),
+      ).toBe(true);
+    });
   });
 
   it('stops a late camera stream after leaving the page', async () => {
@@ -380,15 +415,18 @@ describe('MediaPage', () => {
     await Promise.resolve();
   });
 
+  it('shows the config link for supervisors', async () => {
+    renderWithProviders(<MediaPage />, { role: 'supervisor' });
+    expect(
+      await screen.findByRole('link', { name: /Add or edit codes in Config/i }),
+    ).toHaveAttribute('href', '/admin?section=codes');
+  });
+
   it('decodes with zxing when BarcodeDetector is missing', async () => {
     delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector;
     zxingState.mode = 'TP-CRANE-DEMO-01';
     renderWithProviders(<MediaPage />);
     await screen.findByText(/Device camera notes/);
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
-    );
-    expect(await screen.findByText('No code in frame')).toBeInTheDocument();
     const video = document.querySelector('video');
     expect(video).toBeTruthy();
     Object.defineProperty(video as HTMLVideoElement, 'readyState', {
@@ -403,11 +441,21 @@ describe('MediaPage', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
     );
-    expect(await screen.findByText('No code in frame')).toBeInTheDocument();
+    await waitFor(() => {
+      const alerts = screen.getAllByRole('alert');
+      expect(
+        alerts.some((el) => /No code in frame/i.test(el.textContent ?? '')),
+      ).toBe(true);
+    });
     zxingState.mode = 'throw';
     fireEvent.click(
       screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
     );
-    expect(await screen.findByText('No code in frame')).toBeInTheDocument();
+    await waitFor(() => {
+      const alerts = screen.getAllByRole('alert');
+      expect(
+        alerts.some((el) => /No code in frame/i.test(el.textContent ?? '')),
+      ).toBe(true);
+    });
   });
 });

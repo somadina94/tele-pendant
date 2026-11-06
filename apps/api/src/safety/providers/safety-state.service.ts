@@ -92,10 +92,7 @@ export class SafetyStateService {
    * Drop the software e-stop coil. Requires the plant PIN.
    * Asserting STOP itself does not use the PIN.
    */
-  async resetEStop(
-    pin: string,
-    actor?: AuditActor,
-  ): Promise<SafetySnapshot> {
+  async resetEStop(pin: string, actor?: AuditActor): Promise<SafetySnapshot> {
     const expected = (process.env.SAFE_ACTION_PIN || '').trim();
     const provided = pin.trim();
     if (!expected || !provided || provided !== expected) {

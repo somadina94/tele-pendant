@@ -22,7 +22,7 @@ describe('AssistantPage', () => {
       answer: 'comms lost',
       note: 'local',
     });
-    renderWithProviders(<AssistantPage />);
+    renderWithProviders(<AssistantPage />, { role: 'admin' });
     expect(await screen.findByText(/Indexed documents: 5/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     await waitFor(() =>
@@ -39,7 +39,7 @@ describe('AssistantPage', () => {
       cursorConfigured: true,
     });
     vi.spyOn(api, 'apiPost').mockRejectedValueOnce(new Error('down'));
-    renderWithProviders(<AssistantPage />);
+    renderWithProviders(<AssistantPage />, { role: 'admin' });
     await expandDocsSettings();
     expect(
       await screen.findByRole('link', { name: /Open docs/i }),
@@ -69,7 +69,7 @@ describe('AssistantPage', () => {
       cursorConfigured: true,
     });
     const post = vi.spyOn(api, 'apiPost').mockResolvedValue({ indexed: 9 });
-    renderWithProviders(<AssistantPage />);
+    renderWithProviders(<AssistantPage />, { role: 'admin' });
     await expandDocsSettings();
     await screen.findByDisplayValue('docs');
     fireEvent.change(screen.getByLabelText('Docs root path'), {
@@ -104,7 +104,7 @@ describe('AssistantPage', () => {
       .spyOn(api, 'apiPost')
       .mockRejectedValueOnce('nope')
       .mockRejectedValueOnce(new Error('reindex boom'));
-    renderWithProviders(<AssistantPage />);
+    renderWithProviders(<AssistantPage />, { role: 'admin' });
     await expandDocsSettings();
     const reindexBtn = () => screen.getByRole('button', { name: 'Reindex' });
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
@@ -132,7 +132,7 @@ describe('AssistantPage', () => {
       note: 'Answered by Cursor Agent with local manuals + feature handbook.',
       mode: 'cursor',
     });
-    renderWithProviders(<AssistantPage />);
+    renderWithProviders(<AssistantPage />, { role: 'admin' });
     expect(
       await screen.findByText(/Cursor Agent is configured/),
     ).toBeInTheDocument();
@@ -158,7 +158,7 @@ describe('AssistantPage', () => {
       note: 'local',
       mode: 'local-fts',
     });
-    renderWithProviders(<AssistantPage />);
+    renderWithProviders(<AssistantPage />, { role: 'admin' });
     expect(await screen.findByText('Suggested questions')).toBeInTheDocument();
     // safety group is open by default
     fireEvent.click(
@@ -182,7 +182,7 @@ describe('AssistantPage', () => {
       cursorConfigured: false,
     });
     const post = vi.spyOn(api, 'apiPost');
-    renderWithProviders(<AssistantPage />);
+    renderWithProviders(<AssistantPage />, { role: 'admin' });
     const question = await screen.findByLabelText('Question');
     fireEvent.change(question, { target: { value: '   ' } });
     expect(screen.getByRole('button', { name: 'Ask' })).toBeDisabled();
@@ -204,7 +204,7 @@ describe('AssistantPage', () => {
           resolveAsk = resolve;
         }),
     );
-    renderWithProviders(<AssistantPage />);
+    renderWithProviders(<AssistantPage />, { role: 'admin' });
     const question = await screen.findByLabelText('Question');
     const form = question.closest('form');
     expect(form).toBeTruthy();

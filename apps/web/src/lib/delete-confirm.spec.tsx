@@ -37,9 +37,7 @@ describe('useDeleteConfirmDialog', () => {
     }
     render(<Host />);
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
-    expect(screen.getByRole('alertdialog')).toHaveTextContent(
-      'Delete widget?',
-    );
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Delete widget?');
     fireEvent.click(
       within(screen.getByRole('alertdialog')).getByRole('button', {
         name: 'Cancel',

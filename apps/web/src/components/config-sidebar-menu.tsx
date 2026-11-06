@@ -29,6 +29,13 @@ export function ConfigSidebarMenu() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
+  const onConfig = pathname.startsWith('/admin');
+  const [subOpen, setSubOpen] = useState(onConfig);
+
+  useEffect(() => {
+    if (onConfig) setSubOpen(true);
+  }, [onConfig]);
+
   const role = getStoredUserRole();
   if (!role || !canAccessAppRoute(role, 'config')) return null;
 
@@ -36,18 +43,12 @@ export function ConfigSidebarMenu() {
   const allowed = new Set(
     configSectionIdsForRole(role),
   ) as Set<ConfigSectionId>;
-  const onConfig = pathname.startsWith('/admin');
   const section = parseConfigSection(
     searchParams.get('section'),
     showUsers,
     allowed,
   );
   const groups = configSectionGroups(showUsers, allowed);
-  const [subOpen, setSubOpen] = useState(onConfig);
-
-  useEffect(() => {
-    if (onConfig) setSubOpen(true);
-  }, [onConfig]);
 
   function openSection(id: ConfigSectionId) {
     navigate(`/admin?section=${id}`);

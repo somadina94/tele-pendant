@@ -400,33 +400,17 @@ export function OperatorPage() {
                           e.clientY,
                         )
                       ) {
-                        finishCellPointer(
-                          cell,
-                          e.currentTarget,
-                          e.pointerId,
-                        );
+                        finishCellPointer(cell, e.currentTarget, e.pointerId);
                       }
                     }}
                     onPointerUp={(e) =>
-                      finishCellPointer(
-                        cell,
-                        e.currentTarget,
-                        e.pointerId,
-                      )
+                      finishCellPointer(cell, e.currentTarget, e.pointerId)
                     }
                     onPointerLeave={(e) =>
-                      finishCellPointer(
-                        cell,
-                        e.currentTarget,
-                        e.pointerId,
-                      )
+                      finishCellPointer(cell, e.currentTarget, e.pointerId)
                     }
                     onPointerCancel={(e) =>
-                      finishCellPointer(
-                        cell,
-                        e.currentTarget,
-                        e.pointerId,
-                      )
+                      finishCellPointer(cell, e.currentTarget, e.pointerId)
                     }
                     onLostPointerCapture={() => {
                       if (heldRef.current === cell.id && cell.isMotion) {

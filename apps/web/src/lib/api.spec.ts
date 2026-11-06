@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from './api';
+import {
+  apiDelete,
+  apiDownload,
+  apiGet,
+  apiPatch,
+  apiPost,
+  apiPut,
+} from './api';
 
 describe('api helpers', () => {
   afterEach(() => {
@@ -180,6 +187,40 @@ describe('api helpers', () => {
     });
     expect(fetchMock.mock.calls[2][1].method).toBe('PUT');
     await expect(apiPatch('/fail', {})).rejects.toThrow('denied');
+  });
+
+  it('downloads blobs and triggers a file save', async () => {
+    const blob = new Blob(['a,b\n1,2'], { type: 'text/csv' });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => blob,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const click = vi.fn();
+    const anchor = {
+      href: '',
+      download: '',
+      click,
+    } as unknown as HTMLAnchorElement;
+    const createElement = vi
+      .spyOn(document, 'createElement')
+      .mockReturnValue(anchor);
+    const createObjectURL = vi.fn(() => 'blob:mock');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      createObjectURL,
+      revokeObjectURL,
+    });
+
+    await apiDownload('/audit/export', 'audit.csv');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/audit/export',
+      expect.objectContaining({ headers: {} }),
+    );
+    expect(anchor.download).toBe('audit.csv');
+    expect(click).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock');
+    createElement.mockRestore();
   });
 
   it('deletes and surfaces errors', async () => {

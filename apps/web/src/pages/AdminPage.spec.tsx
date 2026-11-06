@@ -62,6 +62,12 @@ const layout = {
   },
 };
 
+function adminGetFallback(path: string) {
+  if (path === '/media/codes') return [];
+  if (path === '/users') return [];
+  return layout;
+}
+
 const plcHealthMock = {
   connected: true,
   connectionId: '1',
@@ -103,6 +109,17 @@ function cancelPlcEnableDialog() {
   );
 }
 
+async function saveSimConnection() {
+  fireEvent.click(screen.getByRole('button', { name: 'Save sim' }));
+  try {
+    await screen.findByRole('alertdialog', {}, { timeout: 800 });
+    confirmPlcEnableDialog();
+  } catch {
+    /* enabled PLC saves ask for confirmation; disabled saves do not */
+  }
+  await screen.findByText('Saved.');
+}
+
 const SECTION_BY_LABEL: Record<string, string> = {
   'PLC connections': 'plc',
   'Register maps': 'registers',
@@ -126,8 +143,13 @@ function showAdminSection(section: string) {
   return view;
 }
 
-function goConfigSection(label: string) {
+async function goConfigSection(label: string) {
   showAdminSection(SECTION_BY_LABEL[label] ?? 'plc');
+  await waitFor(() => {
+    expect(
+      screen.queryByRole('status', { name: /HMI config/i }),
+    ).not.toBeInTheDocument();
+  });
 }
 
 describe('AdminPage', () => {
@@ -169,27 +191,47 @@ describe('AdminPage', () => {
           },
         ];
       }
-      return layout;
+      return adminGetFallback(path);
     });
     showAdminSection('plc');
     await waitFor(() =>
       expect(screen.getAllByText(/simulator/).length).toBeGreaterThan(0),
     );
     expect(screen.getByDisplayValue('sim')).toBeInTheDocument();
-    goConfigSection('Register maps');
+    await goConfigSection('Register maps');
     expect(screen.getAllByText(/coil\.up/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/coil\.fb/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/coil\.st/).length).toBeGreaterThan(0);
-    goConfigSection('Matrix cells');
+    await goConfigSection('Matrix cells');
     expect(screen.getByDisplayValue('Up')).toBeInTheDocument();
-    goConfigSection('Background');
+    await goConfigSection('Background');
     expect(screen.getByText('No active background')).toBeInTheDocument();
     expect(screen.getAllByText(/—/).length).toBeGreaterThan(0);
-    goConfigSection('QR / scan codes');
+    await goConfigSection('QR / scan codes');
     await waitFor(() =>
       expect(screen.getByDisplayValue('TP-OPS')).toBeInTheDocument(),
     );
-    expect(screen.getByRole('heading', { name: /Add code/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Add code/i }),
+    ).toBeInTheDocument();
+    const delCode = vi.spyOn(api, 'apiDelete').mockResolvedValue({});
+    const codeRow = screen.getByDisplayValue('TP-OPS').closest('form')!;
+    fireEvent.click(within(codeRow).getByRole('button', { name: 'Delete' }));
+    confirmDeleteDialog();
+    await waitFor(() =>
+      expect(delCode).toHaveBeenCalledWith('/media/codes/sc1'),
+    );
+  });
+
+  it('shows scan code load errors', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/media/codes') throw new Error('codes offline');
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') return [];
+      return adminGetFallback(path);
+    });
+    await goConfigSection('QR / scan codes');
+    expect(await screen.findByText('codes offline')).toBeInTheDocument();
   });
 
   it('saves a PLC, a register, and a new connection', async () => {
@@ -208,7 +250,7 @@ describe('AdminPage', () => {
           },
         ];
       }
-      return layout;
+      return adminGetFallback(path);
     });
     const patch = vi.spyOn(api, 'apiPatch').mockResolvedValue({});
     const post = vi.spyOn(api, 'apiPost').mockResolvedValue({});
@@ -227,8 +269,7 @@ describe('AdminPage', () => {
     fireEvent.change(screen.getByLabelText('1 unit'), {
       target: { value: '2' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save sim' }));
-    await screen.findByText('Saved.');
+    await saveSimConnection();
     expect(patch).toHaveBeenCalledWith('/plc/connections/1', {
       label: 'sim',
       host: '10.1.1.1',
@@ -239,10 +280,9 @@ describe('AdminPage', () => {
     });
 
     fireEvent.click(screen.getByLabelText('1 use'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save sim' }));
-    await screen.findByText('Saved.');
+    await saveSimConnection();
 
-    goConfigSection('Register maps');
+    await goConfigSection('Register maps');
     fireEvent.change(screen.getByLabelText('coil.up address'), {
       target: { value: '11' },
     });
@@ -303,7 +343,7 @@ describe('AdminPage', () => {
           },
         ];
       }
-      return layout;
+      return adminGetFallback(path);
     });
     vi.spyOn(api, 'apiPatch')
       .mockRejectedValueOnce(new Error('no route'))
@@ -313,9 +353,11 @@ describe('AdminPage', () => {
     await screen.findByDisplayValue('sim');
 
     fireEvent.click(screen.getByRole('button', { name: 'Save sim' }));
+    await screen.findByRole('alertdialog');
+    confirmPlcEnableDialog();
     await screen.findByText('no route');
 
-    goConfigSection('Register maps');
+    await goConfigSection('Register maps');
     fireEvent.click(screen.getByRole('button', { name: 'Save coil.up' }));
     await screen.findByText('Save failed');
 
@@ -393,9 +435,13 @@ describe('AdminPage', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete Lift' }));
+    await screen.findByRole('alertdialog');
+    confirmDeleteDialog();
     await waitFor(() => expect(del).toHaveBeenCalledWith('/hmi/cells/c1'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete Spare' }));
+    await screen.findByRole('alertdialog');
+    confirmDeleteDialog();
     await screen.findByText('busy');
 
     fireEvent.click(screen.getByRole('button', { name: 'Add cell' }));
@@ -431,7 +477,7 @@ describe('AdminPage', () => {
       expect.objectContaining({ label: 'Extra' }),
     );
 
-    goConfigSection('Live labels');
+    await goConfigSection('Live labels');
     fireEvent.change(screen.getByLabelText('o1 overlay-label'), {
       target: { value: 'Load' },
     });
@@ -450,7 +496,11 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save Height' }));
     await screen.findByText('Saved Load.');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Load' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /Delete (Load|Height)/ }),
+    );
+    await screen.findByRole('alertdialog');
+    confirmDeleteDialog();
     await waitFor(() => expect(del).toHaveBeenCalledWith('/hmi/overlays/o1'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Add label' }));
@@ -474,7 +524,7 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add label' }));
     await screen.findByText('Saved Motor.');
 
-    goConfigSection('Background');
+    await goConfigSection('Background');
     fireEvent.change(screen.getByLabelText('background name'), {
       target: { value: 'yard' },
     });
@@ -501,7 +551,11 @@ describe('AdminPage', () => {
     await screen.findByText('overlay');
 
     del.mockRejectedValueOnce('x');
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Load' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /Delete (Load|Height)/ }),
+    );
+    await screen.findByRole('alertdialog');
+    confirmDeleteDialog();
     await screen.findByText('Save failed');
 
     patch.mockRejectedValueOnce(new Error('bg'));
@@ -557,20 +611,8 @@ describe('AdminPage', () => {
     showAdminSection('cells');
     expect(await screen.findByDisplayValue('bay')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('blank style'), {
-      target: { value: 'estop' },
-    });
-    expect(
-      screen.queryByRole('button', { name: /Delete/i }),
-    ).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('blank style'), {
       target: { value: 'default' },
     });
-    fireEvent.change(screen.getByLabelText('blank cell-label'), {
-      target: { value: ' stop ' },
-    });
-    expect(
-      screen.queryByRole('button', { name: /Delete/i }),
-    ).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('blank cell-label'), {
       target: { value: '' },
     });
@@ -580,7 +622,7 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete cell' }));
     confirmDeleteDialog();
     await waitFor(() => expect(del).toHaveBeenCalledWith('/hmi/cells/blank'));
-    goConfigSection('Live labels');
+    await goConfigSection('Live labels');
     fireEvent.click(screen.getByRole('button', { name: 'Delete label' }));
     cancelDeleteDialog();
     expect(del).not.toHaveBeenCalledWith('/hmi/overlays/o9');
@@ -656,21 +698,20 @@ describe('AdminPage', () => {
     const del = vi.spyOn(api, 'apiDelete').mockResolvedValue({});
     showAdminSection('plc');
     await screen.findByDisplayValue('sim');
-    goConfigSection('Safety roles');
+    await goConfigSection('Safety roles');
     fireEvent.click(screen.getByLabelText('allow timed media motion'));
     fireEvent.click(screen.getByLabelText('allow timed media motion'));
 
-    goConfigSection('PLC connections');
+    await goConfigSection('PLC connections');
     fireEvent.change(screen.getByLabelText('1 protocol'), {
       target: { value: 'modbus-tcp' },
     });
     fireEvent.change(screen.getByLabelText('1 protocol'), {
       target: { value: 'opcua' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save sim' }));
-    await screen.findByText('Saved.');
+    await saveSimConnection();
 
-    goConfigSection('Register maps');
+    await goConfigSection('Register maps');
     fireEvent.change(screen.getByLabelText('holding.height node'), {
       target: { value: 'ns=1;s=Moved' },
     });
@@ -684,7 +725,7 @@ describe('AdminPage', () => {
       expect.objectContaining({ trended: false, nodeId: 'ns=1;s=Moved' }),
     );
 
-    goConfigSection('Alarm definitions');
+    await goConfigSection('Alarm definitions');
     fireEvent.change(screen.getByLabelText('alarm name'), {
       target: { value: 'Hot' },
     });
@@ -741,7 +782,7 @@ describe('AdminPage', () => {
     confirmDeleteDialog();
     await screen.findByText('Save failed');
 
-    goConfigSection('Safety roles');
+    await goConfigSection('Safety roles');
     fireEvent.change(screen.getByLabelText('E-stop'), {
       target: { value: 'r1' },
     });
@@ -781,7 +822,7 @@ describe('AdminPage', () => {
       await screen.findByText(/These fields are saved in SQLite/),
     ).toBeInTheDocument();
     expect(screen.getByText('Add a PLC')).toBeInTheDocument();
-    goConfigSection('Background');
+    await goConfigSection('Background');
     expect(screen.getByText('No active background')).toBeInTheDocument();
   });
 

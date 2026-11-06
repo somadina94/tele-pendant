@@ -32,10 +32,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { ConfigScanCodesSection } from '@/components/config-scan-codes-section';
 import { ConfigUsersSection } from '@/components/config-users-section';
-import {
-  canManageUsers,
-  configSectionIdsForRole,
-} from '@tele-pendant/shared';
+import { canManageUsers, configSectionIdsForRole } from '@tele-pendant/shared';
 import {
   parseConfigSection,
   type ConfigSectionId,
@@ -288,284 +285,290 @@ export function AdminPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-        {section === 'plc' ? (
-          <p className="text-sm text-muted-foreground">
-            These fields are saved in SQLite. Check{' '}
-            <strong>Use this PLC</strong> and press <strong>Save</strong> to
-            connect. Each register address is the Modbus number the buttons and
-            safety checks use.
-          </p>
-        ) : null}
-        {section === 'codes' ? (
-          <p className="text-sm text-muted-foreground">
-            QR and barcodes must match the <strong>Code</strong> text exactly
-            (not a URL unless you register that URL). Operators resolve codes on{' '}
-            <strong>Media</strong>; optional <strong>Route hint</strong> sends
-            them to a screen after a successful scan.
-          </p>
-        ) : null}
+      {section === 'plc' ? (
+        <p className="text-sm text-muted-foreground">
+          These fields are saved in SQLite. Check <strong>Use this PLC</strong>{' '}
+          and press <strong>Save</strong> to connect. Each register address is
+          the Modbus number the buttons and safety checks use.
+        </p>
+      ) : null}
+      {section === 'codes' ? (
+        <p className="text-sm text-muted-foreground">
+          QR and barcodes must match the <strong>Code</strong> text exactly (not
+          a URL unless you register that URL). Operators resolve codes on{' '}
+          <strong>Media</strong>; optional <strong>Route hint</strong> sends
+          them to a screen after a successful scan.
+        </p>
+      ) : null}
 
-        <div className={cn(section !== 'users' && 'hidden')}>
-          {showUsers ? <ConfigUsersSection /> : null}
-        </div>
+      <div className={cn(section !== 'users' && 'hidden')}>
+        {showUsers ? <ConfigUsersSection /> : null}
+      </div>
 
-        <div className={cn(section !== 'plc' && 'hidden')}>
-      <HelpTip id="tour.config.plc">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('plcConnections')}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {plcRows.map((row) => (
-              <ConnectionEditor
-                key={row.id}
-                connectionId={row.id}
-                plcHealth={plcHealth.data}
-                noteKey={row.id}
-                initial={{
-                  label: row.label,
-                  host: row.host,
-                  port: row.port,
-                  unitId: row.unitId ?? 1,
-                  enabled: row.enabled,
-                  protocol: row.protocol ?? 'modbus-tcp',
-                  isSimulator: row.isSimulator,
-                }}
-                submitLabel={`Save ${row.label}`}
-                note={notes[row.id]}
-                onNote={(note) => remember(row.id, note)}
-                onSubmit={(value) => saveConnection(row.id, value)}
-              />
-            ))}
-            <Separator />
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Add a PLC</h3>
-              <ConnectionEditor
-                plcHealth={plcHealth.data}
-                noteKey="new"
-                initial={{
-                  label: '',
-                  host: '',
-                  port: 502,
-                  unitId: 1,
-                  enabled: false,
-                  protocol: 'modbus-tcp',
-                  isSimulator: false,
-                }}
-                submitLabel="Add PLC"
-                note={notes.new}
-                onNote={(note) => remember('new', note)}
-                onSubmit={(value) => saveConnection(null, value)}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </HelpTip>
-        </div>
+      <div className={cn(section !== 'plc' && 'hidden')}>
+        <HelpTip id="tour.config.plc">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('plcConnections')}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {plcRows.map((row) => (
+                <ConnectionEditor
+                  key={row.id}
+                  connectionId={row.id}
+                  plcHealth={plcHealth.data}
+                  noteKey={row.id}
+                  initial={{
+                    label: row.label,
+                    host: row.host,
+                    port: row.port,
+                    unitId: row.unitId ?? 1,
+                    enabled: row.enabled,
+                    protocol: row.protocol ?? 'modbus-tcp',
+                    isSimulator: row.isSimulator,
+                  }}
+                  submitLabel={`Save ${row.label}`}
+                  note={notes[row.id]}
+                  onNote={(note) => remember(row.id, note)}
+                  onSubmit={(value) => saveConnection(row.id, value)}
+                />
+              ))}
+              <Separator />
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Add a PLC</h3>
+                <ConnectionEditor
+                  plcHealth={plcHealth.data}
+                  noteKey="new"
+                  initial={{
+                    label: '',
+                    host: '',
+                    port: 502,
+                    unitId: 1,
+                    enabled: false,
+                    protocol: 'modbus-tcp',
+                    isSimulator: false,
+                  }}
+                  submitLabel="Add PLC"
+                  note={notes.new}
+                  onNote={(note) => remember('new', note)}
+                  onSubmit={(value) => saveConnection(null, value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </HelpTip>
+      </div>
 
-        <div className={cn(section !== 'registers' && 'hidden')}>
-      <HelpTip id="tour.config.registers">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('registerMaps')}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {registers.map((row) => (
-              <RegisterEditor
-                key={row.id}
-                name={row.name}
-                kind={row.kind}
-                address={row.address}
-                trended={Boolean(row.trended)}
-                nodeId={row.nodeId ?? ''}
-                showNode={plcRows.some((item) => item.protocol === 'opcua')}
-                note={notes[row.id]}
-                onNote={(note) => remember(row.id, note)}
-                onSubmit={(value) => saveRegister(row.id, value)}
-              />
-            ))}
-          </CardContent>
-        </Card>
-      </HelpTip>
-        </div>
+      <div className={cn(section !== 'registers' && 'hidden')}>
+        <HelpTip id="tour.config.registers">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('registerMaps')}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {registers.map((row) => (
+                <RegisterEditor
+                  key={row.id}
+                  name={row.name}
+                  kind={row.kind}
+                  address={row.address}
+                  trended={Boolean(row.trended)}
+                  nodeId={row.nodeId ?? ''}
+                  showNode={plcRows.some((item) => item.protocol === 'opcua')}
+                  note={notes[row.id]}
+                  onNote={(note) => remember(row.id, note)}
+                  onSubmit={(value) => saveRegister(row.id, value)}
+                />
+              ))}
+            </CardContent>
+          </Card>
+        </HelpTip>
+      </div>
 
-        <div className={cn(section !== 'cells' && 'hidden')}>
-      <HelpTip id="tour.config.cells">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('cellsTitle')}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {cells.map((cell) => (
-              <CellEditor
-                key={cell.id}
-                noteKey={cell.id}
-                registers={registers}
-                initial={{
-                  row: cell.row,
-                  col: cell.col,
-                  label: cell.label,
-                  style: cell.style,
-                  isMotion: cell.isMotion,
-                  requiresSafeAction: cell.requiresSafeAction,
-                  primaryRegisterId: cell.primaryRegister?.id ?? '',
-                  feedbackRegisterId: cell.feedbackRegister?.id ?? '',
-                  statusRegisterId: cell.statusRegister?.id ?? '',
-                }}
-                submitLabel={`Save ${cell.label}`}
-                note={notes[cell.id]}
-                onNote={(note) => remember(cell.id, note)}
-                onSubmit={(value) =>
-                  apiPatch(`/hmi/cells/${cell.id}`, value).then(() =>
-                    refreshLayout(),
-                  )
-                }
-                onDelete={() =>
-                  apiDelete(`/hmi/cells/${cell.id}`).then(() => refreshLayout())
-                }
-              />
-            ))}
-            <Separator />
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Add a cell</h3>
-              <CellEditor
-                noteKey="new-cell"
-                registers={registers}
-                initial={{
-                  row: 0,
-                  col: 0,
-                  label: '',
-                  style: 'default',
-                  isMotion: false,
-                  requiresSafeAction: false,
-                  primaryRegisterId: registers[0]?.id ?? '',
-                  feedbackRegisterId: '',
-                  statusRegisterId: '',
-                }}
-                submitLabel="Add cell"
-                note={notes['new-cell']}
-                onNote={(note) => remember('new-cell', note)}
-                onSubmit={(value) =>
-                  apiPost('/hmi/cells', value).then(() => refreshLayout())
-                }
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </HelpTip>
-        </div>
+      <div className={cn(section !== 'cells' && 'hidden')}>
+        <HelpTip id="tour.config.cells">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('cellsTitle')}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {cells.map((cell) => (
+                <CellEditor
+                  key={cell.id}
+                  noteKey={cell.id}
+                  registers={registers}
+                  initial={{
+                    row: cell.row,
+                    col: cell.col,
+                    label: cell.label,
+                    style: cell.style,
+                    isMotion: cell.isMotion,
+                    requiresSafeAction: cell.requiresSafeAction,
+                    primaryRegisterId: cell.primaryRegister?.id ?? '',
+                    feedbackRegisterId: cell.feedbackRegister?.id ?? '',
+                    statusRegisterId: cell.statusRegister?.id ?? '',
+                  }}
+                  submitLabel={`Save ${cell.label}`}
+                  note={notes[cell.id]}
+                  onNote={(note) => remember(cell.id, note)}
+                  onSubmit={(value) =>
+                    apiPatch(`/hmi/cells/${cell.id}`, value).then(() =>
+                      refreshLayout(),
+                    )
+                  }
+                  onDelete={() =>
+                    apiDelete(`/hmi/cells/${cell.id}`).then(() =>
+                      refreshLayout(),
+                    )
+                  }
+                />
+              ))}
+              <Separator />
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Add a cell</h3>
+                <CellEditor
+                  noteKey="new-cell"
+                  registers={registers}
+                  initial={{
+                    row: 0,
+                    col: 0,
+                    label: '',
+                    style: 'default',
+                    isMotion: false,
+                    requiresSafeAction: false,
+                    primaryRegisterId: registers[0]?.id ?? '',
+                    feedbackRegisterId: '',
+                    statusRegisterId: '',
+                  }}
+                  submitLabel="Add cell"
+                  note={notes['new-cell']}
+                  onNote={(note) => remember('new-cell', note)}
+                  onSubmit={(value) =>
+                    apiPost('/hmi/cells', value).then(() => refreshLayout())
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </HelpTip>
+      </div>
 
-        <div className={cn(section !== 'labels' && 'hidden')}>
-      <HelpTip id="tour.config.labels">
-        <Card>
-          <CardHeader>
-            <CardTitle>Live labels</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {overlays.map((overlay) => (
-              <OverlayEditor
-                key={overlay.id}
-                noteKey={overlay.id}
-                registers={registers}
-                initial={{
-                  label: overlay.label,
-                  xPct: overlay.xPct,
-                  yPct: overlay.yPct,
-                  format: overlay.format,
-                  registerId: overlay.register?.id ?? '',
-                }}
-                submitLabel={`Save ${overlay.label}`}
-                note={notes[overlay.id]}
-                onNote={(note) => remember(overlay.id, note)}
-                onSubmit={(value) =>
-                  apiPatch(`/hmi/overlays/${overlay.id}`, value).then(() =>
-                    refreshLayout(),
-                  )
-                }
-                onDelete={() =>
-                  apiDelete(`/hmi/overlays/${overlay.id}`).then(() =>
-                    refreshLayout(),
-                  )
-                }
-              />
-            ))}
-            <Separator />
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Add a label</h3>
-              <OverlayEditor
-                key={labelFormKey}
-                noteKey="new-label"
-                registers={registers}
-                initial={{
-                  label: '',
-                  xPct: 10,
-                  yPct: 10,
-                  format: '{value}',
-                  registerId: '',
-                }}
-                submitLabel="Add label"
-                note={notes['new-label']}
-                onNote={(note) => remember('new-label', note)}
-                onSubmit={(value) =>
-                  apiPost('/hmi/overlays', value).then(() => {
-                    setLabelFormKey((current) => current + 1);
-                    return refreshLayout();
-                  })
-                }
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </HelpTip>
-        </div>
+      <div className={cn(section !== 'labels' && 'hidden')}>
+        <HelpTip id="tour.config.labels">
+          <Card>
+            <CardHeader>
+              <CardTitle>Live labels</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {overlays.map((overlay) => (
+                <OverlayEditor
+                  key={overlay.id}
+                  noteKey={overlay.id}
+                  registers={registers}
+                  initial={{
+                    label: overlay.label,
+                    xPct: overlay.xPct,
+                    yPct: overlay.yPct,
+                    format: overlay.format,
+                    registerId: overlay.register?.id ?? '',
+                  }}
+                  submitLabel={`Save ${overlay.label}`}
+                  note={notes[overlay.id]}
+                  onNote={(note) => remember(overlay.id, note)}
+                  onSubmit={(value) =>
+                    apiPatch(`/hmi/overlays/${overlay.id}`, value).then(() =>
+                      refreshLayout(),
+                    )
+                  }
+                  onDelete={() =>
+                    apiDelete(`/hmi/overlays/${overlay.id}`).then(() =>
+                      refreshLayout(),
+                    )
+                  }
+                />
+              ))}
+              <Separator />
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Add a label</h3>
+                <OverlayEditor
+                  key={labelFormKey}
+                  noteKey="new-label"
+                  registers={registers}
+                  initial={{
+                    label: '',
+                    xPct: 10,
+                    yPct: 10,
+                    format: '{value}',
+                    registerId: '',
+                  }}
+                  submitLabel="Add label"
+                  note={notes['new-label']}
+                  onNote={(note) => remember('new-label', note)}
+                  onSubmit={(value) =>
+                    apiPost('/hmi/overlays', value).then(() => {
+                      setLabelFormKey((current) => current + 1);
+                      return refreshLayout();
+                    })
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </HelpTip>
+      </div>
 
-        <div className={cn(section !== 'background' && 'hidden')}>
-      <HelpTip id="tour.config.background">
-        <Card>
-          <CardHeader>
-            <CardTitle>Background</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {layout?.background ? (
-              <BackgroundEditor
-                initial={{
-                  name: layout.background.name,
-                  cssBackground: layout.background.cssBackground ?? '',
-                  imageUrl: layout.background.imageUrl ?? '',
-                }}
-                note={notes.background}
-                onNote={(note) => remember('background', note)}
-                onSubmit={(value) =>
-                  apiPatch('/hmi/background', value).then(() => refreshLayout())
-                }
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No active background
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </HelpTip>
-        </div>
+      <div className={cn(section !== 'background' && 'hidden')}>
+        <HelpTip id="tour.config.background">
+          <Card>
+            <CardHeader>
+              <CardTitle>Background</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {layout?.background ? (
+                <BackgroundEditor
+                  initial={{
+                    name: layout.background.name,
+                    cssBackground: layout.background.cssBackground ?? '',
+                    imageUrl: layout.background.imageUrl ?? '',
+                  }}
+                  note={notes.background}
+                  onNote={(note) => remember('background', note)}
+                  onSubmit={(value) =>
+                    apiPatch('/hmi/background', value).then(() =>
+                      refreshLayout(),
+                    )
+                  }
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No active background
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </HelpTip>
+      </div>
 
-        <div className={cn(section !== 'codes' && 'hidden')}>
-          <HelpTip id="tour.config.codes">
-            <ConfigScanCodesSection />
-          </HelpTip>
-        </div>
+      <div className={cn(section !== 'codes' && 'hidden')}>
+        <HelpTip id="tour.config.codes">
+          <ConfigScanCodesSection />
+        </HelpTip>
+      </div>
 
-        <div className={cn(section !== 'alarms' && 'hidden')}>
-      <HelpTip id="tour.config.alarms">
-        <AlarmSection registers={registers} definitions={alarms} />
-      </HelpTip>
-        </div>
+      <div className={cn(section !== 'alarms' && 'hidden')}>
+        <HelpTip id="tour.config.alarms">
+          <AlarmSection registers={registers} definitions={alarms} />
+        </HelpTip>
+      </div>
 
-        <div className={cn(section !== 'safety' && 'hidden')}>
-      <HelpTip id="tour.config.safety">
-        <SafetySection registers={registers} roles={safetyRoles.data ?? null} />
-      </HelpTip>
-        </div>
+      <div className={cn(section !== 'safety' && 'hidden')}>
+        <HelpTip id="tour.config.safety">
+          <SafetySection
+            registers={registers}
+            roles={safetyRoles.data ?? null}
+          />
+        </HelpTip>
+      </div>
     </div>
   );
 }
@@ -628,7 +631,7 @@ function AlarmSection({
     }
   }
 
-  async function remove(id: string, name: string) {
+  async function remove(id: string) {
     try {
       await apiDelete(`/alarms/definitions/${id}`);
       await queryClient.invalidateQueries({ queryKey: ['alarm-definitions'] });
@@ -684,7 +687,7 @@ function AlarmSection({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => askDelete(row.name, () => remove(row.id, row.name))}
+              onClick={() => askDelete(row.name, () => remove(row.id))}
             >
               <Trash2 />
               {t('delete')} {row.name}
@@ -973,10 +976,7 @@ function ConnectionEditor({
   }
 
   return (
-    <form
-      className="grid gap-4 rounded-lg border p-4"
-      onSubmit={submit}
-    >
+    <form className="grid gap-4 rounded-lg border p-4" onSubmit={submit}>
       {confirmDialog}
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{label || 'New connection'}</span>

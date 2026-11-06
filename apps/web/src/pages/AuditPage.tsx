@@ -53,7 +53,10 @@ import {
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
-function pageNumbers(page: number, totalPages: number): (number | 'ellipsis')[] {
+function pageNumbers(
+  page: number,
+  totalPages: number,
+): (number | 'ellipsis')[] {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, i) => i + 1);
   }
@@ -156,7 +159,12 @@ export function AuditPage() {
           </CardTitle>
           <div className="flex flex-wrap gap-2">
             {hasFilters ? (
-              <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+              >
                 <X />
                 Clear
               </Button>

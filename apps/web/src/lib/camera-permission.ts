@@ -1,4 +1,5 @@
-export type CameraPermissionState = 'prompt' | 'granted' | 'denied' | 'unsupported';
+export type CameraPermissionState =
+  'prompt' | 'granted' | 'denied' | 'unsupported';
 
 export async function queryCameraPermissionState(): Promise<CameraPermissionState> {
   if (!navigator.permissions?.query) return 'unsupported';

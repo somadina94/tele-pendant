@@ -51,7 +51,6 @@ export function AuditDateField({
             onSelect={(day) =>
               onChange(day ? formatAuditDateParam(day) : undefined)
             }
-            initialFocus
           />
         </PopoverContent>
       </Popover>

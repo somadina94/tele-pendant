@@ -73,6 +73,23 @@ describe('AssistantService', () => {
     expect(result.answer.toLowerCase()).toContain('deadman');
   });
 
+  it('returns local FTS without calling Cursor when no API key', async () => {
+    const prev = process.env.CURSOR_API_KEY;
+    delete process.env.CURSOR_API_KEY;
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'database.path') return join(dir, 'tele.sqlite');
+      if (key === 'appConfig.cursor.apiKey') return '';
+      if (key === 'appConfig.cursor.agentCwd') return dir;
+      return undefined;
+    });
+    const result = await service.ask('deadman');
+    expect(result.mode).toBe('local-fts');
+    expect(result.note).toBe('Answers are from the local manuals.');
+    expect((Agent.prompt as jest.Mock).mock.calls.length).toBe(0);
+    if (prev === undefined) delete process.env.CURSOR_API_KEY;
+    else process.env.CURSOR_API_KEY = prev;
+  });
+
   it('returns empty for blank / punctuation-only queries', () => {
     expect(service.search('')).toEqual([]);
     expect(service.search('   ')).toEqual([]);

@@ -115,7 +115,9 @@ function ScanCodeEditor({
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
-          <Label htmlFor={`${initial.code}-payload`}>QR / barcode payload</Label>
+          <Label htmlFor={`${initial.code}-payload`}>
+            QR / barcode payload
+          </Label>
           <Input
             id={`${initial.code}-payload`}
             value={code}
@@ -218,18 +220,20 @@ export function ConfigScanCodesSection() {
               : 'Could not load codes'}
           </p>
         ) : null}
-        {(codes.data ?? []).map((row) => (
+        {(Array.isArray(codes.data) ? codes.data : []).map((row) => (
           <ScanCodeEditor
             key={row.id}
             initial={row}
             submitLabel={`Save ${row.code}`}
             onSubmit={(value) => update(row.id, value)}
             onDelete={() =>
-              askDelete(row.code, () =>
-                void apiDelete(`/media/codes/${row.id}`)
-                  .then(refresh)
-                  .then(() => toastOk('Deleted.'))
-                  .catch((err: Error) => toastErr(err.message)),
+              askDelete(
+                row.code,
+                () =>
+                  void apiDelete(`/media/codes/${row.id}`)
+                    .then(refresh)
+                    .then(() => toastOk('Deleted.'))
+                    .catch((err: Error) => toastErr(err.message)),
               )
             }
           />

@@ -16,7 +16,9 @@ export type OperatorRoute = (typeof OPERATOR_ROUTES)[number];
 export type SupervisorRoute = (typeof SUPERVISOR_ROUTES)[number];
 export type AppRoute = OperatorRoute | SupervisorRoute;
 
-export function isUserRole(value: string | undefined | null): value is UserRole {
+export function isUserRole(
+  value: string | undefined | null,
+): value is UserRole {
   return value === 'operator' || value === 'supervisor' || value === 'admin';
 }
 

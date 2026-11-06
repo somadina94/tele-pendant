@@ -174,8 +174,7 @@ export function MediaPage() {
     } catch {
       setScanFeedback({
         ok: false,
-        text:
-          'No code in frame — use a QR whose text matches a registered code (see list). Safari and Firefox use ZXing; Chrome uses the built-in detector.',
+        text: 'No code in frame — use a QR whose text matches a registered code (see list). Safari and Firefox use ZXing; Chrome uses the built-in detector.',
       });
     }
   }
@@ -352,11 +351,7 @@ export function MediaPage() {
                 disabled={scanBusy}
                 onClick={() => void scanFrame()}
               >
-                {scanBusy ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <QrCode />
-                )}
+                {scanBusy ? <Loader2 className="animate-spin" /> : <QrCode />}
                 Scan QR / barcode in frame
               </Button>
               {scanFeedbackAlert}
@@ -427,9 +422,9 @@ export function MediaPage() {
               <CardHeader>
                 <CardTitle>Voice commands</CardTitle>
                 <CardDescription>
-                  Use Listen for allowlisted commands. Say stop anytime. Hoist and
-                  trolley motion by voice follow the Allow timed media motion
-                  switch in Config; otherwise hold motion on Operator.
+                  Use Listen for allowlisted commands. Say stop anytime. Hoist
+                  and trolley motion by voice follow the Allow timed media
+                  motion switch in Config; otherwise hold motion on Operator.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">

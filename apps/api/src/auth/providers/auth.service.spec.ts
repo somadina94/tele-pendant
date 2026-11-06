@@ -212,6 +212,21 @@ describe('AuthService', () => {
     );
   });
 
+  it('enrolls face and audits null displayName', async () => {
+    const image = faceUrl('blob');
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      displayName: null,
+    });
+    await service.enrollFace(user.id, { imageDataUrl: image });
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userDisplayName: null,
+        action: 'auth.face_enroll',
+      }),
+    );
+  });
+
   it('seals enrolled templates when FACE_TEMPLATE_KEY is set', async () => {
     const key = 'unit-test-face-template-key-32chars!!';
     configService.get.mockImplementation((k: string) => {
@@ -231,6 +246,22 @@ describe('AuthService', () => {
     usersRepository.find.mockResolvedValue([{ ...user, faceTemplate: sealed }]);
     const ok = await service.loginWithFace({ imageDataUrl: image });
     expect(ok.accessToken).toBe('token');
+  });
+
+  it('face login audits null displayName on success', async () => {
+    const image = faceUrl('blob');
+    const enrolled = serializeDescriptor(descriptorFromImageDataUrl(image));
+    usersRepository.find.mockResolvedValue([
+      { ...user, displayName: null, faceTemplate: enrolled },
+    ]);
+    await service.loginWithFace({ imageDataUrl: image });
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userDisplayName: null,
+        action: 'auth.face_login',
+        result: 'success',
+      }),
+    );
   });
 
   it('rejects empty face capture and skips unreadable sealed templates', async () => {

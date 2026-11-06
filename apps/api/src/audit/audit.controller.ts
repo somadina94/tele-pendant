@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Inject,
-  Query,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Inject, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -37,7 +30,14 @@ export class AuditController {
     @Query('to') to?: string,
     @Query('user') user?: string,
   ) {
-    const parsed = parseAuditListQuery({ page, pageSize, limit, from, to, user });
+    const parsed = parseAuditListQuery({
+      page,
+      pageSize,
+      limit,
+      from,
+      to,
+      user,
+    });
     return this.auditService.query(parsed);
   }
 

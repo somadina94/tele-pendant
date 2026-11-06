@@ -115,13 +115,23 @@ describe('MediaService', () => {
       expect.objectContaining({ label: 'Updated' }),
     );
 
-    codes.findOne.mockResolvedValue({ id: 'id-1', code: 'X' });
+    codes.findOneBy.mockResolvedValue(null);
+    await expect(
+      service.saveCode({ id: 'missing-id', code: 'X', label: 'Y' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    codes.findOneBy.mockResolvedValue({ id: 'id-1', code: 'OLD' });
+    codes.findOne.mockResolvedValue({ id: 'other-id', code: 'DUP' });
     await expect(
       service.saveCode({ id: 'id-1', code: 'DUP', label: 'Y' }),
     ).rejects.toBeInstanceOf(ConflictException);
 
     await expect(
       service.saveCode({ code: '', label: 'x' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(
+      service.saveCode({ code: 'X', label: 'Y', routeHint: 'no-slash' }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     codes.findOneBy.mockResolvedValue({ id: 'id-1' });

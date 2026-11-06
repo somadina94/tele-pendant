@@ -30,11 +30,7 @@ export function tourStepsFor(screen: TourScreen): string[] {
         'tour.operator.holdHint',
       ];
     case 'media':
-      return [
-        'tour.media.camera',
-        'tour.media.qr',
-        'tour.media.voice',
-      ];
+      return ['tour.media.camera', 'tour.media.qr', 'tour.media.voice'];
     case 'ops':
       return [
         'tour.ops.diagnostics',

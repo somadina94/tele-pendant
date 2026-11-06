@@ -19,7 +19,10 @@ const PaginationContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ul
     ref={ref}
-    className={cn('flex flex-row flex-wrap items-center justify-center gap-1', className)}
+    className={cn(
+      'flex flex-row flex-wrap items-center justify-center gap-1',
+      className,
+    )}
     {...props}
   />
 ));
@@ -98,7 +101,10 @@ const PaginationEllipsis = ({
 }: React.ComponentProps<'span'>) => (
   <span
     aria-hidden
-    className={cn('flex size-9 shrink-0 items-center justify-center', className)}
+    className={cn(
+      'flex size-9 shrink-0 items-center justify-center',
+      className,
+    )}
     {...props}
   >
     <MoreHorizontal className="size-4" />

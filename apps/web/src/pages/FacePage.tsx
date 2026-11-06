@@ -73,7 +73,9 @@ export function FacePage({
     try {
       const frame = skipCamera
         ? 'data:image/jpeg;base64,abc'
-        : await captureDataUrl(deviceCamera.videoRef.current as HTMLVideoElement);
+        : await captureDataUrl(
+            deviceCamera.videoRef.current as HTMLVideoElement,
+          );
       const nextFrames = [...frames, frame];
       if (nextFrames.length < CHALLENGE_PROMPTS.length) {
         setFrames(nextFrames);

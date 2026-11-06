@@ -55,7 +55,7 @@ describe('OpsPage', () => {
       };
     });
     const post = vi.spyOn(api, 'apiPost').mockResolvedValue({});
-    renderWithProviders(<OpsPage />);
+    renderWithProviders(<OpsPage />, { role: 'supervisor' });
     await waitFor(() => expect(screen.getByText(/E-Stop/)).toBeInTheDocument());
     expect(screen.getByText(/Last error: timeout/)).toBeInTheDocument();
     expect(await screen.findByText(/12 mm/)).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('OpsPage', () => {
         uptimeSec: 1,
       };
     });
-    renderWithProviders(<OpsPage />);
+    renderWithProviders(<OpsPage />, { role: 'supervisor' });
     expect(await screen.findByText('No active alarms')).toBeInTheDocument();
     expect(screen.getByText('No samples yet')).toBeInTheDocument();
   });
@@ -97,7 +97,7 @@ describe('OpsPage', () => {
         uptimeSec: 2,
       };
     });
-    renderWithProviders(<OpsPage />);
+    renderWithProviders(<OpsPage />, { role: 'supervisor' });
     expect(await screen.findByText('No active alarms')).toBeInTheDocument();
     expect(screen.getByText('No samples yet')).toBeInTheDocument();
   });
@@ -109,7 +109,7 @@ describe('OpsPage', () => {
       if (path === '/trends') return [];
       return [];
     });
-    renderWithProviders(<OpsPage />);
+    renderWithProviders(<OpsPage />, { role: 'supervisor' });
     expect(await screen.findByText(/PLC connected:/)).toBeInTheDocument();
     expect(screen.getByText(/n\/a/)).toBeInTheDocument();
   });
@@ -145,7 +145,7 @@ describe('OpsPage', () => {
       .mockRejectedValueOnce(new Error('ack failed'))
       .mockRejectedValueOnce(new Error('shelve failed'))
       .mockRejectedValueOnce(new Error('unshelve failed'));
-    renderWithProviders(<OpsPage />);
+    renderWithProviders(<OpsPage />, { role: 'supervisor' });
     await screen.findByText(/E-Stop/);
     fireEvent.click(screen.getByRole('button', { name: 'Ack' }));
     fireEvent.click(screen.getByRole('button', { name: 'Shelve' }));

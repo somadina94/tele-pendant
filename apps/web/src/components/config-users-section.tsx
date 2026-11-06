@@ -66,7 +66,8 @@ export function ConfigUsersSection() {
           Users
         </CardTitle>
         <CardDescription>
-          Create operator and supervisor accounts. Names appear on the audit log.
+          Create operator and supervisor accounts. Names appear on the audit
+          log.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
@@ -101,7 +102,10 @@ export function ConfigUsersSection() {
         ) : users.isSuccess ? (
           <p className="text-sm text-muted-foreground">No users yet.</p>
         ) : null}
-        <form className="grid gap-4 md:grid-cols-2" onSubmit={(e) => void submit(e)}>
+        <form
+          className="grid gap-4 md:grid-cols-2"
+          onSubmit={(e) => void submit(e)}
+        >
           <div className="grid gap-2">
             <Label htmlFor="new-user-name">Display name</Label>
             <Input

@@ -36,7 +36,12 @@ const NAV: {
 }[] = [
   { to: '/operator', labelKey: 'operator', icon: Gauge, route: 'operator' },
   { to: '/media', labelKey: 'media', icon: Camera, route: 'media' },
-  { to: '/assistant', labelKey: 'assistant', icon: BookOpen, route: 'assistant' },
+  {
+    to: '/assistant',
+    labelKey: 'assistant',
+    icon: BookOpen,
+    route: 'assistant',
+  },
   { to: '/face', labelKey: 'face', icon: ScanFace, route: 'face' },
   { to: '/ops', labelKey: 'ops', icon: Siren, route: 'ops' },
   { to: '/audit', labelKey: 'audit', icon: ClipboardList, route: 'audit' },

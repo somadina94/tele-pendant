@@ -26,6 +26,9 @@ beforeAll(() => {
   });
 
   Element.prototype.scrollIntoView = vi.fn();
+  HTMLElement.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  HTMLElement.prototype.setPointerCapture = vi.fn();
+  HTMLElement.prototype.releasePointerCapture = vi.fn();
 
   Object.defineProperty(navigator, 'mediaDevices', {
     configurable: true,

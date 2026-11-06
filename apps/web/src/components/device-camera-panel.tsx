@@ -1,5 +1,8 @@
 import { useT } from '@/lib/i18n';
-import { useDeviceCamera, type UseDeviceCameraOptions } from '@/lib/use-device-camera';
+import {
+  useDeviceCamera,
+  type UseDeviceCameraOptions,
+} from '@/lib/use-device-camera';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';

@@ -79,7 +79,8 @@ export function parseConfigSection(
   showUsers: boolean,
   allowedIds?: Set<ConfigSectionId>,
 ): ConfigSectionId {
-  const fallback = (allowedIds?.has('plc') ? 'plc' : [...(allowedIds ?? [])][0]) ?? 'plc';
+  const fallback =
+    (allowedIds?.has('plc') ? 'plc' : [...(allowedIds ?? [])][0]) ?? 'plc';
   if (raw && ALL_SECTIONS.includes(raw as ConfigSectionId)) {
     if (raw === 'users' && !showUsers) return fallback as ConfigSectionId;
     if (allowedIds && !allowedIds.has(raw as ConfigSectionId)) {

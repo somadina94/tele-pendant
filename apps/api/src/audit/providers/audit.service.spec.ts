@@ -99,4 +99,73 @@ describe('AuditService', () => {
     expect(qb.skip).toHaveBeenCalledWith(10);
     expect(qb.take).toHaveBeenCalledWith(10);
   });
+
+  it('enriches missing display names on query', async () => {
+    const rows: AuditLog[] = [
+      {
+        id: '1',
+        action: 'x',
+        result: 'success',
+        createdAt: new Date(),
+        userId: 'u1',
+        userDisplayName: 'Already set',
+      },
+      {
+        id: '2',
+        action: 'y',
+        result: 'success',
+        createdAt: new Date(),
+        userId: 'u2',
+      },
+      {
+        id: '3',
+        action: 'z',
+        result: 'success',
+        createdAt: new Date(),
+        userId: 'u-missing',
+      },
+    ];
+    const qb = queryBuilderMock(rows);
+    const repo = {
+      create: jest.fn(),
+      save: jest.fn(),
+      find: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+    };
+    const usersRepo = {
+      find: jest.fn().mockResolvedValue([
+        { id: 'u2', displayName: 'Bob' },
+        { id: 'u3', displayName: undefined },
+      ]),
+    };
+    const service = new AuditService(repo as never, usersRepo as never);
+    const result = await service.query({ page: 1, pageSize: 10 });
+    expect(usersRepo.find).toHaveBeenCalled();
+    expect(result.items[1].userDisplayName).toBe('Bob');
+    expect(result.items[2].userDisplayName).toBeNull();
+  });
+
+  it('exportCsv returns CSV from filtered query', async () => {
+    const rows: AuditLog[] = [
+      {
+        id: '1',
+        action: 'auth.login',
+        result: 'success',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        userEmail: 'a@example.com',
+      },
+    ];
+    const qb = queryBuilderMock(rows);
+    const repo = {
+      create: jest.fn(),
+      save: jest.fn(),
+      find: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+    };
+    const usersRepo = { find: jest.fn().mockResolvedValue([]) };
+    const service = new AuditService(repo as never, usersRepo as never);
+    const csv = await service.exportCsv({});
+    expect(csv).toContain('auth.login');
+    expect(qb.take).toHaveBeenCalledWith(10_000);
+  });
 });

@@ -51,8 +51,13 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 /** GET a non-JSON response (e.g. CSV export) and trigger a browser download. */
-export async function apiDownload(path: string, filename: string): Promise<void> {
-  const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders(false) });
+export async function apiDownload(
+  path: string,
+  filename: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: authHeaders(false),
+  });
   if (!res.ok) await handleFailedResponse(res, path);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

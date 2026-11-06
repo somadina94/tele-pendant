@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from './pagination';
+import {
   Accordion,
   AccordionContent,
   AccordionItem,
@@ -254,5 +263,28 @@ describe('ui primitives', () => {
     expect(await screen.findByText('Sheet')).toBeInTheDocument();
     expect(screen.getByText('Item')).toBeInTheDocument();
     expect(screen.getByText('Cap')).toBeInTheDocument();
+  });
+
+  it('renders pagination controls', () => {
+    render(
+      <Pagination>
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious disabled />
+          </PaginationItem>
+          <PaginationItem>
+            <PaginationLink isActive>1</PaginationLink>
+          </PaginationItem>
+          <PaginationItem>
+            <PaginationEllipsis />
+          </PaginationItem>
+          <PaginationItem>
+            <PaginationNext />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>,
+    );
+    expect(screen.getByLabelText('pagination')).toBeInTheDocument();
+    expect(screen.getByText('More pages')).toBeInTheDocument();
   });
 });
