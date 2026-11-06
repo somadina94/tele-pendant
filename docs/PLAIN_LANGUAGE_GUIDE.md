@@ -1,4 +1,4 @@
-# Tele-Pendant — plain-language guide
+# Tele-Pendant: plain-language guide
 
 This document explains **what the app is**, **everyday words and buzzwords**, **how to use the controls**, and **what each configuration setting means**. It is written for operators, supervisors, and plant managers who do not need to read code.
 
@@ -23,9 +23,9 @@ Think of it as: **sign in → see a picture of the plant → press buttons → n
 
 | Word | Plain English |
 | ---- | ------------- |
-| **HMI** | Human–Machine Interface — the screens and buttons people use to run the plant. Tele-Pendant is the HMI. |
+| **HMI** | Human–Machine Interface; the screens and buttons people use to run the plant. Tele-Pendant is the HMI. |
 | **Tele-pendant** | A portable or remote pendant (control box). Here it is software instead of a physical box on a cable. |
-| **PLC** | Programmable Logic Controller — industrial computer that reads sensors and drives motors. |
+| **PLC** | Programmable Logic Controller; industrial computer that reads sensors and drives motors. |
 | **Modbus TCP** | A common “language” on the network for reading/writing PLC memory. Default in this project. |
 | **OPC UA** | Another network language for PLCs. Optional; used when the plant standard is OPC UA instead of Modbus. |
 | **Register / address** | A numbered slot in PLC memory (like a mailbox). Buttons and labels are wired to specific slots. |
@@ -47,13 +47,13 @@ Think of it as: **sign in → see a picture of the plant → press buttons → n
 | **Live labels / overlays** | Text boxes on the plant picture (Height, Load, Motor) that update from the PLC. |
 | **Control matrix / cells** | The grid of buttons (Hoist Up, STOP, etc.). Each **cell** sits in a row/column and points at PLC registers. |
 | **QR / barcode** | Scannable codes that jump you to a screen (e.g. crane operator view). |
-| **Voice command** | Say **up** or **down** (allowlisted words) to run hoist briefly — demo convenience. |
+| **Voice command** | Say **up** or **down** (allowlisted words) to run hoist briefly; demo convenience. |
 | **OTA** | Over-the-air update for the **phone app’s JavaScript** without reinstalling from the store (still needs native rebuild for camera changes). |
 | **Audit** | A log of who changed settings or triggered important actions. |
 | **JWT / session** | After login, the browser keeps a secure token so you stay signed in for a while. |
 | **SQLite** | A small database file on the server where layouts, users, and alarm rules are stored. |
 | **API** | The server program the web and phone talk to. |
-| **Swagger** | A technical web page listing all API endpoints — mainly for developers. |
+| **Swagger** | A technical web page listing all API endpoints; mainly for developers. |
 
 ---
 
@@ -78,7 +78,7 @@ After sign-in, the top menu on the **Operator** page links to:
 | **Operator** | Main control: picture, live numbers, button matrix. |
 | **Media** | Camera, QR/barcode, voice shortcuts. |
 | **Assistant** | Ask questions about manuals and how the pendant works (local search; optional Cursor Agent if `CURSOR_API_KEY` is set). |
-| **Face** | Optional local face login with challenge liveness (not ISO-certified — see [FACE_LIMITATIONS.md](./FACE_LIMITATIONS.md)). |
+| **Face** | Optional local face login with challenge liveness (not ISO-certified; see [FACE_LIMITATIONS.md](./FACE_LIMITATIONS.md)). |
 | **Ops** | Alarms, trends, connection diagnostics. |
 | **Config** | Admin: PLC connection, registers, buttons, labels, alarms, safety bindings. |
 | **Audit** | Who did what and when. |
@@ -88,20 +88,20 @@ On the **phone app**, the same areas appear as tabs/buttons in the header after 
 
 **Language:** The interface is available in **English, Spanish, French, and German** (en, es, fr, de). On the login page the menu offers the installed languages. That choice is saved on your user profile and overrides the browser language.
 
-**Tour help (optional):** Off by default on web and phone. Turn on **Tour help** to show a small **?** on each annotated control — tap or click it for a plain-language tip. While Tour help is on, **Start tour** runs a short Next / Back / Done walkthrough for the **current screen** only. Turning Tour help off again hides tips and ends any walkthrough. The preference stays on this device (`tourEnabled` in browser storage or phone AsyncStorage); it is not stored on the server.
+**Tour help (optional):** Off by default on web and phone. Turn on **Tour help** to show a small **?** on each annotated control; tap or click it for a plain-language tip. While Tour help is on, **Start tour** runs a short Next / Back / Done walkthrough for the **current screen** only. Turning Tour help off again hides tips and ends any walkthrough. The preference stays on this device (`tourEnabled` in browser storage or phone AsyncStorage); it is not stored on the server.
 
 ---
 
-## Operator screen — controls in detail
+## Operator screen: controls in detail
 
 ### Safety banner (top colored strip)
 
 Shows **Safety:** followed by a mode, for example:
 
-- **normal** — You may move the crane if you follow deadman rules.
-- **e_stop** — Emergency stop is active; motion buttons should be blocked.
-- **deadman HOLD** (while you hold a motion button) — You are actively holding a move; release to stop pulsing motion.
-- **E-STOP** — The e-stop register is active.
+- **normal**: You may move the crane if you follow deadman rules.
+- **e_stop**: Emergency stop is active; motion buttons should be blocked.
+- **deadman HOLD** (while you hold a motion button); You are actively holding a move; release to stop pulsing motion.
+- **E-STOP**: The e-stop register is active.
 
 Treat the banner as your first glance before pressing anything.
 
@@ -109,9 +109,9 @@ Treat the banner as your first glance before pressing anything.
 
 ### Plant graphic (left side)
 
-- **Background** — Gradient or photo from Config (photo URL wins if set).
-- **Live labels** — e.g. **Height** (mm), **Load** (kg), **Motor** (RUN/IDLE). Values refresh over a live connection (websocket), not only when you refresh the page.
-- **Tag strip** — Short summary line: `H … mm`, `Load … kg`, `RUN` or `IDLE`.
+- **Background**: Gradient or photo from Config (photo URL wins if set).
+- **Live labels**: e.g. **Height** (mm), **Load** (kg), **Motor** (RUN/IDLE). Values refresh over a live connection (websocket), not only when you refresh the page.
+- **Tag strip**: Short summary line: `H … mm`, `Load … kg`, `RUN` or `IDLE`.
 
 ### Control matrix (right side)
 
@@ -119,15 +119,15 @@ Default demo layout (empty corners):
 
 | | Left | Center | Right |
 | --- | --- | --- | --- |
-| Top | — | **Hoist Up** | — |
+| Top | n/a | **Hoist Up** | n/a |
 | Middle | **Trolley L** | **STOP** | **Trolley R** |
-| Bottom | — | **Hoist Down** | — |
+| Bottom | n/a | **Hoist Down** | n/a |
 
 **How to use motion buttons (Hoist Up/Down, Trolley L/R)**
 
-1. **Press and hold** — Do not just tap once.
+1. **Press and hold**: Do not just tap once.
 2. While held, the banner shows **deadman HOLD** and the simulator runs motion (hoist height changes on Up/Down).
-3. **Release** — Motion stops; height stays where it landed (it does not rewind).
+3. **Release**: Motion stops; height stays where it landed (it does not rewind).
 
 **STOP button**
 
@@ -140,7 +140,7 @@ Default demo layout (empty corners):
 
 - Label **Reset PIN**, password field, and **Reset e-stop** on **one horizontal row** (desktop and mobile) to save vertical space.
 - Used only to **reset** e-stop. It is not required to press **STOP**.
-- Hidden like a password field (`SAFE_ACTION_PIN` on the server — not your login password).
+- Hidden like a password field (`SAFE_ACTION_PIN` on the server; not your login password).
 
 ---
 
@@ -151,27 +151,26 @@ Default demo layout (empty corners):
 | **Change password** | Any signed-in user | Updates **login** password (current + new + confirm, min 8 chars). Does not change `SAFE_ACTION_PIN`. |
 | **Add operator** / **Add supervisor** / **Manage users** | Admin only | Opens Config **Users** (`/admin?section=users`) to create or manage accounts. |
 
-**Logout** stays in the sidebar footer. Suspended accounts see **Account suspended — contact an administrator** at sign-in.
+**Logout** stays in the sidebar footer. Suspended accounts see **Account suspended; contact an administrator** at sign-in.
 
 ---
 
-## Media screen — controls
+## Media screen: controls
 
 | Control | What it does |
 | ------- | ------------ |
 | **Device camera** | Shows live video; **Scan QR / barcode in frame** tries to read a code from the image. Needs camera permission. |
 | **Manual code field + Resolve** | Type a known code (demo: `TP-CRANE-DEMO-01`) and jump to the linked screen. |
 | **Code shortcut buttons** | Same as Resolve for preset codes (crane → Operator, `TP-OPS` → Ops). |
-| **UP / DOWN** | Runs hoist up/down for about two seconds when **Allow timed media motion** is on. Off by default. |
-| **Listen (8s)** | Uses browser speech recognition; say **up** or **down** if supported. |
+| **Listen (8s)** | Browser or device speech recognition. Say allowlisted words. **up** / **down** run a ~2 s timed hoist only when **Allow timed media motion** is checked in Config **Safety roles** and saved (off by default). No separate UP/DOWN tap buttons on Media. |
 
 **Plant CCTV later:** The Media screen uses the device camera. An administrator can connect a plant camera on the server. The screen then says **Plant camera configured**.
 
-**Voice security:** Only allowlisted words run motion. Random speech shows “not executed.” Saying **stop** commands the crane to stop without a PIN. Timed hoist words stay off until Config enables **Allow timed media motion**.
+**Voice security:** Only allowlisted words run motion. Random speech shows “not executed.” Saying **stop** commands the crane to stop without a PIN. Timed **up** / **down** stay off until an admin checks **Allow timed media motion** under Config **Safety roles** and saves.
 
 ---
 
-## Ops screen — controls
+## Ops screen: controls
 
 | Section | Meaning |
 | ------- | ------- |
@@ -193,14 +192,14 @@ Ops refreshes every couple of seconds automatically.
 - Ask questions in plain language about **deadman**, **Modbus**, **alarms**, **wiring**, HMI features, etc.
 - Docs settings: set the **docs folder path** and an optional **docs link** (admins), then **Save** / **Reindex**.
 - Default answers use the **local search index** on your server.
-- If the server has `CURSOR_API_KEY`, answers can be synthesized by the **Cursor Agent** using those manuals plus a feature handbook. Still **advisory only** — it does not move the crane or change PLC bits.
+- If the server has `CURSOR_API_KEY`, answers can be synthesized by the **Cursor Agent** using those manuals plus a feature handbook. Still **advisory only**: it does not move the crane or change PLC bits.
 
 ---
 
 ## Face screen
 
-- **Enroll** — After password login, capture your face once for quicker login later.
-- **Face login** — Match against stored template; if unsure, use password.
+- **Enroll**: After password login, capture your face once for quicker login later.
+- **Face login**: Match against stored template; if unsure, use password.
 - **Not** certified biometrics; photos or twins could fool it. See [FACE_LIMITATIONS.md](./FACE_LIMITATIONS.md).
 
 ---
@@ -211,7 +210,7 @@ Read-only list: user email, action name, resource, success/fail, time. Useful af
 
 ---
 
-## Config screen — every section explained
+## Config screen: every section explained
 
 Only **supervisor** and **admin** should rely on saving here. Settings persist in the server **SQLite** database until changed again.
 
@@ -236,7 +235,7 @@ Each row is one **named signal** the app understands.
 | Field | Meaning |
 | ----- | ------- |
 | **Name** | Internal label (e.g. `coil.hoistUp`, `holding.hoistHeightMm`). |
-| **Kind** | **coil**, **holding**, or **discrete** — see glossary. |
+| **Kind** | **coil**, **holding**, or **discrete**: see glossary. |
 | **Address** | Modbus number (must match PLC program). |
 | **Node id** | OPC UA address (e.g. `ns=1;s=HoistUp`) when protocol is OPC UA. |
 | **Trend** | Checkbox: record history for Ops charts. |
@@ -289,7 +288,7 @@ Rules evaluated against live registers.
 | **Register** | Which signal to watch. |
 | **Operator** | **eq** (=), **gt** (>), **lt** (<), **neq** (≠). |
 | **Threshold** | Number to compare against. |
-| **Severity** | Label like `warning` or `critical` (shown in brackets on Ops). |
+| **Severity** | One of **info**, **warning**, or **critical** (dropdown when you define an alarm in Config; shown on Ops). |
 | **Enabled** | Turn rule on/off. |
 
 Ops handles **Ack** / **Shelve** on fired alarms; Config defines the rules.
@@ -304,6 +303,7 @@ Tells the supervision logic which registers mean what:
 | **Deadman** | Register pulsed while operator holds motion. |
 | **Heartbeat** | Register proving PLC comms are alive. |
 | **Safe state** | Register reporting machine-safe status. |
+| **Allow timed media motion** | Checkbox (default off). When on and saved, Media voice **up** / **down** may run a short timed hoist; does not add UP/DOWN buttons on Media. |
 
 If deadman is lost, communications fail, or e-stop asserts, the system **clears motion coils** for safety.
 
@@ -321,7 +321,7 @@ Display names appear on audit rows when set.
 
 ---
 
-## Server configuration (.env) — in plain language
+## Server configuration (.env): in plain language
 
 These live in the project `.env` file (copy from `.env.example`). Integrators set them once per environment.
 
@@ -334,7 +334,7 @@ These live in the project `.env` file (copy from `.env.example`). Integrators se
 | `FRONTEND_URL` | Public URL of the web app (for cookies/CORS). |
 | `COOKIE_SECURE` | `true` on HTTPS production sites. |
 | `DATABASE_PATH` | Where the SQLite file lives. |
-| `JWT_SECRET` | Secret used to sign login tokens — change in production. |
+| `JWT_SECRET` | Secret used to sign login tokens; change in production. |
 | `JWT_ACCESS_TOKEN_TTL` | How long login lasts (seconds). |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | First admin user seeded into the database. |
 | `SAFE_ACTION_PIN` | PIN required to **reset** e-stop. Not required to press STOP. |
@@ -350,8 +350,9 @@ Production example URLs are listed in [README.md](../README.md) and [docs/README
 | Topic | Plain explanation |
 | ----- | ----------------- |
 | **API base** | Must point to your server’s `/api/v1` URL. `localhost` only works on the same machine, not from a physical phone on Wi‑Fi. |
-| **Change password** | Drawer item at the bottom — same flow as web **Account menu** → **Change password**. |
-| **Listen (voice)** | Full speech on device may need a **development build** (`npx expo run:android`); Expo Go still supports UP/DOWN buttons. |
+| **Change password** | Drawer item at the bottom; same flow as web **Account menu** → **Change password**. |
+| **Native app** | Signed Android/iOS builds are delivered at handover (not in git). Rebuild with `pnpm handover:mobile` after you receive signing keys privately ([MOBILE_RELEASE.md](./MOBILE_RELEASE.md)). |
+| **Listen (voice)** | Needs the native app or a local dev build; Expo Go cannot run on-device speech. |
 | **OTA manifest** | Server URL `/ota/manifest` tells the app where to download JS updates. |
 
 See [OTA.md](./OTA.md) for update workflow.
@@ -370,7 +371,7 @@ Always follow your site’s real safety program. Software STOP is not a substitu
 
 ---
 
-## Quick reference — demo controls
+## Quick reference: demo controls
 
 | I want to… | Where | Action |
 | ---------- | ----- | ------ |

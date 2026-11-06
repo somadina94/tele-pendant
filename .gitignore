@@ -14,10 +14,26 @@ apps/mobile/.expo
 apps/mobile/android
 apps/mobile/ios
 apps/mobile/dist
+# Mobile signing handover package (see apps/mobile/signing/README.md)
+apps/mobile/signing/**
+!apps/mobile/signing/README.md
+!apps/mobile/signing/credentials.example.env
+!apps/mobile/signing/android/
+!apps/mobile/signing/ios/
+apps/mobile/signing/android/**
+!apps/mobile/signing/android/.gitkeep
+apps/mobile/signing/ios/**
+!apps/mobile/signing/ios/.gitkeep
 apps/web/dist
 *.apk
 *.docx
 *.log
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+*.ipa
+*.aab
 
 .pnpm-store/
 .pnpm-home/

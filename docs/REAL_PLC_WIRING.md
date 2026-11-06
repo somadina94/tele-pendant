@@ -132,7 +132,7 @@ Fill **Node id** on each register row (Config shows that field when an OPC UA co
 
 ## Related docs
 
-- [DRIVERS.md](./DRIVERS.md) — Modbus / OPC UA / adding drivers  
-- [INSTALLATION.md](./INSTALLATION.md) — deploy, ports, TLS  
-- [USER_MANUAL.md](./USER_MANUAL.md) — Config UI walkthrough  
-- [MANUAL_TEST_PLAN.md](./MANUAL_TEST_PLAN.md) — acceptance clicks (simulator-oriented; adapt for plant)
+- [DRIVERS.md](./DRIVERS.md); Modbus / OPC UA / adding drivers  
+- [INSTALLATION.md](./INSTALLATION.md); deploy, ports, TLS  
+- [USER_MANUAL.md](./USER_MANUAL.md); Config UI walkthrough  
+- [MANUAL_TEST_PLAN.md](./MANUAL_TEST_PLAN.md); acceptance clicks (simulator-oriented; adapt for plant)

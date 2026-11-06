@@ -45,6 +45,13 @@ export {
   isUserRole,
 } from './roles';
 export type { AppRoute, OperatorRoute, SupervisorRoute } from './roles';
+export {
+  ALARM_SEVERITIES,
+  DEFAULT_ALARM_SEVERITY,
+  alarmSeveritySelectOptions,
+  normalizeAlarmSeverity,
+} from './alarm-severity';
+export type { AlarmSeverity } from './alarm-severity';
 
 export const WS_EVENTS = {
   TAGS_UPDATE: 'tags.update',

@@ -1,3 +1,4 @@
+import { ALARM_SEVERITIES } from '@tele-pendant/shared';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
@@ -28,10 +29,10 @@ export class SaveAlarmDefinitionDto {
   @IsNumber()
   threshold?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: [...ALARM_SEVERITIES] })
   @IsOptional()
-  @IsString()
-  severity?: string;
+  @IsIn([...ALARM_SEVERITIES])
+  severity?: (typeof ALARM_SEVERITIES)[number];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -60,10 +61,10 @@ export class UpdateAlarmDefinitionDto {
   @IsNumber()
   threshold?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: [...ALARM_SEVERITIES] })
   @IsOptional()
-  @IsString()
-  severity?: string;
+  @IsIn([...ALARM_SEVERITIES])
+  severity?: (typeof ALARM_SEVERITIES)[number];
 
   @ApiPropertyOptional()
   @IsOptional()

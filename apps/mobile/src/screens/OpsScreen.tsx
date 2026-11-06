@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Check, Pause, RefreshCw } from 'lucide-react-native';
 import { canShelveAlarms, type UserRole } from '@tele-pendant/shared';
 import { apiGet, apiPost } from '../api';
+import { normalizeAlarmSeverity } from '@tele-pendant/shared';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
 import { Btn, BtnText, Hint, LinkText, Section } from '../ui';
@@ -79,7 +80,8 @@ export function OpsScreen({
         <HelpTip key={alarm.id} id="tour.ops.ack">
           <View className="mb-2">
             <Hint>
-              [{alarm.definition.severity}] {alarm.definition.name} —{' '}
+              [{normalizeAlarmSeverity(alarm.definition.severity)}]{' '}
+              {alarm.definition.name} —{' '}
               {alarm.state} (value {alarm.value})
             </Hint>
             {alarm.state === 'active' ? (

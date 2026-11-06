@@ -1,4 +1,4 @@
-# Tele-Pendant — Installation
+# Tele-Pendant: Installation
 
 ## Live hosts
 
@@ -76,24 +76,23 @@ pnpm --filter @tele-pendant/mobile dev
 
 On a physical phone, set API base to the live API (`https://api.tele-pendant.jahbyte.com/api/v1`) or your LAN URL (not `127.0.0.1`).
 
-### Local release APK (no EAS)
+### Handover native builds (Android + iOS)
 
-Needs JDK 17+, Android SDK, and `ANDROID_HOME`.
+Signed installables and signing keys are **not in git**. The vendor sends a signed **APK** and **IPA** securely when you need them, plus keystore / Apple signing material privately. To rebuild later, use the repo scripts (full detail in [MOBILE_RELEASE.md](./MOBILE_RELEASE.md)):
 
 ```bash
-# From repo root — writes apps/mobile/dist/tele-pendant-release.apk
-pnpm --filter @tele-pendant/mobile apk:release
-
-# Optional: force a clean native project, or point OTA at another host
-PREBUILD_CLEAN=1 OTA_PUBLIC_URL=https://api.tele-pendant.jahbyte.com \
-  pnpm --filter @tele-pendant/mobile apk:release
-
-adb install -r apps/mobile/dist/tele-pendant-release.apk
+pnpm handover:mobile              # APK + AAB + iOS IPA
+pnpm handover:mobile:apk          # side-load APK
+pnpm handover:mobile:aab          # Play Store bundle
+pnpm handover:mobile:android      # APK + AAB
+pnpm handover:mobile:ios          # macOS + Xcode only
 ```
 
-The script runs `expo prebuild` then `./gradlew assembleRelease` for **arm64-v8a** only (set `REACT_NATIVE_ARCHITECTURES` for more ABIs). It temporarily sets `updates.url` to `$OTA_PUBLIC_URL/ota/manifest` (default live API). Signing uses the debug keystore until you add a release keystore.
+Outputs under `apps/mobile/dist/` (gitignored): `tele-pendant-release.apk`, `tele-pendant-release.aab`, `tele-pendant-release.ipa`.
 
-A full native release needs several GB free. If Gradle fails mid-C++ with a vague ninja error, check `df -h` — a full disk is a common cause.
+Android needs JDK 17+, Android SDK, and `ANDROID_HOME`. iOS needs macOS, Xcode, and `APPLE_TEAM_ID` (and cert/profile from handover). Set `TELE_PENDANT_ANDROID_*` env vars for release APK signing when the vendor shared a keystore.
+
+A full native release needs several GB free. If Gradle fails mid-C++ with a vague ninja error, check `df -h`; a full disk is a common cause.
 
 Debug binary (installs to a device/emulator):
 
@@ -120,7 +119,7 @@ TLS stays on your reverse proxy and certificate. Enable HSTS on that proxy (`Str
 - Set strong `JWT_SECRET`, `ADMIN_PASSWORD`, `SAFE_ACTION_PIN`, and `FACE_TEMPLATE_KEY` (32+ chars) before production.
 - `COOKIE_SECURE=true` when serving HTTPS.
 - Face templates are encrypted at rest when `FACE_TEMPLATE_KEY` is set; they are never returned to clients.
-- Software deadman/e-stop/watchdog supervise the HMI path only — not SIL. See `REAL_PLC_WIRING.md` for **step-by-step real PLC registration** (example values and where to get host, port, unit id, and register addresses from the machine).
+- Software deadman/e-stop/watchdog supervise the HMI path only; not SIL. See `REAL_PLC_WIRING.md` for **step-by-step real PLC registration** (example values and where to get host, port, unit id, and register addresses from the machine).
 
 ## HTTPS hostnames (production)
 

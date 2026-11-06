@@ -1,4 +1,4 @@
-# Face auth — limitations (local, not certified)
+# Face auth: limitations (local, not certified)
 
 Tele-Pendant face enroll/login is **local on-prem production biometrics**, not an ISO/IEC-certified product. Web and phone send challenge frames; matching runs only on your API.
 

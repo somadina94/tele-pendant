@@ -1,4 +1,4 @@
-# Tele-Pendant — click-through test manual
+# Tele-Pendant: click-through test manual
 
 Use this on the **live** site or while the Docker **dev** stack is running. Every feature below is a click on the web UI, plus the Expo handheld at the end. Do the steps in order. **STOP is last** because it latches until the simulator is restarted.
 
@@ -40,13 +40,13 @@ Sign-in values if you get logged out (from `.env`):
 3. Click **Sign in**.
 4. **Success:** the address becomes `/operator`. The sidebar lists **Operator**, **Media**, **Assistant**, **Face**, **Ops**, **Audit**, and **Config** (role permitting). The header shows an **Account menu** button (your display name or email prefix), **Tour help**, and theme toggle. **Logout** is at the bottom of the sidebar.
 
-Wrong password shows a red error and you stay on the login page. A **suspended** account shows **Account suspended — contact an administrator** and does not sign in.
+Wrong password shows a red error and you stay on the login page. A **suspended** account shows **Account suspended; contact an administrator** and does not sign in.
 
-## 1. Operator screen — layout
+## 1. Operator screen: layout
 
 Stay on http://localhost:8080/operator.
 
-After sign-in, the operator page may show a short **Operator** loading state until the HMI layout and live tag snapshot are ready (or until a brief fallback timeout). If layout load fails, a red message appears instead of an empty matrix — refresh or fix the API connection.
+After sign-in, the operator page may show a short **Operator** loading state until the HMI layout and live tag snapshot are ready (or until a brief fallback timeout). If layout load fails, a red message appears instead of an empty matrix; refresh or fix the API connection.
 
 **Success, top to bottom:**
 
@@ -99,7 +99,7 @@ Numbers on Height and the `H` strip should match and tick together (live tags ov
 4. Type the reset PIN (`SAFE_ACTION_PIN` from the server environment) and click **Reset e-stop**.
 5. **Success:** banner returns to **normal**. A wrong PIN shows **PIN does not match** and leaves e-stop latched.
 
-## 6. Media — camera, codes, voice
+## 6. Media: camera, codes, voice
 
 Click **Media** in the top nav (or open http://localhost:8080/media).
 
@@ -112,10 +112,9 @@ Click **Media** in the top nav (or open http://localhost:8080/media).
 - Section **Manual / known codes**. Supervisors and admins see a link to **Add or edit codes in Config**.
 - Code field already contains `TP-CRANE-DEMO-01`, button **Resolve**.
 - Two code buttons:
-  - **TP-CRANE-DEMO-01** — Demo crane bay A
-  - **TP-OPS** — Ops dashboard
-- Section **Voice commands**. Timed **UP** / **DOWN** stay disabled until Config turns on **Allow timed media motion**. **stop** still commands a stop.
-- Button **Listen (8s)**.
+  - **TP-CRANE-DEMO-01**: Demo crane bay A
+  - **TP-OPS**: Ops dashboard
+- Section **Voice commands** with **Listen (8s)** only (no UP/DOWN tap buttons). Saying **up** or **down** runs a short timed hoist only after an admin enables **Allow timed media motion** under Config **Safety roles** and saves. **stop** still commands a stop without a PIN.
 
 ### 6a. Resolve the crane code
 
@@ -142,7 +141,7 @@ Put `TP-CRANE-DEMO-01` back in the field if you want.
 ### 6d. Scan button
 
 1. Click **Scan QR / barcode in frame** (a spinner shows while decoding).
-2. **Success in this desktop browser (no QR in front of the camera):** a red alert such as **No code in frame — hold a registered QR steady and try again.** If the camera is blocked, a red alert tells you to allow Camera in the browser’s site settings (lock/controls icon in the address bar), then **Reload page**.
+2. **Success in this desktop browser (no QR in front of the camera):** a red alert such as **No code in frame; hold a registered QR steady and try again.** If the camera is blocked, a red alert tells you to allow Camera in the browser’s site settings (lock/controls icon in the address bar), then **Reload page**.
 3. **Success with a demo QR:** encode plain text **TP-CRANE-DEMO-01** (not a random URL). After scan or **Resolve**, you see **Resolved: Demo crane bay A (TP-CRANE-DEMO-01)** and the app opens **Operator** when that code’s route is set.
 
 ### 6d-b. Manage codes (supervisor / admin)
@@ -153,21 +152,20 @@ Put `TP-CRANE-DEMO-01` back in the field if you want.
 
 ### 6e. Voice
 
-Hoist commands are the **UP** and **DOWN** buttons under Voice commands. They stay disabled until Config turns on **Allow timed media motion**. With that switch on, each runs the hoist for about 2 seconds. Saying those words does the same thing. The status line keeps what was heard.
+Voice uses **Listen (8s)** only. Timed hoist from speech is off until **Allow timed media motion** is checked in Config **Safety roles** (bottom of that form) and you click **Save safety roles**. Otherwise say **up** / **down** returns not executed or timed motion off. Hold-to-run motion stays on **Operator**.
 
-1. In Config, turn on **Allow timed media motion** and save the safety roles. Return to Media.
-2. Click **UP**.
+1. Open **Config**, sidebar **Safety roles**, check **Allow timed media motion**, click **Save safety roles**. Return to **Media**.
+2. Click **Listen (8s)** and say **up**.
 3. **Success:** **Heard: up. Executed: Hoist Up**. On **Operator**, height climbs for about 2 seconds, then stops.
-4. Click **DOWN**.
+4. Listen again and say **down**.
 5. **Success:** **Heard: down. Executed: Hoist Down**, and height falls for about 2 seconds.
-6. Optional: click **Listen (8s)** and say **up** or **down**. **Success** is the same status line as the buttons. With no microphone, the line is **Nothing heard** or **Microphone error: …**.
-7. Repeat and say a nonsense phrase.
-8. **Success:** **Heard: … Not executed: command_not_allowlisted**.
-9. Say **stop**. **Success:** the reply says the crane was commanded to stop, and Operator shows **e_stop**. Clear it with **Reset e-stop**.
+6. With **Allow timed media motion** off, say **up** again. **Success:** not executed (timed motion disabled).
+7. Say a nonsense phrase. **Success:** **Heard: … Not executed: command_not_allowlisted**.
+8. Say **stop**. **Success:** the crane is commanded to stop and Operator shows **e_stop**. Clear it with **Reset e-stop**.
 
 If the browser has no speech API, **success** is the line **SpeechRecognition not supported in this browser**.
 
-## 7. Ops — diagnostics, trends, alarms
+## 7. Ops: diagnostics, trends, alarms
 
 Open http://localhost:8080/ops (or, from Media, click the **TP-OPS** code).
 
@@ -180,7 +178,7 @@ Open http://localhost:8080/ops (or, from Media, click the **TP-OPS** code).
   - **Watchdog OK: true**
   - **Uptime:** a number of seconds, increasing
 - **Alarms:** **No active alarms** (until you press STOP in step 11).
-- **Trend: hoist height (recent):** time-stamped lines ending in **mm**. After steps 2–3 and voice hoist, the mm values are not stuck only at the original 1250 if you held hoist long enough to move it. A line **No samples yet** means the poller has not written a sample yet — wait a few seconds and the list should fill.
+- **Trend: hoist height (recent):** time-stamped lines ending in **mm**. After steps 2–3 and voice hoist, the mm values are not stuck only at the original 1250 if you held hoist long enough to move it. A line **No samples yet** means the poller has not written a sample yet; wait a few seconds and the list should fill.
 
 When an alarm is **active**, **Ack** and **Shelve** sit on that row. **Ack** changes the state to **acked**. **Shelve** changes the state to **shelved**. Use one or the other on a given alarm. Step 11 clicks **Ack**. A later step clicks **Shelve** on a fresh STOP.
 
@@ -208,17 +206,17 @@ From Operator, click **Config** (http://localhost:8080/admin). Sign in as the ad
 - To go back to the fake crane, check **Use this PLC** on **demo-simulator** and click **Save**. **Success:** **Saved and connecting.**
 - **Real plant PLC:** full step-by-step (example IPs, ports, unit id, register addresses, and where to get each value from the machine) is in [REAL_PLC_WIRING.md](./REAL_PLC_WIRING.md).
 - **Cells (3 PLC addresses each):**
-  - `[0,1] Hoist Up` — primary `coil.hoistUp` / feedback `discrete.motorRunning` / status `holding.hoistHeightMm`
-  - `[1,0] Trolley L` — primary `coil.trolleyLeft`
-  - `[1,1] STOP` — primary `coil.eStop`
-  - `[1,2] Trolley R` — primary `coil.trolleyRight`
-  - `[2,1] Hoist Down` — primary `coil.hoistDown` / feedback `discrete.motorRunning` / status `holding.hoistHeightMm`
+  - `[0,1] Hoist Up`; primary `coil.hoistUp` / feedback `discrete.motorRunning` / status `holding.hoistHeightMm`
+  - `[1,0] Trolley L`; primary `coil.trolleyLeft`
+  - `[1,1] STOP`; primary `coil.eStop`
+  - `[1,2] Trolley R`; primary `coil.trolleyRight`
+  - `[2,1] Hoist Down`; primary `coil.hoistDown` / feedback `discrete.motorRunning` / status `holding.hoistHeightMm`
 - **Add a cell** is an empty form. Pick a primary register, fill the label, and click **Add cell**.
 - **Live labels** lists **Height**, **Load**, and **Motor** with **X**, **Y**, **Format**, and a register. Those three feed the fixed **cluster readout** on Operator (they do not float on the graphic). **Add a label** posts a free-position overlay (use X/Y for placement).
 - **Background** has **Name**, a CSS background, and an image URL. If the image URL is filled, Operator uses that picture. If it is empty, Operator uses the CSS background.
 - **Users** (admin only): table of accounts with **Name**, **Email**, **Role**, **Status** (**Active** / **Suspended**), and **Edit** / **Suspend** or **Activate** / **Remove** on operator and supervisor rows. The seeded **admin** row shows **Protected**; you cannot suspend or remove yourself. Below the table, **Add user** creates an operator or supervisor (display name, email, password at least 8 characters, role). **Success:** toast **Added** with the name or email. Suspended users cannot sign in until an admin **Activate**s them. Removing a user deletes the account.
 
-Admins can open **Users** from Config’s sidebar section, from the **Account menu** (**Manage users**, **Add operator**, **Add supervisor** — each jumps to Config with the **Users** section open), or directly at http://localhost:8080/admin?section=users.
+Admins can open **Users** from Config’s sidebar section, from the **Account menu** (**Manage users**, **Add operator**, **Add supervisor**: each jumps to Config with the **Users** section open), or directly at http://localhost:8080/admin?section=users.
 
 ### Edit a cell, a label, and the background, then put them back
 
@@ -256,12 +254,12 @@ From Operator, open **Assistant** (http://localhost:8080/assistant).
 **Acceptance default:** leave `CURSOR_API_KEY` unset. Answers use local SQLite FTS over manuals. Optional Cursor Agent: set `CURSOR_API_KEY` in the API `.env` (never commit the key). Optional `CURSOR_AGENT_CWD` (repo root) and `CURSOR_MODEL` (default `composer-2.5`, not `auto`).
 
 1. Click **Ask**.
-2. **Success (FTS — required for acceptance):** bullet lines including **Lost communications** / `comms_lost`. Note mentions FTS or that `CURSOR_API_KEY` is unset.
-3. **Success (with Cursor key — optional):** a short prose answer; note says Cursor Agent. The assistant is **advisory only** — it must not issue PLC or safety commands.
+2. **Success (FTS; required for acceptance):** bullet lines including **Lost communications** / `comms_lost`. Note mentions FTS or that `CURSOR_API_KEY` is unset.
+3. **Success (with Cursor key; optional):** a short prose answer; note says Cursor Agent. The assistant is **advisory only**: it must not issue PLC or safety commands.
 
 Admin: change **Docs root path**, save (reindexes when the path changes), or click **Reindex**. Set **Docs link** to a public manual URL for **Open docs**.
 
-Optional: ask **deadman** — expect deadman hold guidance. Nonsense tokens → **No local documents matched…**
+Optional: ask **deadman**: expect deadman hold guidance. Nonsense tokens → **No local documents matched…**
 
 ## 10. Face (local challenge)
 
@@ -281,7 +279,7 @@ From Operator, click **Face** (http://localhost:8080/face). You must already be 
 3. **Success:** status line mentions local on-prem face match / not ISO-certified / face never authorizes safety actions.
 4. Log out (Operator **Logout** or password login page), then open `/face` again.
 5. Leave **Email hint (login)** as `admin@example.com`. Run **Face login** with the same 3-step challenge.
-6. **Success:** you land on **/operator**. Mismatch or failed liveness → **Face match failed — use password login** (or a liveness error). Prefer password when unsure.
+6. **Success:** you land on **/operator**. Mismatch or failed liveness → **Face match failed; use password login** (or a liveness error). Prefer password when unsure.
 
 Click **Enroll** while logged out. **Success:** **Sign in with password first, then enroll**.
 
@@ -292,7 +290,7 @@ Click **Enroll** while logged out. **Success:** **Sign in with password first, t
 3. Open **Ops**.
 4. **Success:**
    - **Safety mode: e_stop**
-   - **Alarms** shows **[critical] E-Stop asserted — active**
+   - **Alarms** shows **[critical] E-Stop asserted; active**
    - **Ack** and **Shelve** sit on that row
 5. Click **Ack** (leave **Shelve** for the later fresh STOP).
 6. **Success:** that row’s state changes from **active** to **acked**. The banner on Operator stays **e_stop** (ack does not clear the coil).
@@ -315,7 +313,7 @@ Do this only after the banner is **normal** again. One alarm cannot be both acke
 4. **Success:** the state text is **shelved**.
 5. Click **Unshelve** to bring it back, or reset e-stop. When the e-stop coil clears, a shelved alarm clears too.
 
-## 12. Account menu — change password
+## 12. Account menu: change password
 
 Any signed-in role can change its own password (not the plant **Reset PIN**).
 
@@ -342,6 +340,8 @@ The API serves `apps/api/ota` with no login.
 
 ## 15. Expo handheld
 
+Use the **signed native app** the vendor sends securely (Android APK or AAB, iOS IPA). Binaries and signing keys are **not in this git repo**. To build APK, AAB, and IPA yourself after handover, run `pnpm handover:mobile` (see [MOBILE_RELEASE.md](./MOBILE_RELEASE.md)). Until then, iPhone users can use the web HMI in Safari at https://tele-pendant.jahbyte.com.
+
 Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit**.
 
 1. On the phone, set **API base** to `https://api.tele-pendant.jahbyte.com/api/v1` for the live API, or your computer’s LAN URL ending in `/api/v1` for a local stack (not `localhost` on a physical phone).
@@ -349,8 +349,8 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 3. Tap **Sign in**.
 4. **Success:** title **Tele-Pendant**, drawer navigation, **Change password**, and **Logout**. Operator may show a brief loading indicator, then banner `Safety: normal · H … mm`, **Reset PIN** and **Reset e-stop** on one row, and the same five cells.
 5. Press and hold **Hoist Up**. **Success:** banner includes **DEADMAN** and the held cell gets a green border. Height in the banner increases. Release: **DEADMAN** clears.
-6. Open **Media**. Tap **Listen** (Expo Go explains that speech needs `npx expo run:android`). Tap **UP**, then **DOWN**. **Success:** **Heard: up. Executed: Hoist Up**, then the same line for **down** / **Hoist Down**. Type a known code or scan a QR with the camera and tap **Resolve**. **Success:** the code’s label.
-7. Open **Face**. **Success:** the sentence **Convenience match only — not certified biometrics. Fail closed to password.**
+6. Open **Media**. Tap **Listen** (native build required for speech; Expo Go shows a hint). With **Allow timed media motion** on in Config **Safety roles**, say **up** then **down**. **Success:** **Heard: up. Executed: Hoist Up**, then the down line. Scan or resolve a QR code. **Success:** the code’s label.
+7. Open **Face**. **Success:** the sentence **Convenience match only; not certified biometrics. Fail closed to password.**
 8. Open **Ops**. **Success:** diagnostics, alarms (**Ack** and **Shelve** when one is active), and the height trend.
 9. Open **Config**. Change a register address or a cell label and save, then set it back. **Success:** a saved line.
 10. Open **Audit**. **Success:** the same list as the web (email, action, resource, result, time).
@@ -371,7 +371,7 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 - **Safety roles** bind E-stop, deadman, heartbeat, and safe-state to registers. Losing the deadman, the link, or e-stop clears the primary coil of every motion cell.
 - **Protocol** is Modbus TCP by default (simulator port 1502). OPC UA is optional: `docker compose -f docker-compose.dev.yml --profile opcua up opcua-sim`, then set the connection to OPC UA and fill each register’s node id (`ns=1;s=HoistUp` and the matching names).
 - The phone operator screen shows the same plant graphic, photo, and live labels as the web. Buttons stay the action name.
-- Phone **Listen** needs `npx expo run:android` in `apps/mobile`. Expo Go keeps **UP** and **DOWN**.
+- Phone **Listen** needs the signed native app or a local dev build (`npx expo run:android` / Xcode), not Expo Go alone.
 - Face login uses a 3-pose challenge with local liveness and optional AES template encryption. It is not ISO-certified and never authorizes e-stop. See `FACE_LIMITATIONS.md`.
 
 ## Security (operators & integrators)
@@ -380,7 +380,7 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 - Keep `JWT_SECRET`, `ADMIN_PASSWORD`, `SAFE_ACTION_PIN`, and `FACE_TEMPLATE_KEY` strong and unique per environment (never commit real secrets).
 - Login and face endpoints are **rate-limited**. Face templates stay on the server (never returned to clients).
 - PIN policy: **STOP** is one press. `SAFE_ACTION_PIN` is only for **Reset e-stop**. Face auth must never replace that PIN.
-- Roles (operator / supervisor / admin) gate Config, Audit, and safety actions via JWT. Admins manage operator/supervisor accounts (suspend, edit, remove); every role changes its own login password via **Account menu** / phone drawer — not via `SAFE_ACTION_PIN`.
+- Roles (operator / supervisor / admin) gate Config, Audit, and safety actions via JWT. Admins manage operator/supervisor accounts (suspend, edit, remove); every role changes its own login password via **Account menu** / phone drawer; not via `SAFE_ACTION_PIN`.
 
 ## What this software does not do
 

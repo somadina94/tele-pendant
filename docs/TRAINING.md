@@ -1,4 +1,4 @@
-# Tele-Pendant — Training outline
+# Tele-Pendant: Training outline
 
 Live demo hosts: web https://tele-pendant.jahbyte.com · API/Swagger https://api.tele-pendant.jahbyte.com/api · health https://api.tele-pendant.jahbyte.com/api/v1/health.
 

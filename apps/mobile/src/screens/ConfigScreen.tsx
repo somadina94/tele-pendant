@@ -16,6 +16,11 @@ import {
 } from '../config-sections';
 import { HelpTip } from '../tour';
 import {
+  alarmSeveritySelectOptions,
+  normalizeAlarmSeverity,
+  type AlarmSeverity,
+} from '@tele-pendant/shared';
+import {
   confirmAction,
   confirmDestructive,
   Field,
@@ -754,9 +759,7 @@ function AlarmBlock({
   }, [registerId, registers]);
   const [compareOp, setCompareOp] = useState<'eq' | 'gt' | 'lt' | 'neq'>('gt');
   const [threshold, setThreshold] = useState('1');
-  const [severity, setSeverity] = useState<'info' | 'warning' | 'critical'>(
-    'warning',
-  );
+  const [severity, setSeverity] = useState<AlarmSeverity>('warning');
   const [enabled, setEnabled] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -816,7 +819,7 @@ function AlarmBlock({
           </Text>
           <Text className="text-xs text-muted-foreground">
             {row.register?.name ?? '—'} · {row.compareOp} {row.threshold} ·{' '}
-            {row.severity}
+            {normalizeAlarmSeverity(row.severity)}
             {row.enabled ? '' : ' · disabled'}
           </Text>
           <View className="mt-1 flex-row gap-3">
@@ -827,10 +830,7 @@ function AlarmBlock({
                 setRegisterId(row.register?.id ?? registers[0]?.id ?? '');
                 setCompareOp(row.compareOp as 'eq' | 'gt' | 'lt' | 'neq');
                 setThreshold(String(row.threshold));
-                setSeverity(
-                  (row.severity as 'info' | 'warning' | 'critical') ||
-                    'warning',
-                );
+                setSeverity(normalizeAlarmSeverity(row.severity));
                 setEnabled(row.enabled);
               }}
             >
@@ -882,12 +882,8 @@ function AlarmBlock({
       <SelectField
         label="Severity"
         value={severity}
-        options={[
-          { value: 'info', label: 'info' },
-          { value: 'warning', label: 'warning' },
-          { value: 'critical', label: 'critical' },
-        ]}
-        onChange={(value) => setSeverity(value)}
+        options={alarmSeveritySelectOptions()}
+        onChange={(value) => setSeverity(value as AlarmSeverity)}
       />
       <SelectField
         label="Enabled"

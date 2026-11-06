@@ -32,7 +32,13 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { ConfigScanCodesSection } from '@/components/config-scan-codes-section';
 import { ConfigUsersSection } from '@/components/config-users-section';
-import { canManageUsers, configSectionIdsForRole } from '@tele-pendant/shared';
+import {
+  alarmSeveritySelectOptions,
+  canManageUsers,
+  configSectionIdsForRole,
+  normalizeAlarmSeverity,
+  type AlarmSeverity,
+} from '@tele-pendant/shared';
 import {
   parseConfigSection,
   type ConfigSectionId,
@@ -586,7 +592,7 @@ function AlarmSection({
   const [registerId, setRegisterId] = useState(registers[0]?.id ?? '');
   const [compareOp, setCompareOp] = useState('gt');
   const [threshold, setThreshold] = useState('1');
-  const [severity, setSeverity] = useState('warning');
+  const [severity, setSeverity] = useState<AlarmSeverity>('warning');
   const [enabled, setEnabled] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [note, setNote] = useState<Note | null>(null);
@@ -677,7 +683,7 @@ function AlarmSection({
                 setRegisterId(row.register?.id ?? registers[0]?.id ?? '');
                 setCompareOp(row.compareOp);
                 setThreshold(String(row.threshold));
-                setSeverity(row.severity || 'warning');
+                setSeverity(normalizeAlarmSeverity(row.severity));
                 setEnabled(row.enabled);
               }}
             >
@@ -740,12 +746,8 @@ function AlarmSection({
             label="Severity"
             ariaLabel="alarm severity"
             value={severity}
-            onChange={setSeverity}
-            options={[
-              { value: 'info', label: 'info' },
-              { value: 'warning', label: 'warning' },
-              { value: 'critical', label: 'critical' },
-            ]}
+            onChange={(value) => setSeverity(value as AlarmSeverity)}
+            options={alarmSeveritySelectOptions()}
           />
           <div className="flex items-center gap-2">
             <Checkbox

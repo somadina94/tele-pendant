@@ -1,4 +1,4 @@
-# Tele-Pendant — Maintenance
+# Tele-Pendant: Maintenance
 
 ## Live checks
 

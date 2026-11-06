@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DEMO_CRANE_MAP } from '@tele-pendant/modbus-core';
+import { normalizeAlarmSeverity } from '@tele-pendant/shared';
 import { Repository } from 'typeorm';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
 import { AuditService } from '../../audit/providers/audit.service';
@@ -232,7 +233,7 @@ export class AlarmEngineService implements OnModuleInit {
       .save(
         this.definitions.create({
           name,
-          severity: input.severity?.trim() || 'warning',
+          severity: normalizeAlarmSeverity(input.severity),
           compareOp,
           threshold: Number.isFinite(input.threshold)
             ? Number(input.threshold)
@@ -272,7 +273,7 @@ export class AlarmEngineService implements OnModuleInit {
       row.name = name;
     }
     if (input.severity !== undefined) {
-      row.severity = input.severity.trim() || 'warning';
+      row.severity = normalizeAlarmSeverity(input.severity);
     }
     if (input.compareOp !== undefined) {
       if (!['eq', 'gt', 'lt', 'neq'].includes(input.compareOp)) {

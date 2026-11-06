@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { canShelveAlarms } from '@tele-pendant/shared';
+import { canShelveAlarms, normalizeAlarmSeverity } from '@tele-pendant/shared';
 import { getStoredUserRole } from '@/lib/user-session';
 import { toastErr, toastOk } from '@/lib/toast';
 
@@ -119,17 +119,21 @@ export function OpsPage() {
                     <TableCell colSpan={5}>{t('noAlarms')}</TableCell>
                   </TableRow>
                 ) : null}
-                {(alarms.data ?? []).map((a) => (
+                {(alarms.data ?? []).map((a) => {
+                  const severity = normalizeAlarmSeverity(
+                    a.definition.severity,
+                  );
+                  return (
                   <TableRow key={a.id}>
                     <TableCell>
                       <Badge
                         variant={
-                          a.definition.severity === 'critical'
+                          severity === 'critical'
                             ? 'destructive'
                             : 'secondary'
                         }
                       >
-                        {a.definition.severity}
+                        {severity}
                       </Badge>
                     </TableCell>
                     <TableCell>{a.definition.name}</TableCell>
@@ -194,7 +198,8 @@ export function OpsPage() {
                       ) : null}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>

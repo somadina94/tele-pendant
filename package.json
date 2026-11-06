@@ -15,7 +15,13 @@
     "docker:dev:watch": "docker compose -f docker-compose.dev.yml up --build --watch",
     "docker:up": "docker compose up --build -d",
     "docker:prod": "docker compose -f docker-compose.prod.yml up -d --build",
-    "docker:down": "docker compose -f docker-compose.dev.yml down && docker compose down"
+    "docker:down": "docker compose -f docker-compose.dev.yml down && docker compose down",
+    "handover:mobile": "node scripts/handover-native-build.mjs all",
+    "handover:mobile:apk": "node scripts/handover-native-build.mjs apk",
+    "handover:mobile:aab": "node scripts/handover-native-build.mjs aab",
+    "handover:mobile:android": "node scripts/handover-native-build.mjs android",
+    "handover:mobile:ios": "node scripts/handover-native-build.mjs ios",
+    "handover:mobile:signing-zip": "pnpm --filter @tele-pendant/mobile signing:zip"
   },
   "devDependencies": {
     "prettier": "^3.4.2",
