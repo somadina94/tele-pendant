@@ -1,5 +1,12 @@
 import { FormEvent, useState } from 'react';
-import { ChevronDown, KeyRound, User, UserPlus, Users } from 'lucide-react';
+import {
+  ChevronDown,
+  KeyRound,
+  Shield,
+  User,
+  UserPlus,
+  Users,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { apiPatch } from '@/lib/api';
 import { toastErr, toastOk } from '@/lib/toast';
@@ -33,11 +40,51 @@ export function AccountMenu() {
   const navigate = useNavigate();
   const user = getStoredUser();
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [resetPinOpen, setResetPinOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [currentResetPin, setCurrentResetPin] = useState('');
+  const [newResetPin, setNewResetPin] = useState('');
+  const [confirmResetPin, setConfirmResetPin] = useState('');
 
   if (!user) return null;
+
+  function patchStoredUser(patch: { hasSafeActionPin?: boolean }) {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      localStorage.setItem('user', JSON.stringify({ ...parsed, ...patch }));
+    } catch {
+      // ignore
+    }
+  }
+
+  async function submitResetPin(event: FormEvent) {
+    event.preventDefault();
+    if (newResetPin !== confirmResetPin) {
+      toastErr('New reset PINs do not match');
+      return;
+    }
+    try {
+      const body: { newPin: string; currentPin?: string } = {
+        newPin: newResetPin,
+      };
+      if (currentResetPin.trim()) body.currentPin = currentResetPin.trim();
+      await apiPatch('/auth/safe-action-pin', body);
+      toastOk('Reset PIN updated.');
+      patchStoredUser({ hasSafeActionPin: true });
+      setCurrentResetPin('');
+      setNewResetPin('');
+      setConfirmResetPin('');
+      setResetPinOpen(false);
+    } catch (err) {
+      toastErr(
+        err instanceof Error ? err.message : 'Could not update reset PIN',
+      );
+    }
+  }
 
   async function submitPassword(event: FormEvent) {
     event.preventDefault();
@@ -86,6 +133,10 @@ export function AccountMenu() {
             <KeyRound className="size-4" />
             Change password
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setResetPinOpen(true)}>
+            <Shield className="size-4" />
+            {user.hasSafeActionPin ? 'Change reset PIN' : 'Set reset PIN'}
+          </DropdownMenuItem>
           {user.role === 'admin' ? (
             <>
               <DropdownMenuSeparator />
@@ -108,6 +159,66 @@ export function AccountMenu() {
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Sheet open={resetPinOpen} onOpenChange={setResetPinOpen}>
+        <SheetContent side="right" className="overflow-y-auto sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>
+              {user.hasSafeActionPin ? 'Change reset PIN' : 'Set reset PIN'}
+            </SheetTitle>
+            <SheetDescription>
+              Used only to clear e-stop after STOP (not your login password).
+              Each operator, supervisor, and admin sets their own PIN (at least 4
+              characters). If you still use the plant default from install, enter
+              it as Current when changing.
+            </SheetDescription>
+          </SheetHeader>
+          <form
+            className="mt-6 grid gap-4"
+            onSubmit={(e) => void submitResetPin(e)}
+          >
+            <div className="grid gap-2">
+              <Label htmlFor="account-current-reset-pin">
+                Current reset PIN (if any)
+              </Label>
+              <Input
+                id="account-current-reset-pin"
+                type="password"
+                autoComplete="off"
+                value={currentResetPin}
+                onChange={(e) => setCurrentResetPin(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="account-new-reset-pin">New reset PIN</Label>
+              <Input
+                id="account-new-reset-pin"
+                type="password"
+                autoComplete="off"
+                value={newResetPin}
+                onChange={(e) => setNewResetPin(e.target.value)}
+                minLength={4}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="account-confirm-reset-pin">
+                Confirm new reset PIN
+              </Label>
+              <Input
+                id="account-confirm-reset-pin"
+                type="password"
+                autoComplete="off"
+                value={confirmResetPin}
+                onChange={(e) => setConfirmResetPin(e.target.value)}
+                minLength={4}
+                required
+              />
+            </div>
+            <Button type="submit">Save reset PIN</Button>
+          </form>
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={passwordOpen} onOpenChange={setPasswordOpen}>
         <SheetContent side="right" className="overflow-y-auto sm:max-w-md">

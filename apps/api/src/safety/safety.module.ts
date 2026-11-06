@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
+import { UsersModule } from '../users/users.module';
 import { Cell } from '../cells/entities/cell.entity';
 import { PlcModule } from '../plc/plc.module';
 import { RegisterMap } from '../registers/entities/register-map.entity';
@@ -12,6 +13,7 @@ import { SafetyStateService } from './providers/safety-state.service';
   imports: [
     PlcModule,
     AuditModule,
+    UsersModule,
     TypeOrmModule.forFeature([Cell, RegisterMap, SafetyRoles]),
   ],
   controllers: [SafetyController],

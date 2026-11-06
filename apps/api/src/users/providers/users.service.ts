@@ -38,6 +38,7 @@ export class UsersService {
       locale: user.locale,
       localePinned: user.localePinned === true,
       hasFaceTemplate: Boolean(user.faceTemplate),
+      hasSafeActionPin: Boolean(user.safeActionPinHash),
       suspended: user.suspended === true,
     };
   }

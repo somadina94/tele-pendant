@@ -62,6 +62,10 @@ describe('AuthService', () => {
   const auditService = {
     write: jest.fn().mockResolvedValue({}),
   };
+  const safeActionPin = {
+    plantPinFallback: jest.fn(() => ''),
+    changePin: jest.fn(),
+  };
 
   let service: AuthService;
 
@@ -79,11 +83,13 @@ describe('AuthService', () => {
     user.faceTemplate = null;
     user.displayName = 'Admin';
     configService.get.mockImplementation(defaultConfig);
+    safeActionPin.plantPinFallback.mockReturnValue('');
     service = new AuthService(
       usersRepository as never,
       jwtService as never,
       configService as never,
       auditService as never,
+      safeActionPin as never,
     );
   });
 

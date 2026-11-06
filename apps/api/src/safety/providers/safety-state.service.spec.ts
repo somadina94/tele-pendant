@@ -29,6 +29,13 @@ describe('SafetyStateService', () => {
     })),
   };
 
+  const safeActionPin = {
+    verify: jest.fn(async (_userId: string | undefined, pin: string) => {
+      const expected = (process.env.SAFE_ACTION_PIN || '').trim();
+      return Boolean(expected && pin.trim() === expected);
+    }),
+  };
+
   let service: SafetyStateService;
 
   beforeEach(() => {
@@ -41,12 +48,19 @@ describe('SafetyStateService', () => {
     cells.find.mockResolvedValue([]);
     registers.findOneBy.mockResolvedValue(null);
     roles.find.mockResolvedValue([]);
+    safeActionPin.verify.mockImplementation(
+      async (_userId: string | undefined, pin: string) => {
+        const expected = (process.env.SAFE_ACTION_PIN || '').trim();
+        return Boolean(expected && pin.trim() === expected);
+      },
+    );
     service = new SafetyStateService(
       plcService as never,
       auditService as never,
       cells as never,
       registers as never,
       roles as never,
+      safeActionPin as never,
     );
   });
 

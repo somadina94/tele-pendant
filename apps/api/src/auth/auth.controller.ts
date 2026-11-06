@@ -20,6 +20,7 @@ import { FaceImageDto, FaceLoginDto } from './dtos/face-image.dto';
 import { LoginDto } from './dtos/login.dto';
 import { OAuthTokenDto } from './dtos/oauth-token.dto';
 import { ChangePasswordDto } from './dtos/change-password.dto';
+import { ChangeSafeActionPinDto } from './dtos/change-safe-action-pin.dto';
 import { UpdateLocaleDto } from './dtos/update-locale.dto';
 import { AuthService, JwtPayload } from './providers/auth.service';
 import { JwtAuthGuard } from './providers/jwt-auth.guard';
@@ -126,6 +127,27 @@ export class AuthController {
       req.user.sub,
       body.currentPassword,
       body.newPassword,
+      req.ip,
+    );
+  }
+
+  @Patch('safe-action-pin')
+  @UseGuards(JwtAuthGuard)
+  @ApiAuth()
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary:
+      'Set or change personal reset PIN (operator, supervisor, admin)',
+  })
+  changeSafeActionPin(
+    @Body() body: ChangeSafeActionPinDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.authService.changeSafeActionPin(
+      req.user.sub,
+      body.currentPin,
+      body.newPin,
       req.ip,
     );
   }

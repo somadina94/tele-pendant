@@ -31,7 +31,7 @@ Sign-in values if you get logged out (from `.env`):
 
 - Email: `ADMIN_EMAIL` (seed `admin@example.com`)
 - Password: `ADMIN_PASSWORD` (seed `change-me-admin-password`)
-- Safe-action PIN: `SAFE_ACTION_PIN` (seed is the same string as the admin password)
+- Reset PIN: each user sets their own under Account menu / mobile drawer (plant `SAFE_ACTION_PIN` in `.env` is fallback until set)
 
 ## 0. Sign in (only if you see the login page)
 
@@ -96,7 +96,7 @@ Numbers on Height and the `H` strip should match and tick together (live tags ov
 1. Leave **Reset PIN** empty.
 2. Click **STOP**.
 3. **Success:** banner becomes **Safety: e_stop** and includes **E-STOP**. No PIN error.
-4. Type the reset PIN (`SAFE_ACTION_PIN` from the server environment) and click **Reset e-stop**.
+4. Type **your** reset PIN (set under Account menu) and click **Reset e-stop**.
 5. **Success:** banner returns to **normal**. A wrong PIN shows **PIN does not match** and leaves e-stop latched.
 
 ## 6. Media: camera, codes, voice

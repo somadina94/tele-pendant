@@ -36,6 +36,9 @@ export class User {
   @Column({ type: 'boolean', default: false })
   suspended!: boolean;
 
+  @Column({ name: 'safe_action_pin_hash', type: 'varchar', nullable: true })
+  safeActionPinHash?: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

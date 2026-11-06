@@ -14,6 +14,7 @@ import { Repository } from 'typeorm';
 import { AuditService } from '../../audit/providers/audit.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 import { User } from '../../users/entities/user.entity';
+import { SafeActionPinService } from '../../users/providers/safe-action-pin.service';
 import { LoginDto } from '../dtos/login.dto';
 import {
   descriptorFromChallengeFrames,
@@ -46,6 +47,7 @@ export class AuthService implements OnModuleInit {
   private readonly jwtService: JwtService;
   private readonly configService: ConfigService;
   private readonly auditService: AuditService;
+  private readonly safeActionPin: SafeActionPinService;
 
   constructor(
     @InjectRepository(User)
@@ -53,11 +55,13 @@ export class AuthService implements OnModuleInit {
     @Inject(JwtService) jwtService: JwtService,
     @Inject(ConfigService) configService: ConfigService,
     @Inject(AuditService) auditService: AuditService,
+    @Inject(SafeActionPinService) safeActionPin: SafeActionPinService,
   ) {
     this.usersRepository = usersRepository;
     this.jwtService = jwtService;
     this.configService = configService;
     this.auditService = auditService;
+    this.safeActionPin = safeActionPin;
   }
 
   async onModuleInit(): Promise<void> {
@@ -69,12 +73,17 @@ export class AuthService implements OnModuleInit {
     if (existing) return;
 
     const passwordHash = await bcrypt.hash(password, 12);
+    const plantPin = this.safeActionPin.plantPinFallback();
+    const safeActionPinHash = plantPin
+      ? await bcrypt.hash(plantPin, 12)
+      : null;
     await this.usersRepository.save(
       this.usersRepository.create({
         email,
         passwordHash,
         role: UserRole.ADMIN,
         displayName: 'Administrator',
+        safeActionPinHash,
       }),
     );
   }
@@ -100,6 +109,7 @@ export class AuthService implements OnModuleInit {
       locale: user.locale,
       localePinned: user.localePinned === true,
       hasFaceTemplate: Boolean(user.faceTemplate),
+      hasSafeActionPin: Boolean(user.safeActionPinHash),
       suspended: user.suspended === true,
     };
   }
@@ -153,6 +163,25 @@ export class AuthService implements OnModuleInit {
       result: 'success',
     });
     return { ok: true };
+  }
+
+  async changeSafeActionPin(
+    userId: string,
+    currentPin: string | undefined,
+    newPin: string,
+    ip?: string,
+  ) {
+    const user = await this.usersRepository.findOneByOrFail({ id: userId });
+    await this.safeActionPin.changePin(userId, currentPin, newPin);
+    await this.auditService.write({
+      userId: user.id,
+      userEmail: user.email,
+      userDisplayName: user.displayName ?? null,
+      action: 'auth.safe_action_pin_change',
+      ip,
+      result: 'success',
+    });
+    return { ok: true, hasSafeActionPin: true };
   }
 
   async login(dto: LoginDto, ip?: string) {

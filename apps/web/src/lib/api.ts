@@ -107,6 +107,7 @@ export interface PublicUser {
   locale: string;
   localePinned?: boolean;
   hasFaceTemplate?: boolean;
+  hasSafeActionPin?: boolean;
   suspended?: boolean;
 }
 

@@ -65,7 +65,7 @@ Think of it as: **sign in → see a picture of the plant → press buttons → n
 | **Supervisor** | Shift lead | Yes | Yes | Yes | Yes |
 | **Admin** | IT / integrator | Yes | Yes | Yes | Yes |
 
-The demo admin account is set in the server environment (`ADMIN_EMAIL` / `ADMIN_PASSWORD`). The reset PIN is `SAFE_ACTION_PIN` in that same file.
+The demo admin account is set in the server environment (`ADMIN_EMAIL` / `ADMIN_PASSWORD`). Each signed-in user sets their own **reset PIN** under **Account menu** (web) or drawer **Reset PIN** (mobile). Until then, reset may still accept the plant `SAFE_ACTION_PIN` from `.env` as a fallback.
 
 ---
 
@@ -148,7 +148,8 @@ Default demo layout (empty corners):
 
 | Item | Who | What it does |
 | ---- | --- | ------------ |
-| **Change password** | Any signed-in user | Updates **login** password (current + new + confirm, min 8 chars). Does not change `SAFE_ACTION_PIN`. |
+| **Change password** | Any signed-in user | Updates **login** password (current + new + confirm, min 8 chars). |
+| **Set / change reset PIN** | Operator, supervisor, admin | Personal PIN for **Reset e-stop** only (min 4 chars). Not the login password. |
 | **Add operator** / **Add supervisor** / **Manage users** | Admin only | Opens Config **Users** (`/admin?section=users`) to create or manage accounts. |
 
 **Logout** stays in the sidebar footer. Suspended accounts see **Account suspended; contact an administrator** at sign-in.

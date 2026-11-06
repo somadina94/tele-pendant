@@ -41,8 +41,7 @@ export function translate(locale: Locale, key: string): string {
 
 const errorKeys: Record<string, string> = {
   'Motion blocked: hold deadman and ensure normal safety mode': 'err.motion',
-  'SAFE_ACTION_PIN does not match. Type the value from .env (this demo uses the admin password), not the name SAFE_ACTION_PIN.':
-    'err.pin',
+  'PIN does not match': 'err.pin',
   'Face match failed — use password login': 'err.face',
   'No face detected': 'err.noface',
   'Liveness failed — not enough head motion between frames': 'err.faceLiveness',

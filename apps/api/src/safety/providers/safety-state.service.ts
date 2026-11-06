@@ -7,6 +7,7 @@ import { Cell } from '../../cells/entities/cell.entity';
 import { PlcService } from '../../plc/providers/plc.service';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
+import { SafeActionPinService } from '../../users/providers/safe-action-pin.service';
 import { SafetyRoles } from '../entities/safety-roles.entity';
 
 export type SafetyMode = 'normal' | 'safe_state' | 'e_stop' | 'comms_lost';
@@ -42,6 +43,7 @@ export class SafetyStateService {
   private readonly cells: Repository<Cell>;
   private readonly registers: Repository<RegisterMap>;
   private readonly roles: Repository<SafetyRoles>;
+  private readonly safeActionPin: SafeActionPinService;
 
   constructor(
     @Inject(PlcService) plcService: PlcService,
@@ -49,12 +51,14 @@ export class SafetyStateService {
     @InjectRepository(Cell) cells: Repository<Cell>,
     @InjectRepository(RegisterMap) registers: Repository<RegisterMap>,
     @InjectRepository(SafetyRoles) roles: Repository<SafetyRoles>,
+    @Inject(SafeActionPinService) safeActionPin: SafeActionPinService,
   ) {
     this.plcService = plcService;
     this.auditService = auditService;
     this.cells = cells;
     this.registers = registers;
     this.roles = roles;
+    this.safeActionPin = safeActionPin;
   }
 
   async getRoles(): Promise<SafetyRoles> {
@@ -89,13 +93,13 @@ export class SafetyStateService {
   }
 
   /**
-   * Drop the software e-stop coil. Requires the plant PIN.
+   * Drop the software e-stop coil. Requires the signed-in user's reset PIN
+   * (or plant SAFE_ACTION_PIN fallback until they set a personal PIN).
    * Asserting STOP itself does not use the PIN.
    */
   async resetEStop(pin: string, actor?: AuditActor): Promise<SafetySnapshot> {
-    const expected = (process.env.SAFE_ACTION_PIN || '').trim();
-    const provided = pin.trim();
-    if (!expected || !provided || provided !== expected) {
+    const ok = await this.safeActionPin.verify(actor?.userId, pin);
+    if (!ok) {
       await this.auditService.write({
         ...auditWriteFields(actor),
         action: 'safety.reset_denied',

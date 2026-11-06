@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Gauge,
   KeyRound,
+  Shield,
   LogOut,
   Menu,
   ScanFace,
@@ -36,6 +37,7 @@ import { FaceScreen } from './screens/FaceScreen';
 import { ConfigScreen } from './screens/ConfigScreen';
 import { AuditScreen } from './screens/AuditScreen';
 import { ChangePasswordScreen } from './screens/ChangePasswordScreen';
+import { ChangeResetPinScreen } from './screens/ChangeResetPinScreen';
 import type { ScreenName } from './types';
 
 export type RootDrawerParamList = {
@@ -44,6 +46,7 @@ export type RootDrawerParamList = {
   config: undefined;
   audit: undefined;
   changePassword: undefined;
+  changeResetPin: undefined;
 };
 
 export type MainTabParamList = {
@@ -170,6 +173,17 @@ function DrawerItems({
         >
           <KeyRound size={18} color={iconColor(false, dark)} />
           <Text className="text-sm text-muted-foreground">Change password</Text>
+        </Pressable>
+        <Pressable
+          className="flex-row items-center gap-3 rounded-lg px-3 py-3"
+          onPress={() =>
+            (props.navigation.navigate as (name: string) => void)(
+              'changeResetPin',
+            )
+          }
+        >
+          <Shield size={18} color={iconColor(false, dark)} />
+          <Text className="text-sm text-muted-foreground">Reset PIN</Text>
         </Pressable>
         <Pressable
           className="flex-row items-center gap-3 rounded-lg px-3 py-3"
@@ -337,6 +351,14 @@ export function AppShell({
       >
         {({ navigation }) => (
           <ChangePasswordScreen
+            token={token}
+            onClose={() => navigation.navigate('MainTabs')}
+          />
+        )}
+      </Drawer.Screen>
+      <Drawer.Screen name="changeResetPin" options={{ title: 'Reset PIN' }}>
+        {({ navigation }) => (
+          <ChangeResetPinScreen
             token={token}
             onClose={() => navigation.navigate('MainTabs')}
           />

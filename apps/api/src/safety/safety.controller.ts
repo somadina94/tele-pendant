@@ -66,7 +66,10 @@ export class SafetyController {
 
   @Post('reset')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Reset e-stop. Requires the plant PIN.' })
+  @ApiOperation({
+    summary:
+      'Reset e-stop. Requires the signed-in user reset PIN (personal or plant fallback).',
+  })
   reset(
     @Body() body: ResetEStopDto,
     @Req() req: Request & { user: JwtPayload },
