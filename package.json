@@ -16,11 +16,11 @@
     "docker:up": "docker compose up --build -d",
     "docker:prod": "docker compose -f docker-compose.prod.yml up -d --build",
     "docker:down": "docker compose -f docker-compose.dev.yml down && docker compose down",
-    "handover:mobile": "node scripts/handover-native-build.mjs all",
-    "handover:mobile:apk": "node scripts/handover-native-build.mjs apk",
-    "handover:mobile:aab": "node scripts/handover-native-build.mjs aab",
-    "handover:mobile:android": "node scripts/handover-native-build.mjs android",
-    "handover:mobile:ios": "node scripts/handover-native-build.mjs ios",
+    "handover:mobile:apk": "pnpm --filter @tele-pendant/mobile apk:release",
+    "handover:mobile:aab": "pnpm --filter @tele-pendant/mobile aab:release",
+    "handover:mobile:ios": "pnpm --filter @tele-pendant/mobile ios:release",
+    "handover:mobile:android": "pnpm handover:mobile:apk && pnpm handover:mobile:aab",
+    "handover:mobile": "pnpm handover:mobile:android && pnpm handover:mobile:ios",
     "handover:mobile:signing-zip": "pnpm --filter @tele-pendant/mobile signing:zip"
   },
   "devDependencies": {

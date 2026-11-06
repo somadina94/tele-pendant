@@ -27,6 +27,8 @@ apps/mobile/signing/ios/**
 apps/web/dist
 *.apk
 *.docx
+scripts/build-test-report-docx.py
+scripts/handover-native-build.mjs
 *.log
 *.keystore
 *.jks

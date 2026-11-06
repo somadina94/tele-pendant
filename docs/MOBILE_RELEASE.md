@@ -26,8 +26,6 @@ Underlying mobile package scripts:
 - `pnpm --filter @tele-pendant/mobile aab:release`
 - `pnpm --filter @tele-pendant/mobile ios:release`
 
-Orchestrator: `node scripts/handover-native-build.mjs [apk|aab|ios|android|all]`
-
 See [INSTALLATION.md](./INSTALLATION.md) for JDK, Android SDK, and Xcode requirements.
 
 ## Signing package folder (gitignored)
