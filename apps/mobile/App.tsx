@@ -22,6 +22,7 @@ import {
 import { BrandMark } from './src/brand';
 import { LocaleProvider, useLocale } from './src/locale';
 import { AppShell } from './src/navigation';
+import type { Layout } from './src/types';
 import { FaceChallenge } from './src/screens/FaceChallenge';
 import { onUnauthorized } from './src/session';
 import { BootSplash } from './src/splash';
@@ -223,6 +224,14 @@ function Pendant() {
       setToken(null);
     });
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    void queryClient.prefetchQuery({
+      queryKey: ['layout', token],
+      queryFn: () => apiGet<Layout>('/hmi/layout', token),
+    });
+  }, [token]);
 
   const logout = async () => {
     await AsyncStorage.removeItem('accessToken');

@@ -155,11 +155,29 @@ const layout = {
   },
 };
 
+const defaultTags = {
+  hoistHeightMm: 100,
+  loadKg: 5,
+  speedPct: 0,
+  motorRunning: false,
+  fault: false,
+  commsOk: true,
+  values: {},
+  at: new Date().toISOString(),
+};
+
 describe('OperatorPage', () => {
   beforeEach(() => {
     socket.on.mockClear();
     socket.off.mockClear();
     socket.emit.mockClear();
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === 'tags.update') {
+          handler(defaultTags);
+        }
+      },
+    );
     vi.spyOn(api, 'apiGet').mockResolvedValue(layout);
     vi.spyOn(api, 'apiPost').mockResolvedValue({ ok: true });
   });
@@ -288,7 +306,7 @@ describe('OperatorPage', () => {
     renderWithProviders(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     expect(hoist).toHaveTextContent('Hoist Up');
-    expect(hoist).not.toHaveTextContent('IDLE');
+    expect(hoist).toHaveTextContent('IDLE');
     const photo = screen.getByRole('img', { name: 'Plant background' });
     expect(photo).toHaveAttribute('src', 'https://example.com/bay.png');
     fireEvent.error(photo);
@@ -316,11 +334,76 @@ describe('OperatorPage', () => {
     expect(localStorage.getItem('accessToken')).toBeNull();
   });
 
-  it('renders matrix placeholders when layout request fails', async () => {
+  it('shows a layout error when the operator screen cannot load', async () => {
     vi.spyOn(api, 'apiGet').mockRejectedValue(new Error('offline'));
     renderWithProviders(<OperatorPage />);
-    expect(await screen.findByText('Plant graphic')).toBeInTheDocument();
-    expect(screen.getByText(/safety/i)).toBeInTheDocument();
+    expect(await screen.findByText('offline')).toBeInTheDocument();
+  });
+
+  it('shows a generic layout error when the failure is not an Error', async () => {
+    vi.spyOn(api, 'apiGet').mockRejectedValue('nope');
+    renderWithProviders(<OperatorPage />);
+    expect(
+      await screen.findByText('Could not load operator screen'),
+    ).toBeInTheDocument();
+  });
+
+  it('opens the operator screen after the live tag fallback timer', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    socket.on.mockImplementation(() => {});
+    renderWithProviders(<OperatorPage />);
+    expect(
+      screen.getByRole('status', { name: 'Operator' }),
+    ).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('clears the live fallback timer on unmount', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    socket.on.mockImplementation(() => {});
+    const view = renderWithProviders(<OperatorPage />);
+    expect(
+      screen.getByRole('status', { name: 'Operator' }),
+    ).toBeInTheDocument();
+    view.unmount();
+    await vi.advanceTimersByTimeAsync(2500);
+    vi.useRealTimers();
+  });
+
+  it('renders when live tags arrive after the layout loads', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let tagsHandler: ((p: unknown) => void) | undefined;
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === 'tags.update') tagsHandler = handler;
+      },
+    );
+    renderWithProviders(<OperatorPage />);
+    expect(
+      screen.getByRole('status', { name: 'Operator' }),
+    ).toBeInTheDocument();
+    tagsHandler?.(defaultTags);
+    expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('shows a warning status dot for non-normal safety modes', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      ...layout,
+      safety: {
+        mode: 'maintenance',
+        deadmanActive: false,
+        eStopActive: false,
+        watchdogOk: true,
+      },
+    });
+    const { container } = renderWithProviders(<OperatorPage />);
+    await screen.findByText('Hoist Up');
+    expect(
+      container.querySelector('.plant-cluster-status-dot.warn'),
+    ).toBeTruthy();
   });
 
   it('renders empty cell slots when matrix has gaps', async () => {
@@ -329,7 +412,7 @@ describe('OperatorPage', () => {
       matrix: { rows: 1, cols: 2 },
       cells: [layout.cells[0]],
       background: null,
-      overlays: [],
+      overlays: undefined,
       safety: {
         mode: 'safe_state',
         deadmanActive: false,

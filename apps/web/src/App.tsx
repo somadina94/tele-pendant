@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AdminPage } from './pages/AdminPage';
 import { AuditPage } from './pages/AuditPage';
@@ -10,11 +11,12 @@ import { OperatorPage } from './pages/OperatorPage';
 import { OpsPage } from './pages/OpsPage';
 import { RequireRole } from '@/components/require-role';
 import { AppShell } from './layouts/AppShell';
-import { apiGet, type PublicUser } from './lib/api';
+import { apiGet, type HmiLayout, type PublicUser } from './lib/api';
 import { clearSession } from './lib/session';
 import { PageSpinner } from '@/components/page-spinner';
 
 function RequireAuth({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<'loading' | 'ok' | 'out'>('loading');
 
   useEffect(() => {
@@ -27,6 +29,10 @@ function RequireAuth({ children }: { children: ReactNode }) {
     void apiGet<PublicUser>('/auth/me')
       .then((user) => {
         localStorage.setItem('user', JSON.stringify(user));
+        void queryClient.prefetchQuery({
+          queryKey: ['hmi-layout'],
+          queryFn: () => apiGet<HmiLayout>('/hmi/layout'),
+        });
         if (!cancelled) setState('ok');
       })
       .catch(() => {

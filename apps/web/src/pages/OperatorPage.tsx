@@ -8,6 +8,10 @@ import {
   isClusterMetricRegister,
   tagValueForRegister,
 } from '../lib/operator-helpers';
+import {
+  isOperatorScreenReady,
+  operatorNeedsLiveTags,
+} from '@tele-pendant/shared';
 import { getRealtimeSocket } from '../lib/realtime';
 import { HelpTip } from '../lib/tour';
 import { PageSpinner } from '@/components/page-spinner';
@@ -56,6 +60,7 @@ export function OperatorPage() {
   const [safePin, setSafePin] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [photoOk, setPhotoOk] = useState(true);
+  const [liveFallback, setLiveFallback] = useState(false);
 
   const layoutQuery = useQuery({
     queryKey: ['hmi-layout'],
@@ -214,15 +219,45 @@ export function OperatorPage() {
   }
 
   const layout = layoutQuery.data;
+  const needsLive = useMemo(() => operatorNeedsLiveTags(layout), [layout]);
   const imageUrl = layout?.background?.imageUrl ?? '';
   const cssBackground = layout?.background?.cssBackground?.trim() || '';
   const mode = safety?.mode ?? layout?.safety.mode ?? 'unknown';
 
   useEffect(() => {
+    if (!needsLive || tags) {
+      setLiveFallback(false);
+      return;
+    }
+    const id = window.setTimeout(() => setLiveFallback(true), 2500);
+    return () => window.clearTimeout(id);
+  }, [needsLive, tags, layout]);
+
+  useEffect(() => {
     setPhotoOk(true);
   }, [imageUrl]);
 
-  if (layoutQuery.isLoading) {
+  const operatorReady = isOperatorScreenReady({
+    layoutLoaded: Boolean(layout),
+    gridReady: Boolean(grid),
+    needsLive,
+    hasTags: tags !== null,
+    liveFallback,
+  });
+
+  if (layoutQuery.isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>
+          {layoutQuery.error instanceof Error
+            ? layoutQuery.error.message
+            : 'Could not load operator screen'}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (!operatorReady || !layout || !grid) {
     return <PageSpinner label={t('operator')} />;
   }
 
@@ -265,7 +300,7 @@ export function OperatorPage() {
           ) : null}
           <div className="plant-cluster-chrome">
             <h2 className="plant-cluster-title">
-              {layout?.background?.name ?? t('plantGraphic')}
+              {layout.background?.name ?? t('plantGraphic')}
             </h2>
             <div
               className={cn(
@@ -287,7 +322,7 @@ export function OperatorPage() {
             </div>
           </div>
           <div className="plant-overlay-stage">
-            {(layout?.overlays ?? [])
+            {(layout.overlays ?? [])
               .filter((o) => !isClusterMetricRegister(o.register?.name))
               .map((o) => (
                 <div
@@ -366,10 +401,10 @@ export function OperatorPage() {
             <div
               className="matrix-grid"
               style={{
-                gridTemplateColumns: `repeat(${grid?.cols ?? 1}, minmax(0, 1fr))`,
+                gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
               }}
             >
-              {(grid?.cells ?? []).map((cell, idx) =>
+              {grid.cells.map((cell, idx) =>
                 cell ? (
                   <Button
                     key={cell.id}

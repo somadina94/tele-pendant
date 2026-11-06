@@ -26,6 +26,8 @@ export {
   isClusterMetricRegister,
   tagValueForRegister,
 } from './tags';
+export { isOperatorScreenReady, operatorNeedsLiveTags } from './operator-ready';
+export type { OperatorLayoutLike } from './operator-ready';
 export type { TagSnapshot } from './tags';
 export { tourStepsFor } from './tour';
 export type { TourScreen } from './tour';

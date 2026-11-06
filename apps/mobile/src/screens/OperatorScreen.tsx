@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   AppState,
   Image,
   Pressable,
@@ -9,7 +10,12 @@ import {
   View,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { tagValueForRegister, type TagSnapshot } from '@tele-pendant/shared';
+import {
+  isOperatorScreenReady,
+  operatorNeedsLiveTags,
+  tagValueForRegister,
+  type TagSnapshot,
+} from '@tele-pendant/shared';
 import { io, Socket } from 'socket.io-client';
 import { operatorApiError } from '../api-errors';
 import { apiGet, apiPost, getApiBase } from '../api';
@@ -38,6 +44,7 @@ export function OperatorScreen({ token }: { token: string }) {
   const [height, setHeight] = useState<number | null>(null);
   const [tags, setTags] = useState<TagSnapshot | null>(null);
   const [photoOk, setPhotoOk] = useState(true);
+  const [liveFallback, setLiveFallback] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const heldId = useRef<string | null>(null);
   /** Bumps on release so in-flight activate(true) cannot leave a coil latched. */
@@ -229,6 +236,51 @@ export function OperatorScreen({ token }: { token: string }) {
     }
     return { cols: layout.matrix.cols, cells };
   }, [layoutQuery.data]);
+
+  const needsLive = useMemo(
+    () => operatorNeedsLiveTags(layoutQuery.data),
+    [layoutQuery.data],
+  );
+
+  useEffect(() => {
+    if (!needsLive || tags) {
+      setLiveFallback(false);
+      return;
+    }
+    const id = setTimeout(() => setLiveFallback(true), 2500);
+    return () => clearTimeout(id);
+  }, [needsLive, tags, layoutQuery.data]);
+
+  const operatorReady = isOperatorScreenReady({
+    layoutLoaded: Boolean(layoutQuery.data),
+    gridReady: Boolean(grid),
+    needsLive,
+    hasTags: tags !== null,
+    liveFallback,
+  });
+
+  if (layoutQuery.isError) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background p-4">
+        <Text className="text-center text-sm text-destructive">
+          {layoutQuery.error instanceof Error
+            ? layoutQuery.error.message
+            : 'Could not load operator screen'}
+        </Text>
+      </View>
+    );
+  }
+
+  if (!operatorReady) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator size="large" color="#3D9CFD" />
+        <Text className="mt-2 text-sm text-muted-foreground">
+          {t('operator')}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView
