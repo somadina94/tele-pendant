@@ -43,6 +43,7 @@ describe('AuthService', () => {
     displayName: 'Admin' as string | null | undefined,
     locale: 'en',
     faceTemplate: null as string | null,
+    suspended: false,
   };
 
   const usersRepository = {
@@ -148,6 +149,66 @@ describe('AuthService', () => {
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'auth.login', result: 'success' }),
     );
+  });
+
+  it('rejects suspended accounts on login and me', async () => {
+    usersRepository.findOne.mockResolvedValue({ ...user, suspended: true });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    await expect(
+      service.login({ email: user.email, password: 'x' }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    usersRepository.findOne.mockResolvedValue({ ...user, suspended: true });
+    await expect(
+      service.me({ sub: user.id, email: user.email, role: user.role }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('changes password when current password matches', async () => {
+    usersRepository.findOneByOrFail.mockResolvedValue(user);
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('new-hash');
+    await expect(
+      service.changePassword(user.id, 'old', 'new-password', '127.0.0.1'),
+    ).resolves.toEqual({ ok: true });
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auth.password_change' }),
+    );
+  });
+
+  it('rejects change password when current password is wrong', async () => {
+    usersRepository.findOneByOrFail.mockResolvedValue(user);
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+    await expect(
+      service.changePassword(user.id, 'wrong', 'new-password'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('audits password change with null displayName', async () => {
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      displayName: null,
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('new-hash');
+    await service.changePassword(user.id, 'old', 'new-password');
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userDisplayName: null,
+        action: 'auth.password_change',
+      }),
+    );
+  });
+
+  it('rejects face login for suspended accounts after a match', async () => {
+    const image = faceUrl('blob');
+    const enrolled = serializeDescriptor(descriptorFromImageDataUrl(image));
+    usersRepository.find.mockResolvedValue([
+      { ...user, suspended: true, faceTemplate: enrolled },
+    ]);
+    await expect(
+      service.loginWithFace({ imageDataUrl: image }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects unknown user and wrong password', async () => {

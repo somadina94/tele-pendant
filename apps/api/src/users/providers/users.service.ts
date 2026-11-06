@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
@@ -10,6 +12,8 @@ import { Repository } from 'typeorm';
 import { AuditService } from '../../audit/providers/audit.service';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
 import { CreateUserDto } from '../dtos/create-user.dto';
+import { UpdateUserDto } from '../dtos/update-user.dto';
+import { UserRole } from '../enums/user-role.enum';
 import { User } from '../entities/user.entity';
 
 @Injectable()
@@ -34,7 +38,17 @@ export class UsersService {
       locale: user.locale,
       localePinned: user.localePinned === true,
       hasFaceTemplate: Boolean(user.faceTemplate),
+      suspended: user.suspended === true,
     };
+  }
+
+  private assertAdminCanManage(target: User, actor: AuditActor) {
+    if (target.id === actor.userId) {
+      throw new ForbiddenException('Use account settings for your own profile');
+    }
+    if (target.role === UserRole.ADMIN) {
+      throw new ForbiddenException('Admin accounts cannot be changed here');
+    }
   }
 
   async list() {
@@ -69,5 +83,57 @@ export class UsersService {
       result: 'success',
     });
     return this.toPublicUser(saved);
+  }
+
+  async update(id: string, dto: UpdateUserDto, actor: AuditActor) {
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    this.assertAdminCanManage(user, actor);
+
+    if (dto.email !== undefined) {
+      const email = dto.email.trim().toLowerCase();
+      const taken = await this.usersRepository.findOne({ where: { email } });
+      if (taken && taken.id !== user.id) {
+        throw new ConflictException('Email already registered');
+      }
+      user.email = email;
+    }
+    if (dto.displayName !== undefined) {
+      const displayName = dto.displayName.trim();
+      if (!displayName) {
+        throw new BadRequestException('Display name is required');
+      }
+      user.displayName = displayName;
+    }
+    if (dto.role !== undefined) user.role = dto.role;
+    if (dto.suspended !== undefined) user.suspended = dto.suspended;
+    if (dto.password !== undefined) {
+      user.passwordHash = await bcrypt.hash(dto.password, 12);
+    }
+
+    const saved = await this.usersRepository.save(user);
+    await this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'users.update',
+      resource: saved.email,
+      details: `role=${saved.role};suspended=${saved.suspended}`,
+      result: 'success',
+    });
+    return this.toPublicUser(saved);
+  }
+
+  async remove(id: string, actor: AuditActor) {
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    this.assertAdminCanManage(user, actor);
+    await this.usersRepository.remove(user);
+    await this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'users.delete',
+      resource: user.email,
+      details: user.displayName ?? undefined,
+      result: 'success',
+    });
+    return { ok: true };
   }
 }

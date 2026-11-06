@@ -100,6 +100,7 @@ export class AuthService implements OnModuleInit {
       locale: user.locale,
       localePinned: user.localePinned === true,
       hasFaceTemplate: Boolean(user.faceTemplate),
+      suspended: user.suspended === true,
     };
   }
 
@@ -122,7 +123,36 @@ export class AuthService implements OnModuleInit {
     if (!ok) {
       throw new UnauthorizedException('Invalid credentials');
     }
+    if (user.suspended) {
+      throw new UnauthorizedException(
+        'Account suspended — contact an administrator',
+      );
+    }
     return user;
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    ip?: string,
+  ) {
+    const user = await this.usersRepository.findOneByOrFail({ id: userId });
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.usersRepository.save(user);
+    await this.auditService.write({
+      userId: user.id,
+      userEmail: user.email,
+      userDisplayName: user.displayName ?? null,
+      action: 'auth.password_change',
+      ip,
+      result: 'success',
+    });
+    return { ok: true };
   }
 
   async login(dto: LoginDto, ip?: string) {
@@ -159,6 +189,11 @@ export class AuthService implements OnModuleInit {
     });
     if (!user) {
       throw new UnauthorizedException('User not found');
+    }
+    if (user.suspended) {
+      throw new UnauthorizedException(
+        'Account suspended — contact an administrator',
+      );
     }
     return this.toPublicUser(user);
   }
@@ -226,6 +261,11 @@ export class AuthService implements OnModuleInit {
       if (!best || best.score < FACE_MATCH_THRESHOLD) {
         throw new UnauthorizedException(
           'Face match failed — use password login',
+        );
+      }
+      if (best.user.suspended) {
+        throw new UnauthorizedException(
+          'Account suspended — contact an administrator',
         );
       }
 

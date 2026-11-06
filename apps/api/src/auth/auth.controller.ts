@@ -19,6 +19,7 @@ import { SkipDataWrap } from '../common/swagger/skip-data-wrap.decorator';
 import { FaceImageDto, FaceLoginDto } from './dtos/face-image.dto';
 import { LoginDto } from './dtos/login.dto';
 import { OAuthTokenDto } from './dtos/oauth-token.dto';
+import { ChangePasswordDto } from './dtos/change-password.dto';
 import { UpdateLocaleDto } from './dtos/update-locale.dto';
 import { AuthService, JwtPayload } from './providers/auth.service';
 import { JwtAuthGuard } from './providers/jwt-auth.guard';
@@ -109,6 +110,24 @@ export class AuthController {
     @Req() req: Request & { user: JwtPayload },
   ) {
     return this.authService.updateLocale(req.user.sub, body.locale);
+  }
+
+  @Patch('password')
+  @UseGuards(JwtAuthGuard)
+  @ApiAuth()
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Change password (signed-in user)' })
+  changePassword(
+    @Body() body: ChangePasswordDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.authService.changePassword(
+      req.user.sub,
+      body.currentPassword,
+      body.newPassword,
+      req.ip,
+    );
   }
 
   /**

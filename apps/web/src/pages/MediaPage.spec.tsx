@@ -4,11 +4,36 @@ import { MediaPage } from './MediaPage';
 import { renderWithProviders } from '../test/render';
 import * as api from '../lib/api';
 
+const navigateMock = vi.hoisted(() => vi.fn());
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
 const zxingState = vi.hoisted(() => ({ mode: 'TP-CRANE-DEMO-01' }));
+const cameraOverride = vi.hoisted(() => ({
+  impl: null as
+    | null
+    | (() => ReturnType<
+        typeof import('@/lib/use-device-camera').useDeviceCamera
+      >),
+}));
 const toastMocks = vi.hoisted(() => ({
   ok: vi.fn(),
   err: vi.fn(),
 }));
+
+vi.mock('@/lib/use-device-camera', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/use-device-camera')>();
+  return {
+    useDeviceCamera: (opts?: Parameters<typeof actual.useDeviceCamera>[0]) =>
+      cameraOverride.impl?.() ?? actual.useDeviceCamera(opts),
+  };
+});
 
 vi.mock('@/lib/toast', () => ({
   toastOk: (...args: unknown[]) => toastMocks.ok(...args),
@@ -27,6 +52,10 @@ vi.mock('@zxing/browser', () => ({
 
 describe('MediaPage', () => {
   beforeEach(() => {
+    cameraOverride.impl = null;
+    navigateMock.mockClear();
+    zxingState.mode = 'TP-CRANE-DEMO-01';
+    delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector;
     toastMocks.ok.mockClear();
     toastMocks.err.mockClear();
     Object.defineProperty(navigator, 'mediaDevices', {
@@ -52,6 +81,44 @@ describe('MediaPage', () => {
       label: 'Bay',
       routeHint: null,
     });
+  });
+
+  it('navigates after resolve when a route hint is returned', async () => {
+    vi.spyOn(api, 'apiPost').mockResolvedValue({
+      code: 'TP-OPS',
+      label: 'Ops',
+      routeHint: '/ops',
+    });
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/ops'));
+  });
+
+  it('rejects whitespace-only scan payloads', async () => {
+    class SpaceDetector {
+      detect = vi.fn().mockResolvedValue([{ rawValue: '   ' }]);
+    }
+    (
+      window as unknown as { BarcodeDetector: typeof SpaceDetector }
+    ).BarcodeDetector = SpaceDetector;
+    const post = vi.spyOn(api, 'apiPost');
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    await waitFor(() => expect(document.querySelector('video')).toBeTruthy());
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
+    );
+    await waitFor(() => {
+      const alerts = screen.getAllByRole('alert');
+      expect(
+        alerts.some((el) => /Enter a code/i.test(el.textContent ?? '')),
+      ).toBe(true);
+    });
+    expect(post).not.toHaveBeenCalledWith(
+      '/media/codes/resolve',
+      expect.anything(),
+    );
   });
 
   it('resolves codes and scans barcodes', async () => {
@@ -215,10 +282,12 @@ describe('MediaPage', () => {
 
     const post = vi
       .spyOn(api, 'apiPost')
+      .mockResolvedValueOnce({ ok: true, message: 'Hoist Up moved' })
       .mockResolvedValueOnce({ ok: true, label: 'Hoist Up' })
       .mockResolvedValueOnce({ ok: false, reason: 'command_not_allowlisted' })
       .mockResolvedValueOnce({ ok: false })
       .mockRejectedValueOnce(new Error('voice failed'))
+      .mockRejectedValueOnce('nope')
       .mockResolvedValueOnce({ ok: true, label: 'Trolley L' })
       .mockRejectedValueOnce(new Error('trolley failed'))
       .mockResolvedValueOnce({ ok: false });
@@ -231,6 +300,15 @@ describe('MediaPage', () => {
     });
     expect(await screen.findByText('Nothing heard')).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    instance()!.onresult?.({
+      results: [[{ transcript: 'go up' }]],
+    });
+    await waitFor(() => expect(toastMocks.ok).toHaveBeenCalledWith('up'));
+    expect(await screen.findByText('Hoist Up moved')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
     instance()!.onresult?.({
       results: [
         {
@@ -241,8 +319,9 @@ describe('MediaPage', () => {
       ],
     });
     expect(await screen.findByText('Heard: hoist')).toBeInTheDocument();
-    expect(post).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledTimes(1);
 
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
     instance()!.onresult?.({
       results: {
         length: 2,
@@ -271,7 +350,7 @@ describe('MediaPage', () => {
       screen.getByText('Heard: up. Executed: Hoist Up'),
     ).toBeInTheDocument();
     expect(screen.queryByText('Heard: again')).not.toBeInTheDocument();
-    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledTimes(2);
     expect(post).toHaveBeenCalledWith('/media/voice', { transcript: 'up' });
 
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
@@ -297,6 +376,12 @@ describe('MediaPage', () => {
     expect(
       await screen.findByText(/Not executed: voice failed/),
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    instance()!.onresult?.({
+      results: [[{ transcript: 'slow up' }]],
+    });
+    await waitFor(() => expect(toastMocks.err).toHaveBeenCalledWith('failed'));
 
     fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
     instance()!.onresult?.({
@@ -420,6 +505,44 @@ describe('MediaPage', () => {
     expect(
       await screen.findByRole('link', { name: /Add or edit codes in Config/i }),
     ).toHaveAttribute('href', '/admin?section=codes');
+  });
+
+  it('reports camera warmup before zxing', async () => {
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    await waitFor(() => expect(document.querySelector('video')).toBeTruthy());
+    const video = document.querySelector('video') as HTMLVideoElement;
+    Object.defineProperty(video, 'readyState', {
+      configurable: true,
+      get: () => 0,
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(/Camera still starting/i).length,
+      ).toBeGreaterThan(0),
+    );
+  });
+
+  it('reports missing video when the camera element is unavailable', async () => {
+    cameraOverride.impl = () => ({
+      videoRef: { current: null },
+      camError: 'Camera permission denied',
+      camRepromptAllowed: false,
+      camShowSettingsHint: false,
+      camPermissionDenied: true,
+      retryCameraAccess: vi.fn(),
+    });
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText(/No camera video/i).length).toBeGreaterThan(0),
+    );
   });
 
   it('decodes with zxing when BarcodeDetector is missing', async () => {

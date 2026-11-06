@@ -33,6 +33,9 @@ export class User {
   @Column({ name: 'face_template', type: 'text', nullable: true })
   faceTemplate?: string | null;
 
+  @Column({ type: 'boolean', default: false })
+  suspended!: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

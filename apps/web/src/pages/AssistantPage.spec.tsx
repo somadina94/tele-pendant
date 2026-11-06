@@ -190,6 +190,40 @@ describe('AssistantPage', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('defaults docs settings permission when no session role is stored', async () => {
+    localStorage.removeItem('user');
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      docsRoot: 'docs',
+      docsLink: '',
+      indexed: 3,
+      cursorConfigured: false,
+    });
+    renderWithProviders(<AssistantPage />);
+    expect(
+      await screen.findByText(
+        /Indexed documents: 3\. Docs settings are admin-only\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows indexed count without admin docs settings for operators', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      docsRoot: 'docs',
+      docsLink: '',
+      indexed: 6,
+      cursorConfigured: false,
+    });
+    renderWithProviders(<AssistantPage />, { role: 'operator' });
+    expect(
+      await screen.findByText(
+        /Indexed documents: 6\. Docs settings are admin-only\./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Docs settings/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it('ignores a second ask while busy', async () => {
     vi.spyOn(api, 'apiGet').mockResolvedValue({
       docsRoot: 'docs',

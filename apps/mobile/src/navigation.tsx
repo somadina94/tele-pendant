@@ -10,12 +10,20 @@ import {
   Camera,
   ClipboardList,
   Gauge,
+  KeyRound,
   LogOut,
   Menu,
   ScanFace,
   Settings2,
   Siren,
 } from 'lucide-react-native';
+import {
+  canAccessAppRoute,
+  canEditAssistantSettings,
+  canShelveAlarms,
+  type UserRole,
+} from '@tele-pendant/shared';
+import { AccessDeniedScreen } from './access-denied';
 import { useLocale } from './locale';
 import { HelpTip, TourBar } from './tour';
 import { ThemeToggle, useTheme } from './theme';
@@ -27,6 +35,7 @@ import { AssistantScreen } from './screens/AssistantScreen';
 import { FaceScreen } from './screens/FaceScreen';
 import { ConfigScreen } from './screens/ConfigScreen';
 import { AuditScreen } from './screens/AuditScreen';
+import { ChangePasswordScreen } from './screens/ChangePasswordScreen';
 import type { ScreenName } from './types';
 
 export type RootDrawerParamList = {
@@ -34,6 +43,7 @@ export type RootDrawerParamList = {
   face: undefined;
   config: undefined;
   audit: undefined;
+  changePassword: undefined;
 };
 
 export type MainTabParamList = {
@@ -64,9 +74,11 @@ function iconColor(active: boolean, dark: boolean) {
 function DrawerItems({
   props,
   onLogout,
+  userRole,
 }: {
   props: DrawerContentComponentProps;
   onLogout: () => void;
+  userRole: UserRole | null;
 }) {
   const { t } = useLocale();
   const { theme } = useTheme();
@@ -78,7 +90,7 @@ function DrawerItems({
       ? tabState.routes[tabState.index ?? 0]?.name
       : 'operator';
 
-  const items: Array<{ id: ScreenName; target: 'tab' | 'drawer' }> = [
+  const allItems: Array<{ id: ScreenName; target: 'tab' | 'drawer' }> = [
     { id: 'operator', target: 'tab' },
     { id: 'media', target: 'tab' },
     { id: 'assistant', target: 'tab' },
@@ -87,6 +99,12 @@ function DrawerItems({
     { id: 'config', target: 'drawer' },
     { id: 'audit', target: 'drawer' },
   ];
+  const items = allItems.filter((item) => {
+    if (item.id === 'config' || item.id === 'audit') {
+      return userRole !== null && canAccessAppRoute(userRole, item.id);
+    }
+    return true;
+  });
 
   return (
     <DrawerContentScrollView
@@ -144,6 +162,17 @@ function DrawerItems({
       <View className="mt-auto border-t border-border px-2 pt-3">
         <Pressable
           className="flex-row items-center gap-3 rounded-lg px-3 py-3"
+          onPress={() =>
+            (props.navigation.navigate as (name: string) => void)(
+              'changePassword',
+            )
+          }
+        >
+          <KeyRound size={18} color={iconColor(false, dark)} />
+          <Text className="text-sm text-muted-foreground">Change password</Text>
+        </Pressable>
+        <Pressable
+          className="flex-row items-center gap-3 rounded-lg px-3 py-3"
           onPress={onLogout}
         >
           <LogOut size={18} color={iconColor(false, dark)} />
@@ -154,7 +183,13 @@ function DrawerItems({
   );
 }
 
-function MainTabs({ token }: { token: string }) {
+function MainTabs({
+  token,
+  userRole,
+}: {
+  token: string;
+  userRole: UserRole | null;
+}) {
   const { t } = useLocale();
   const { theme } = useTheme();
   const dark = theme === 'dark';
@@ -179,12 +214,14 @@ function MainTabs({ token }: { token: string }) {
       <Tab.Screen name="operator">
         {() => <OperatorScreen token={token} />}
       </Tab.Screen>
-      <Tab.Screen name="ops">{() => <OpsScreen token={token} />}</Tab.Screen>
+      <Tab.Screen name="ops">
+        {() => <OpsScreen token={token} userRole={userRole} />}
+      </Tab.Screen>
       <Tab.Screen name="media">
         {() => <MediaScreen token={token} />}
       </Tab.Screen>
       <Tab.Screen name="assistant">
-        {() => <AssistantScreen token={token} />}
+        {() => <AssistantScreen token={token} userRole={userRole} />}
       </Tab.Screen>
     </Tab.Navigator>
   );
@@ -211,10 +248,12 @@ function tourScreenFor(
 
 export function AppShell({
   token,
+  userRole,
   onLogout,
   onToken,
 }: {
   token: string;
+  userRole: UserRole | null;
   onLogout: () => void;
   onToken: (token: string) => void;
 }) {
@@ -265,20 +304,43 @@ export function AppShell({
         };
       }}
       drawerContent={(props) => (
-        <DrawerItems props={props} onLogout={onLogout} />
+        <DrawerItems props={props} onLogout={onLogout} userRole={userRole} />
       )}
     >
       <Drawer.Screen name="MainTabs" options={{ title: t('operator') }}>
-        {() => <MainTabs token={token} />}
+        {() => <MainTabs token={token} userRole={userRole} />}
       </Drawer.Screen>
       <Drawer.Screen name="face" options={{ title: t('face') }}>
         {() => <FaceScreen token={token} onToken={onToken} />}
       </Drawer.Screen>
       <Drawer.Screen name="config" options={{ title: t('config') }}>
-        {() => <ConfigScreen token={token} />}
+        {() =>
+          userRole && canAccessAppRoute(userRole, 'config') ? (
+            <ConfigScreen token={token} />
+          ) : (
+            <AccessDeniedScreen detail="Config is for supervisors and administrators." />
+          )
+        }
       </Drawer.Screen>
       <Drawer.Screen name="audit" options={{ title: t('audit') }}>
-        {() => <AuditScreen token={token} />}
+        {() =>
+          userRole && canAccessAppRoute(userRole, 'audit') ? (
+            <AuditScreen token={token} />
+          ) : (
+            <AccessDeniedScreen detail="The audit log is limited to supervisors and administrators." />
+          )
+        }
+      </Drawer.Screen>
+      <Drawer.Screen
+        name="changePassword"
+        options={{ title: 'Change password' }}
+      >
+        {({ navigation }) => (
+          <ChangePasswordScreen
+            token={token}
+            onClose={() => navigation.navigate('MainTabs')}
+          />
+        )}
       </Drawer.Screen>
     </Drawer.Navigator>
   );

@@ -29,15 +29,32 @@ loadEnvFile(path.join(__dirname, '.env'), { override: true });
 const appJson = require('./app.json');
 
 function resolveApiUrl() {
+  // Root .env: phone on same Wi‑Fi as Docker (overrides mobile .env production URL).
+  const mobileDev = process.env.MOBILE_API_URL?.trim();
+  if (mobileDev) return mobileDev.replace(/\/$/, '');
+
   const explicit = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (explicit) return explicit.replace(/\/$/, '');
+
   const appUrl = process.env.APP_URL?.trim().replace(/\/$/, '');
-  if (appUrl) return `${appUrl}/api/v1`;
+  if (
+    appUrl &&
+    /localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\./i.test(
+      appUrl,
+    )
+  ) {
+    return `${appUrl.replace(/\/api\/v1$/, '')}/api/v1`;
+  }
+  if (appUrl && !appUrl.includes('tele-pendant.jahbyte.com')) {
+    return `${appUrl}/api/v1`;
+  }
+
   return 'https://api.tele-pendant.jahbyte.com/api/v1';
 }
 
 const apiUrl = resolveApiUrl();
 process.env.EXPO_PUBLIC_API_URL = apiUrl;
+console.log(`[tele-pendant] Expo API base: ${apiUrl}`);
 
 module.exports = {
   expo: {

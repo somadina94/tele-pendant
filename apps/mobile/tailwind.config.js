@@ -25,12 +25,12 @@ module.exports = {
         success: 'var(--success)',
         input: 'var(--input)',
         cell: {
-          DEFAULT: 'var(--cell)',
-          border: 'var(--cell-border)',
+          DEFAULT: '#1c3a5c',
+          border: '#2f6aa8',
         },
         estop: {
-          DEFAULT: 'var(--estop)',
-          border: 'var(--estop-border)',
+          DEFAULT: '#e10600',
+          border: '#e10600',
         },
       },
     },

@@ -18,6 +18,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from './alert';
 import { Badge } from './badge';
 import { Button } from './button';
+import { Calendar } from './calendar';
 import {
   Card,
   CardContent,
@@ -263,6 +264,22 @@ describe('ui primitives', () => {
     expect(await screen.findByText('Sheet')).toBeInTheDocument();
     expect(screen.getByText('Item')).toBeInTheDocument();
     expect(screen.getByText('Cap')).toBeInTheDocument();
+  });
+
+  it('renders range and single calendar modes', () => {
+    render(
+      <div>
+        <Calendar mode="single" selected={new Date(2026, 0, 15)} />
+        <Calendar
+          mode="range"
+          selected={{
+            from: new Date(2026, 0, 10),
+            to: new Date(2026, 0, 12),
+          }}
+        />
+      </div>,
+    );
+    expect(screen.getAllByRole('grid').length).toBeGreaterThan(0);
   });
 
   it('renders pagination controls', () => {

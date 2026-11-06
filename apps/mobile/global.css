@@ -17,8 +17,8 @@
   --input: #ffffff;
   --cell: #dbeafe;
   --cell-border: #93c5fd;
-  --estop: #fecaca;
-  --estop-border: #f87171;
+  --estop: #e10600;
+  --estop-border: #e10600;
 }
 
 .dark:root,
@@ -37,6 +37,6 @@
   --input: #161d27;
   --cell: #1c3a5c;
   --cell-border: #2f6aa8;
-  --estop: #5a1d1d;
-  --estop-border: #cc4444;
+  --estop: #e10600;
+  --estop-border: #e10600;
 }

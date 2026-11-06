@@ -223,6 +223,20 @@ describe('api helpers', () => {
     createElement.mockRestore();
   });
 
+  it('surfaces download failures', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => 'export failed',
+      }),
+    );
+    await expect(apiDownload('/audit/export', 'audit.csv')).rejects.toThrow(
+      'export failed',
+    );
+  });
+
   it('deletes and surfaces errors', async () => {
     const fetchMock = vi
       .fn()

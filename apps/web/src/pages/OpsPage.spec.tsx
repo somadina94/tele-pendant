@@ -114,6 +114,64 @@ describe('OpsPage', () => {
     expect(screen.getByText(/n\/a/)).toBeInTheDocument();
   });
 
+  it('defaults shelve permission when no session role is stored', async () => {
+    localStorage.removeItem('user');
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/alarms') {
+        return [
+          {
+            id: 'a1',
+            state: 'active',
+            value: 1,
+            definition: { name: 'E-Stop', severity: 'critical' },
+            createdAt: new Date().toISOString(),
+          },
+        ];
+      }
+      if (path === '/trends') return [];
+      return {
+        plc: { connected: true, label: 'sim', lastError: null },
+        safety: { mode: 'normal', watchdogOk: true },
+        uptimeSec: 1,
+      };
+    });
+    renderWithProviders(<OpsPage />);
+    await screen.findByText(/E-Stop/);
+    expect(
+      screen.queryByRole('button', { name: 'Shelve' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('hides shelve controls for operators', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/alarms') {
+        return [
+          {
+            id: 'a1',
+            state: 'active',
+            value: 1,
+            definition: { name: 'E-Stop', severity: 'critical' },
+            createdAt: new Date().toISOString(),
+          },
+        ];
+      }
+      if (path === '/trends') return [];
+      return {
+        plc: { connected: true, label: 'sim', lastError: null },
+        safety: { mode: 'normal', watchdogOk: true },
+        uptimeSec: 1,
+      };
+    });
+    renderWithProviders(<OpsPage />, { role: 'operator' });
+    await screen.findByText(/E-Stop/);
+    expect(
+      screen.queryByRole('button', { name: 'Shelve' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Unshelve' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('toasts when ack or shelve fails', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
       if (path === '/alarms') {

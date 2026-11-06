@@ -1,25 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AppState,
   Image,
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   View,
-  type DimensionValue,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import {
-  formatOverlay,
-  isClusterMetricRegister,
-  tagValueForRegister,
-  type TagSnapshot,
-} from '@tele-pendant/shared';
+import { tagValueForRegister, type TagSnapshot } from '@tele-pendant/shared';
 import { io, Socket } from 'socket.io-client';
+import { operatorApiError } from '../api-errors';
 import { apiGet, apiPost, getApiBase } from '../api';
 import type { Cell, Layout } from '../types';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import { Banner, ErrorText, Field, Hint } from '../ui';
+import { ESTOP, operatorCell } from '../hmi-styles';
+import { useTheme } from '../theme';
+import { Banner, Card, showErrorAlert } from '../ui';
 
 function statusTone(mode: string): 'ok' | 'warn' | 'danger' {
   if (mode === 'safe_state' || mode === 'estop' || mode === 'e_stop') {
@@ -31,8 +30,9 @@ function statusTone(mode: string): 'ok' | 'warn' | 'danger' {
 
 export function OperatorScreen({ token }: { token: string }) {
   const { t, terror } = useLocale();
+  const { theme } = useTheme();
+  const cellPalette = operatorCell(theme === 'dark');
   const [pin, setPin] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [holdingId, setHoldingId] = useState<string | null>(null);
   const [safetyMode, setSafetyMode] = useState('unknown');
   const [height, setHeight] = useState<number | null>(null);
@@ -40,7 +40,11 @@ export function OperatorScreen({ token }: { token: string }) {
   const [photoOk, setPhotoOk] = useState(true);
   const socketRef = useRef<Socket | null>(null);
   const heldId = useRef<string | null>(null);
-  const latched = useRef(false);
+  /** Bumps on release so in-flight activate(true) cannot leave a coil latched. */
+  const holdGen = useRef(0);
+  const activatingId = useRef<string | null>(null);
+  /** Release arrived while activate(true) was still in flight — finish after pressCell. */
+  const releaseAfterActivate = useRef<string | null>(null);
 
   useEffect(() => {
     let socket: Socket | null = null;
@@ -74,91 +78,131 @@ export function OperatorScreen({ token }: { token: string }) {
     queryFn: () => apiGet<Layout>('/hmi/layout', token),
   });
 
-  const pulseDeadman = useCallback(() => {
+  const pulseDeadman = useCallback(async () => {
     socketRef.current?.emit('deadman.pulse');
-    return apiPost('/safety/deadman/pulse', undefined, token).catch(
+    await apiPost('/safety/deadman/pulse', undefined, token);
+  }, [token]);
+
+  const releaseDeadman = useCallback(() => {
+    socketRef.current?.emit('deadman.release');
+    void apiPost('/safety/deadman/release', undefined, token).catch(
       () => undefined,
     );
   }, [token]);
 
-  const dropDeadman = useCallback(() => {
-    socketRef.current?.emit('deadman.release');
-    return apiPost('/safety/deadman/release', undefined, token).catch(
-      () => undefined,
-    );
-  }, [token]);
+  const dropMotionCoil = useCallback(
+    async (cellId: string) => {
+      try {
+        await apiPost(`/hmi/cells/${cellId}/activate`, { value: false }, token);
+      } catch {
+        // Best-effort coil drop.
+      }
+    },
+    [token],
+  );
+
+  const finishMotionRelease = useCallback(
+    async (cellId: string) => {
+      releaseAfterActivate.current = null;
+      setHoldingId((current) => (current === cellId ? null : current));
+      releaseDeadman();
+      await dropMotionCoil(cellId);
+    },
+    [dropMotionCoil, releaseDeadman],
+  );
 
   useEffect(() => {
     if (!holdingId) return;
     const id = setInterval(() => {
-      void pulseDeadman();
+      socketRef.current?.emit('deadman.pulse');
+      void apiPost('/safety/deadman/pulse', undefined, token).catch(
+        () => undefined,
+      );
     }, 400);
     return () => clearInterval(id);
-  }, [holdingId, pulseDeadman]);
+  }, [holdingId, token]);
 
   const pressCell = async (cell: Cell) => {
-    setError(null);
-    heldId.current = cell.id;
-    if (cell.isMotion) setHoldingId(cell.id);
+    const pressGen = holdGen.current;
+    if (cell.isMotion) {
+      heldId.current = cell.id;
+      setHoldingId(cell.id);
+      releaseAfterActivate.current = null;
+    }
+    activatingId.current = cell.id;
     try {
       if (cell.isMotion) {
         await pulseDeadman();
-        if (heldId.current !== cell.id) {
-          await dropDeadman();
-          return;
-        }
       }
-      await apiPost(
-        `/hmi/cells/${cell.id}/activate`,
-        {
-          value: true,
-          safeActionPin: cell.requiresSafeAction ? pin || undefined : undefined,
-        },
-        token,
-      );
-      if (heldId.current !== cell.id) {
-        if (cell.isMotion) {
-          await apiPost(
-            `/hmi/cells/${cell.id}/activate`,
-            { value: false },
-            token,
-          ).catch(() => undefined);
-          await dropDeadman();
-        }
-        return;
-      }
-      if (cell.isMotion) latched.current = true;
+      await apiPost(`/hmi/cells/${cell.id}/activate`, { value: true }, token);
     } catch (err) {
-      setError(err instanceof Error ? terror(err.message) : 'Activate failed');
+      showErrorAlert(
+        operatorApiError(
+          err,
+          cell.style === 'estop' ? 'stop' : 'reset',
+          terror,
+        ),
+      );
       if (heldId.current === cell.id) {
         heldId.current = null;
-        latched.current = false;
         setHoldingId(null);
-        if (cell.isMotion) await dropDeadman();
+        if (cell.isMotion) releaseDeadman();
       }
+      releaseAfterActivate.current = null;
+      return;
+    } finally {
+      if (activatingId.current === cell.id) {
+        activatingId.current = null;
+      }
+    }
+    if (cell.isMotion && releaseAfterActivate.current === cell.id) {
+      await finishMotionRelease(cell.id);
+      return;
+    }
+    if (
+      cell.isMotion &&
+      (heldId.current !== cell.id || holdGen.current !== pressGen)
+    ) {
+      await dropMotionCoil(cell.id);
+      if (heldId.current === null) releaseDeadman();
     }
   };
 
   const releaseCell = async (cell: Cell) => {
     if (!cell.isMotion) return;
     const mine = heldId.current === cell.id;
-    heldId.current = null;
-    setHoldingId(null);
+    if (heldId.current === cell.id) heldId.current = null;
     if (!mine) return;
-    const wasLatched = latched.current;
-    latched.current = false;
-    try {
-      if (wasLatched) {
-        await apiPost(
-          `/hmi/cells/${cell.id}/activate`,
-          { value: false },
-          token,
-        );
+    holdGen.current += 1;
+    if (activatingId.current === cell.id) {
+      releaseAfterActivate.current = cell.id;
+      return;
+    }
+    await finishMotionRelease(cell.id);
+  };
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') {
+        const id = heldId.current;
+        heldId.current = null;
+        holdGen.current += 1;
+        setHoldingId(null);
+        releaseDeadman();
+        if (!id) return;
+        const cell = layoutQuery.data?.cells.find((row) => row.id === id);
+        if (!cell?.isMotion) return;
+        void apiPost(`/hmi/cells/${id}/activate`, { value: false }, token);
       }
+    });
+    return () => sub.remove();
+  }, [layoutQuery.data?.cells, releaseDeadman, token]);
+
+  const resetEStop = async () => {
+    try {
+      await apiPost('/safety/reset', { pin }, token);
     } catch (err) {
-      setError(err instanceof Error ? terror(err.message) : 'Release failed');
-    } finally {
-      await dropDeadman();
+      showErrorAlert(operatorApiError(err, 'reset', terror));
     }
   };
 
@@ -189,23 +233,19 @@ export function OperatorScreen({ token }: { token: string }) {
   return (
     <ScrollView
       className="flex-1 bg-background"
-      contentContainerClassName="p-4 pb-12"
+      contentContainerClassName="gap-1.5 p-2 pb-6"
       scrollEnabled={!holdingId}
       keyboardShouldPersistTaps="handled"
     >
       <HelpTip id="tour.operator.banner">
         <Banner>
-          {t('safety')}: {safetyMode} · H {height ?? '—'} mm
+          {t('safety')}: {safetyMode}
           {holdingId ? ` · ${t('deadmanHold')}` : ''}
         </Banner>
       </HelpTip>
-      {error ? <ErrorText>{error}</ErrorText> : null}
-      <HelpTip id="tour.operator.safePin">
-        <Field label={t('safePin')} value={pin} onChangeText={setPin} secure />
-      </HelpTip>
       <HelpTip id="tour.operator.graphic">
         <View
-          className="relative mb-3 min-h-[220px] overflow-hidden rounded-2xl border border-white/10"
+          className="relative h-[152px] overflow-hidden rounded-xl border border-white/10"
           style={{ backgroundColor: solidBackground || '#07090c' }}
         >
           {imageUrl && photoOk ? (
@@ -250,39 +290,7 @@ export function OperatorScreen({ token }: { token: string }) {
               </Text>
             </View>
           </View>
-          <View className="relative z-10 min-h-[96px] flex-1 overflow-hidden">
-            {(layoutQuery.data?.overlays ?? [])
-              .filter(
-                (overlay) => !isClusterMetricRegister(overlay.register?.name),
-              )
-              .map((overlay) => (
-                <View
-                  key={overlay.id}
-                  className="absolute min-w-[72px] items-center rounded-lg border border-white/20 bg-black/70 px-2.5 py-1.5"
-                  style={{
-                    left: `${overlay.xPct}%` as DimensionValue,
-                    top: `${overlay.yPct}%` as DimensionValue,
-                    transform: [{ translateX: -36 }, { translateY: -18 }],
-                  }}
-                >
-                  <Text
-                    className="text-[9px] font-medium uppercase text-white/55"
-                    style={{ letterSpacing: 1.8 }}
-                  >
-                    {overlay.label}
-                  </Text>
-                  <Text className="font-mono text-sm font-semibold text-white">
-                    {String(
-                      formatOverlay(
-                        overlay.format,
-                        tagValueForRegister(tags, overlay.register?.name),
-                      ),
-                    )}
-                  </Text>
-                </View>
-              ))}
-          </View>
-          <View className="z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-2.5 pt-2">
+          <View className="absolute inset-x-0 bottom-0 z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1">
             {(
               [
                 {
@@ -296,7 +304,7 @@ export function OperatorScreen({ token }: { token: string }) {
                   unit: 'kg',
                 },
                 {
-                  label: 'Drive',
+                  label: 'Motor',
                   value: tags?.motorRunning ? 'RUN' : 'IDLE',
                   unit: 'status',
                 },
@@ -314,7 +322,7 @@ export function OperatorScreen({ token }: { token: string }) {
                 >
                   {metric.label}
                 </Text>
-                <Text className="font-mono text-xl font-semibold text-white">
+                <Text className="font-mono text-base font-semibold text-white">
                   {metric.value}
                 </Text>
                 <Text
@@ -328,69 +336,112 @@ export function OperatorScreen({ token }: { token: string }) {
           </View>
         </View>
       </HelpTip>
-      <HelpTip id="tour.operator.matrix">
-        <View className="flex-row flex-wrap gap-2">
-          {grid &&
-            grid.cells.map((cell, idx) => {
-              const cellWidth: DimensionValue =
-                grid.cols > 0
-                  ? (`${Math.floor(100 / grid.cols) - 2}%` as DimensionValue)
-                  : '31%';
-              return cell ? (
-                <Pressable
-                  key={cell.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={cell.label}
-                  className={`min-h-[88px] items-center justify-center rounded-[10px] border p-2 ${
-                    cell.style === 'estop'
-                      ? 'border-estop-border bg-estop'
-                      : 'border-cell-border bg-cell'
-                  } ${holdingId === cell.id ? 'border-2 border-success' : ''}`}
-                  style={{ width: cellWidth }}
-                  onPressIn={() => {
-                    void pressCell(cell);
-                  }}
-                  onPressOut={() => {
-                    void releaseCell(cell);
-                  }}
-                >
-                  <Text className="text-center font-bold text-foreground">
-                    {cell.label}
-                  </Text>
-                  {cell.feedbackRegister || cell.statusRegister ? (
-                    <Text className="mt-1 text-center text-[10px] text-muted-foreground">
-                      {cell.feedbackRegister
-                        ? `F ${String(
-                            tagValueForRegister(
-                              tags,
-                              cell.feedbackRegister.name,
-                            ),
-                          )}`
-                        : ''}
-                      {cell.feedbackRegister && cell.statusRegister
-                        ? ' · '
-                        : ''}
-                      {cell.statusRegister
-                        ? `S ${String(
-                            tagValueForRegister(tags, cell.statusRegister.name),
-                          )}`
-                        : ''}
+      <Card compact>
+        <HelpTip id="tour.operator.safePin">
+          <View className="gap-1">
+            <Text className="text-xs text-muted-foreground">
+              {t('safePin')}
+            </Text>
+            <View className="flex-row items-center gap-1">
+              <TextInput
+                className="h-12 min-h-12 flex-1 rounded-md border border-border bg-input px-3 text-sm text-foreground"
+                value={pin}
+                onChangeText={setPin}
+                secureTextEntry
+                autoCapitalize="none"
+                placeholder={t('safePin')}
+                placeholderTextColor="#5C6B7A"
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('resetEstop')}
+                className="h-12 min-h-12 shrink-0 items-center justify-center rounded-md border border-border px-2"
+                onPress={() => void resetEStop()}
+              >
+                <Text className="text-xs font-semibold text-foreground">
+                  {t('resetEstop')}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </HelpTip>
+        <HelpTip id="tour.operator.matrix">
+          <View className="mt-1 gap-[22px]">
+            {grid &&
+              grid.cells.map((cell) => {
+                if (!cell) return null;
+                const isEstop = cell.style === 'estop';
+                const holding = holdingId === cell.id;
+                const labelColor = isEstop
+                  ? ESTOP.foreground
+                  : cellPalette.foreground;
+                const metaColor = isEstop
+                  ? 'rgba(255,255,255,0.85)'
+                  : cellPalette.meta;
+                return (
+                  <Pressable
+                    key={cell.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={cell.label}
+                    className="min-h-16 w-full flex-row flex-nowrap items-center justify-between gap-2 rounded-md border px-3 py-3.5"
+                    style={{
+                      backgroundColor: isEstop
+                        ? ESTOP.background
+                        : cellPalette.background,
+                      borderColor: holding
+                        ? '#3dd68c'
+                        : isEstop
+                          ? ESTOP.border
+                          : cellPalette.border,
+                      borderWidth: holding ? 2 : 1,
+                    }}
+                    onPressIn={() => {
+                      void pressCell(cell);
+                    }}
+                    onPressOut={() => {
+                      void releaseCell(cell);
+                    }}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      className="shrink-0 text-base font-semibold"
+                      style={{ color: labelColor }}
+                    >
+                      {cell.label}
                     </Text>
-                  ) : null}
-                </Pressable>
-              ) : (
-                <View
-                  key={`e-${idx}`}
-                  className="min-h-[88px]"
-                  style={{ width: cellWidth }}
-                />
-              );
-            })}
-        </View>
-      </HelpTip>
-      <HelpTip id="tour.operator.holdHint">
-        <Hint>{t('holdHint')}</Hint>
-      </HelpTip>
+                    {cell.feedbackRegister || cell.statusRegister ? (
+                      <Text
+                        numberOfLines={1}
+                        className="shrink-0 text-[10px] opacity-80"
+                        style={{ color: metaColor }}
+                      >
+                        {cell.feedbackRegister
+                          ? `F ${String(
+                              tagValueForRegister(
+                                tags,
+                                cell.feedbackRegister.name,
+                              ),
+                            )}`
+                          : ''}
+                        {cell.feedbackRegister && cell.statusRegister
+                          ? ' · '
+                          : ''}
+                        {cell.statusRegister
+                          ? `S ${String(
+                              tagValueForRegister(
+                                tags,
+                                cell.statusRegister.name,
+                              ),
+                            )}`
+                          : ''}
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+          </View>
+        </HelpTip>
+      </Card>
     </ScrollView>
   );
 }

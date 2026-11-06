@@ -1,8 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
+  Param,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -16,6 +19,7 @@ import { JwtAuthGuard } from '../auth/providers/jwt-auth.guard';
 import { RolesGuard } from '../auth/providers/roles.guard';
 import { auditActorFromRequest } from '../common/audit-actor';
 import { CreateUserDto } from './dtos/create-user.dto';
+import { UpdateUserDto } from './dtos/update-user.dto';
 import { UserRole } from './enums/user-role.enum';
 import { UsersService } from './providers/users.service';
 
@@ -41,5 +45,23 @@ export class UsersController {
     @Req() req: Request & { user: JwtPayload },
   ) {
     return this.users.create(dto, auditActorFromRequest(req.user, req.ip));
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update user (admin)' })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.users.update(id, dto, auditActorFromRequest(req.user, req.ip));
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Remove user account (admin)' })
+  remove(@Param('id') id: string, @Req() req: Request & { user: JwtPayload }) {
+    return this.users.remove(id, auditActorFromRequest(req.user, req.ip));
   }
 }

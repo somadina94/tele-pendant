@@ -5,6 +5,20 @@ vi.mock('@/lib/toast', () => ({
   toastErr: vi.fn(),
   toastOk: vi.fn(),
 }));
+
+vi.mock('@/components/ui/calendar', () => ({
+  Calendar: ({ onSelect }: { onSelect?: (day?: Date) => void }) => (
+    <div>
+      <div role="grid" />
+      <button
+        type="button"
+        onClick={() => onSelect?.(new Date('2026-01-15T12:00:00.000Z'))}
+      >
+        Pick stub day
+      </button>
+    </div>
+  ),
+}));
 import userEvent from '@testing-library/user-event';
 import { AuditPage } from './AuditPage';
 import { renderWithProviders } from '../test/render';
@@ -90,6 +104,14 @@ describe('AuditPage', () => {
         true,
       ),
     );
+    await user.click(screen.getByRole('button', { name: /Export CSV/i }));
+    await waitFor(() =>
+      expect(
+        download.mock.calls.some(([path]) =>
+          String(path).includes('user=alice'),
+        ),
+      ).toBe(true),
+    );
 
     await user.click(screen.getByRole('button', { name: /Clear/i }));
     await user.click(screen.getByRole('button', { name: '2' }));
@@ -120,6 +142,9 @@ describe('AuditPage', () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Export CSV/i }));
     await waitFor(() => expect(toastErr).toHaveBeenCalledWith('export fail'));
+    vi.spyOn(api, 'apiDownload').mockRejectedValue('nope');
+    fireEvent.click(screen.getByRole('button', { name: /Export CSV/i }));
+    await waitFor(() => expect(toastErr).toHaveBeenCalledWith('Export failed'));
   });
 
   it('changes rows per page and shows ellipsis pages', async () => {
@@ -142,6 +167,46 @@ describe('AuditPage', () => {
     await user.click(screen.getByRole('option', { name: '10' }));
     await waitFor(() =>
       expect(screen.getByText('More pages')).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole('button', { name: '2' }));
+    await user.click(screen.getByRole('button', { name: '3' }));
+    await user.click(screen.getByRole('button', { name: '4' }));
+    await user.click(screen.getByRole('button', { name: '5' }));
+    expect(screen.getAllByText('More pages').length).toBeGreaterThan(0);
+    for (let i = 0; i < 12; i += 1) {
+      await user.click(screen.getByRole('button', { name: 'Go to next page' }));
+    }
+    expect(screen.getAllByText('More pages').length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('button', { name: '20' }));
+  });
+
+  it('resets pagination when date filters change', async () => {
+    const user = userEvent.setup();
+    const get = vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path.includes('page=2')) return paged(2, 25, 80);
+      return paged(1, 25, 80);
+    });
+    renderWithProviders(<AuditPage />);
+    await screen.findByText(/1.25 of 80/);
+    await user.click(screen.getByRole('button', { name: '2' }));
+    await waitFor(() =>
+      expect(get.mock.calls.some(([path]) => path.includes('page=2'))).toBe(
+        true,
+      ),
+    );
+    fireEvent.click(screen.getAllByText('Pick a date')[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Pick stub day' }));
+    await waitFor(() =>
+      expect(get.mock.calls.some(([path]) => path.includes('page=1'))).toBe(
+        true,
+      ),
+    );
+    fireEvent.click(screen.getAllByText('Pick a date')[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Pick stub day' }));
+    await waitFor(() =>
+      expect(
+        get.mock.calls.some(([path]) => path.includes('from=2026-01-15')),
+      ).toBe(true),
     );
   });
 

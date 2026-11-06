@@ -9,12 +9,16 @@ import {
   Save,
   Send,
 } from 'lucide-react-native';
-import { ASSISTANT_SUGGESTION_GROUPS } from '@tele-pendant/shared';
+import {
+  ASSISTANT_SUGGESTION_GROUPS,
+  canEditAssistantSettings,
+  type UserRole,
+} from '@tele-pendant/shared';
 import { apiGet, apiPost, apiPut } from '../api';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
 import { useTheme } from '../theme';
-import { Btn, BtnText, Card, ErrorText, Field, Hint, Section } from '../ui';
+import { Btn, BtnText, Card, Field, Hint, Section, showErrorFrom } from '../ui';
 
 interface AssistantSettings {
   docsRoot: string;
@@ -65,8 +69,15 @@ function AccordionSection({
   );
 }
 
-export function AssistantScreen({ token }: { token: string }) {
+export function AssistantScreen({
+  token,
+  userRole,
+}: {
+  token: string;
+  userRole: UserRole | null;
+}) {
   const { t } = useLocale();
+  const mayEditDocs = canEditAssistantSettings(userRole ?? 'operator');
   const { theme } = useTheme();
   const iconColor = theme === 'dark' ? '#E8EEF4' : '#0F1419';
   const [question, setQuestion] = useState('What happens on lost Modbus?');
@@ -81,8 +92,6 @@ export function AssistantScreen({ token }: { token: string }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     safety: true,
   });
-  const [error, setError] = useState<string | null>(null);
-
   useEffect(() => {
     void apiGet<AssistantSettings>('/assistant/settings', token)
       .then((s) => {
@@ -99,7 +108,6 @@ export function AssistantScreen({ token }: { token: string }) {
     if (!trimmed || busy) return;
     setQuestion(trimmed);
     setBusy(true);
-    setError(null);
     try {
       const res = await apiPost<{
         answer: string;
@@ -108,9 +116,8 @@ export function AssistantScreen({ token }: { token: string }) {
       }>('/assistant/ask', { question: trimmed }, token);
       setAnswer(toPlainAnswer(res.answer));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Ask failed';
       setAnswer(null);
-      setError(message);
+      showErrorFrom(err, 'Ask failed');
     } finally {
       setBusy(false);
     }
@@ -118,7 +125,6 @@ export function AssistantScreen({ token }: { token: string }) {
 
   async function saveSettings() {
     setSettingsBusy(true);
-    setError(null);
     try {
       const s = await apiPut<AssistantSettings>(
         '/assistant/settings',
@@ -130,7 +136,7 @@ export function AssistantScreen({ token }: { token: string }) {
       setIndexed(s.indexed);
       setCursorConfigured(s.cursorConfigured);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed');
+      showErrorFrom(err, 'Save failed');
     } finally {
       setSettingsBusy(false);
     }
@@ -138,7 +144,6 @@ export function AssistantScreen({ token }: { token: string }) {
 
   async function reindex() {
     setSettingsBusy(true);
-    setError(null);
     try {
       const res = await apiPost<{ indexed: number }>(
         '/assistant/reindex',
@@ -147,7 +152,7 @@ export function AssistantScreen({ token }: { token: string }) {
       );
       setIndexed(res.indexed);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Reindex failed');
+      showErrorFrom(err, 'Reindex failed');
     } finally {
       setSettingsBusy(false);
     }
@@ -168,62 +173,66 @@ export function AssistantScreen({ token }: { token: string }) {
             {t('tour.assistant.title')}{' '}
             {cursorConfigured
               ? 'Cursor Agent is configured on the server.'
-              : 'Running on local document search until CURSOR_API_KEY is set.'}
+              : 'Running on local document search.'}
           </Hint>
         </Card>
       </HelpTip>
 
-      <Card>
-        <AccordionSection
-          title="Docs settings"
-          subtitle={`Indexed documents: ${indexed}`}
-          open={docsOpen}
-          onToggle={() => setDocsOpen((v) => !v)}
-        >
-          <Hint>Admins can change the docs folder and public docs link.</Hint>
-          <Field
-            label="Docs root path"
-            value={docsRoot}
-            onChangeText={setDocsRoot}
-          />
-          <Field
-            label="Docs link (URL)"
-            value={docsLink}
-            onChangeText={setDocsLink}
-          />
-          <View className="mt-2 flex-row flex-wrap gap-2">
-            <Btn
-              disabled={settingsBusy}
-              onPress={() => void saveSettings()}
-              className="mt-0 flex-1"
-            >
-              {settingsBusy ? (
-                <Loader2 size={16} color="#041018" />
-              ) : (
-                <Save size={16} color="#041018" />
-              )}
-              <BtnText>Save settings</BtnText>
-            </Btn>
-            <Btn
-              disabled={settingsBusy}
-              onPress={() => void reindex()}
-              className="mt-0 flex-1"
-            >
-              <RefreshCw size={16} color="#041018" />
-              <BtnText>Reindex</BtnText>
-            </Btn>
-          </View>
-          {docsLink ? (
-            <Btn
-              className="mt-2"
-              onPress={() => void Linking.openURL(docsLink)}
-            >
-              <ExternalLink size={16} color="#041018" />
-              <BtnText>Open docs</BtnText>
-            </Btn>
-          ) : null}
-        </AccordionSection>
-      </Card>
+      {mayEditDocs ? (
+        <Card>
+          <AccordionSection
+            title="Docs settings"
+            subtitle={`Indexed documents: ${indexed}`}
+            open={docsOpen}
+            onToggle={() => setDocsOpen((v) => !v)}
+          >
+            <Hint>Admins can change the docs folder and public docs link.</Hint>
+            <Field
+              label="Docs root path"
+              value={docsRoot}
+              onChangeText={setDocsRoot}
+            />
+            <Field
+              label="Docs link (URL)"
+              value={docsLink}
+              onChangeText={setDocsLink}
+            />
+            <View className="mt-2 flex-row flex-wrap gap-2">
+              <Btn
+                disabled={settingsBusy}
+                onPress={() => void saveSettings()}
+                className="mt-0 flex-1"
+              >
+                {settingsBusy ? (
+                  <Loader2 size={16} color="#041018" />
+                ) : (
+                  <Save size={16} color="#041018" />
+                )}
+                <BtnText>Save settings</BtnText>
+              </Btn>
+              <Btn
+                disabled={settingsBusy}
+                onPress={() => void reindex()}
+                className="mt-0 flex-1"
+              >
+                <RefreshCw size={16} color="#041018" />
+                <BtnText>Reindex</BtnText>
+              </Btn>
+            </View>
+            {docsLink ? (
+              <Btn
+                className="mt-2"
+                onPress={() => void Linking.openURL(docsLink)}
+              >
+                <ExternalLink size={16} color="#041018" />
+                <BtnText>Open docs</BtnText>
+              </Btn>
+            ) : null}
+          </AccordionSection>
+        </Card>
+      ) : (
+        <Hint>Indexed documents: {indexed}. Docs settings are admin-only.</Hint>
+      )}
 
       <Card>
         <Text className="mb-1 text-base font-semibold text-foreground">
@@ -278,7 +287,6 @@ export function AssistantScreen({ token }: { token: string }) {
             )}
             <BtnText>{busy ? 'Asking…' : 'Ask'}</BtnText>
           </Btn>
-          {error ? <ErrorText>{error}</ErrorText> : null}
           {answer ? (
             <Text className="mt-3 rounded-md border border-border bg-muted p-3 text-sm text-foreground">
               {answer}

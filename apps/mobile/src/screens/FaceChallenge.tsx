@@ -6,7 +6,7 @@ import { Camera, ScanFace, UserPlus } from 'lucide-react-native';
 import { apiPost } from '../api';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import { Btn, BtnText, ErrorText, Field, Hint, OkText, Section } from '../ui';
+import { Btn, BtnText, Field, Hint, OkText, Section } from '../ui';
 
 export const CHALLENGE_PROMPTS = [
   'Center your face in the frame',
@@ -60,7 +60,6 @@ export function FaceChallenge({
   const camera = useRef<CameraView>(null);
   const [email, setEmail] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<ChallengeMode>(
     autoStartLogin ? 'login' : null,
@@ -89,13 +88,11 @@ export function FaceChallenge({
 
   function showError(raw: string) {
     const message = terror(raw) || raw;
-    setErr(message);
     setMsg(null);
     Alert.alert(t('faceAuthFailed'), message);
   }
 
   function startChallenge(next: 'enroll' | 'login') {
-    setErr(null);
     setMsg(null);
     if (next === 'enroll' && !token) {
       showError('Sign in with password first, then enroll');
@@ -128,7 +125,6 @@ export function FaceChallenge({
       return;
     }
     setBusy(true);
-    setErr(null);
     try {
       const photo = await camera.current.takePictureAsync({
         base64: true,
@@ -157,7 +153,6 @@ export function FaceChallenge({
         );
         const ok = t('faceEnrolled');
         setMsg(ok);
-        setErr(null);
         resetChallenge();
         Alert.alert(t('faceAuthOk'), ok);
         return;
@@ -175,7 +170,6 @@ export function FaceChallenge({
       await AsyncStorage.setItem('accessToken', res.accessToken);
       const ok = t('faceSignedIn');
       setMsg(ok);
-      setErr(null);
       resetChallenge();
       Alert.alert(t('faceAuthOk'), ok, [
         {
@@ -216,7 +210,6 @@ export function FaceChallenge({
   return (
     <>
       {msg ? <OkText>{msg}</OkText> : null}
-      {err ? <ErrorText>{err}</ErrorText> : null}
 
       {!permission ? (
         <Hint>Checking camera permission…</Hint>

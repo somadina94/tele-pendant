@@ -223,6 +223,67 @@ describe('AdminPage', () => {
     );
   });
 
+  it('shows PLC connection status variants for enabled connections', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let healthCall = 0;
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') {
+        healthCall += 1;
+        if (healthCall === 1) return null;
+        if (healthCall === 2) {
+          return {
+            ...plcHealthMock,
+            connectionId: 'other',
+            connected: true,
+          };
+        }
+        if (healthCall === 3) {
+          return {
+            ...plcHealthMock,
+            connected: false,
+            lastError: 'timeout',
+          };
+        }
+        if (healthCall === 4) {
+          return {
+            ...plcHealthMock,
+            connected: false,
+            lastError: null,
+          };
+        }
+        return plcHealthMock;
+      }
+      if (path === '/plc/connections') {
+        return [
+          {
+            id: '1',
+            label: 'sim',
+            host: '127.0.0.1',
+            port: 1502,
+            enabled: true,
+            isSimulator: true,
+          },
+        ];
+      }
+      return adminGetFallback(path);
+    });
+    await goConfigSection('PLC connections');
+    expect(await screen.findByText(/Checking connection/i)).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(
+      await screen.findByText(/Standby — another PLC is active/i),
+    ).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(
+      await screen.findByText(/Not connected: timeout/i),
+    ).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(await screen.findByText(/^Not connected$/i)).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(await screen.findByText(/^Connected$/i)).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
   it('shows scan code load errors', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
       if (path === '/media/codes') throw new Error('codes offline');
@@ -759,6 +820,12 @@ describe('AdminPage', () => {
     cancelDeleteDialog();
     expect(del).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Edit Overload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Overload' }));
+    confirmDeleteDialog();
+    await screen.findByText('Deleted alarm.');
+    expect(del).toHaveBeenCalledWith('/alarms/definitions/a1');
+    expect(screen.getByLabelText('alarm name')).toHaveValue('');
+
     fireEvent.click(screen.getByRole('button', { name: 'Edit Bare' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save alarm' }));
     await screen.findByText('Saved alarm.');
@@ -768,17 +835,12 @@ describe('AdminPage', () => {
     );
     expect(screen.getByLabelText('alarm name')).toHaveValue('');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Overload' }));
-    confirmDeleteDialog();
-    await screen.findByText('Deleted alarm.');
-    expect(del).toHaveBeenCalledWith('/alarms/definitions/a1');
-
     fireEvent.click(screen.getByRole('button', { name: 'Edit Bare' }));
     patch.mockRejectedValueOnce(new Error('alarm'));
     fireEvent.click(screen.getByRole('button', { name: 'Save alarm' }));
     await screen.findByText('alarm');
     del.mockRejectedValueOnce('nope');
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Overload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Bare' }));
     confirmDeleteDialog();
     await screen.findByText('Save failed');
 
@@ -802,6 +864,55 @@ describe('AdminPage', () => {
     put.mockRejectedValueOnce(new Error('roles'));
     fireEvent.click(screen.getByRole('button', { name: 'Save safety roles' }));
     await screen.findByText('roles');
+  });
+
+  it('shows user management for admins', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') return [];
+      if (path === '/users' || path === '/media/codes') return [];
+      if (path === '/alarms/definitions') return [];
+      if (path === '/safety/roles') {
+        return {
+          eStopRegisterId: null,
+          deadmanRegisterId: null,
+          heartbeatRegisterId: null,
+          safeStateRegisterId: null,
+        };
+      }
+      return layout;
+    });
+    renderWithProviders(<AdminPage />, {
+      route: '/admin?section=users',
+      role: 'admin',
+    });
+    expect(
+      await screen.findByRole('button', { name: /Add user/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('hides user management for supervisors', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') return [];
+      if (path === '/media/codes' || path === '/users') return [];
+      if (path === '/alarms/definitions') return [];
+      if (path === '/safety/roles') {
+        return {
+          eStopRegisterId: null,
+          deadmanRegisterId: null,
+          heartbeatRegisterId: null,
+          safeStateRegisterId: null,
+        };
+      }
+      return layout;
+    });
+    renderWithProviders(<AdminPage />, {
+      route: '/admin?section=users',
+      role: 'supervisor',
+    });
+    await screen.findByText(/These fields are saved in SQLite/);
+    expect(screen.queryByText('Add user')).not.toBeInTheDocument();
   });
 
   it('renders empty sections when layout and plc queries fail', async () => {

@@ -203,7 +203,7 @@ export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
 
   return (
     <View
-      className={`relative mb-1 ${
+      className={`relative mb-0.5 ${
         highlighted ? 'rounded-lg border-2 border-primary p-1' : ''
       }`}
     >

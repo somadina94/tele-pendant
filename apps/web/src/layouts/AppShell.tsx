@@ -8,11 +8,9 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
-import { AdminUserMenu } from '@/components/admin-user-menu';
+import { AccountMenu } from '@/components/account-menu';
 import { PageTourBar } from '@/lib/tour';
 import { useT } from '@/lib/i18n';
-import { getStoredUser } from '@/lib/user-session';
-
 export function screenFromPath(pathname: string): TourScreen {
   if (pathname.startsWith('/media')) return 'media';
   if (pathname.startsWith('/ops')) return 'ops';
@@ -33,7 +31,6 @@ export function AppShell() {
   const { pathname } = useLocation();
   const { t } = useT();
   const screen = screenFromPath(pathname);
-  const sessionUser = getStoredUser();
 
   return (
     <SidebarProvider>
@@ -51,12 +48,7 @@ export function AppShell() {
             </h1>
           </div>
           <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5 md:gap-2">
-            {sessionUser?.displayName ? (
-              <span className="hidden max-w-[8rem] truncate text-xs text-muted-foreground lg:inline">
-                {sessionUser.displayName}
-              </span>
-            ) : null}
-            <AdminUserMenu />
+            <AccountMenu />
             <PageTourBar screen={screen} />
             <ThemeToggle />
           </div>

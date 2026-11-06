@@ -11,6 +11,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarSeparator,
   SidebarTrigger,
@@ -122,5 +125,37 @@ describe('sidebar extra coverage', () => {
       </SidebarProvider>,
     );
     fireEvent.click(screen.getByText('force-toggle'));
+  });
+
+  it('renders submenu buttons in both sizes and asChild', () => {
+    stubMatchMedia(false);
+    render(
+      <SidebarProvider>
+        <Sidebar>
+          <SidebarContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuSub>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton size="sm" isActive>
+                      Small
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild size="md">
+                      <a href="/child">Child link</a>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                </SidebarMenuSub>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarContent>
+        </Sidebar>
+      </SidebarProvider>,
+    );
+    expect(screen.getByText('Small')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Child link' }),
+    ).toBeInTheDocument();
   });
 });

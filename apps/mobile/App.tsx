@@ -10,8 +10,15 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LogIn, ScanFace } from 'lucide-react-native';
-import type { Locale } from '@tele-pendant/shared';
+import type { Locale, UserRole } from '@tele-pendant/shared';
+import { isUserRole } from '@tele-pendant/shared';
 import { apiGet, apiPost } from './src/api';
+import {
+  clearStoredUser,
+  getStoredUserRole,
+  persistUser,
+  type StoredUser,
+} from './src/user-session';
 import { BrandMark } from './src/brand';
 import { LocaleProvider, useLocale } from './src/locale';
 import { AppShell } from './src/navigation';
@@ -23,8 +30,8 @@ import { ThemeProvider, ThemeToggle, useTheme } from './src/theme';
 import {
   Btn,
   BtnText,
-  ErrorText,
   Field,
+  showErrorFrom,
   Hint,
   SelectField,
   Subtitle,
@@ -34,24 +41,33 @@ import {
 const queryClient = new QueryClient();
 const SPLASH_MIN_MS = 1600;
 
-function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
+function LoginScreen({
+  onLoggedIn,
+}: {
+  onLoggedIn: (token: string, role: UserRole | null) => void;
+}) {
   const { t, setLocale, locale } = useLocale();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'password' | 'face'>('password');
 
   const login = async () => {
-    setError(null);
     try {
-      const data = await apiPost<{ accessToken: string }>('/auth/login', {
-        email,
-        password,
-      });
+      const data = await apiPost<{ accessToken: string; user: StoredUser }>(
+        '/auth/login',
+        {
+          email,
+          password,
+        },
+      );
       await AsyncStorage.setItem('accessToken', data.accessToken);
-      onLoggedIn(data.accessToken);
+      await persistUser(data.user);
+      onLoggedIn(
+        data.accessToken,
+        isUserRole(data.user.role) ? data.user.role : null,
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      showErrorFrom(err, 'Login failed', t('signIn'));
     }
   };
 
@@ -80,7 +96,23 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
             </Hint>
             <FaceChallenge
               token=""
-              onToken={onLoggedIn}
+              onToken={(accessToken) => {
+                void (async () => {
+                  try {
+                    const me = await apiGet<StoredUser>(
+                      '/auth/me',
+                      accessToken,
+                    );
+                    await persistUser(me);
+                    onLoggedIn(
+                      accessToken,
+                      isUserRole(me.role) ? me.role : null,
+                    );
+                  } catch {
+                    onLoggedIn(accessToken, null);
+                  }
+                })();
+              }}
               active
               allowEnroll={false}
               allowLogin
@@ -128,7 +160,6 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
                 importantForAutofill="no"
               />
             </HelpTip>
-            {error ? <ErrorText>{error}</ErrorText> : null}
             <HelpTip id="tour.login.signIn">
               <Btn onPress={() => void login()}>
                 <LogIn size={16} color="#041018" />
@@ -151,6 +182,7 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
 function Pendant() {
   const { theme } = useTheme();
   const [token, setToken] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [booting, setBooting] = useState(true);
 
   useEffect(() => {
@@ -161,11 +193,19 @@ function Pendant() {
         const saved = await AsyncStorage.getItem('accessToken');
         if (!saved) return;
         try {
-          await apiGet('/auth/me', saved);
-          if (!cancelled) setToken(saved);
+          const me = await apiGet<StoredUser>('/auth/me', saved);
+          await persistUser(me);
+          if (!cancelled) {
+            setToken(saved);
+            setUserRole(isUserRole(me.role) ? me.role : null);
+          }
         } catch {
           await AsyncStorage.removeItem('accessToken');
-          if (!cancelled) setToken(null);
+          await clearStoredUser();
+          if (!cancelled) {
+            setToken(null);
+            setUserRole(null);
+          }
         }
       } finally {
         const wait = Math.max(0, SPLASH_MIN_MS - (Date.now() - started));
@@ -186,7 +226,14 @@ function Pendant() {
 
   const logout = async () => {
     await AsyncStorage.removeItem('accessToken');
+    await clearStoredUser();
     setToken(null);
+    setUserRole(null);
+  };
+
+  const onLoggedIn = (nextToken: string, role: UserRole | null) => {
+    setToken(nextToken);
+    setUserRole(role);
   };
 
   const navTheme =
@@ -219,15 +266,19 @@ function Pendant() {
   }
 
   if (!token) {
-    return <LoginScreen onLoggedIn={setToken} />;
+    return <LoginScreen onLoggedIn={onLoggedIn} />;
   }
 
   return (
     <NavigationContainer theme={navTheme}>
       <AppShell
         token={token}
+        userRole={userRole}
         onLogout={() => void logout()}
-        onToken={setToken}
+        onToken={(next) => {
+          setToken(next);
+          void getStoredUserRole().then(setUserRole);
+        }}
       />
     </NavigationContainer>
   );

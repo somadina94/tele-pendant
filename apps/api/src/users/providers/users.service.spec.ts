@@ -8,6 +8,7 @@ describe('UsersService', () => {
     find: jest.fn(),
     findOne: jest.fn(),
     save: jest.fn(),
+    remove: jest.fn(),
     create: jest.fn((x) => x),
   };
 
@@ -65,5 +66,49 @@ describe('UsersService', () => {
         {},
       ),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('updates a non-admin user', async () => {
+    usersRepository.findOne.mockResolvedValue({
+      id: 'u2',
+      email: 'op@plant.local',
+      displayName: 'Jordan',
+      role: UserRole.OPERATOR,
+      suspended: false,
+      passwordHash: 'old',
+    });
+    usersRepository.save.mockImplementation(async (x) => x);
+    const service = new UsersService(
+      usersRepository as never,
+      auditService as never,
+    );
+    const row = await service.update(
+      'u2',
+      { displayName: 'Jay', suspended: true },
+      { userId: 'admin-id', userEmail: 'admin@x', userDisplayName: 'Admin' },
+    );
+    expect(row.displayName).toBe('Jay');
+    expect(row.suspended).toBe(true);
+  });
+
+  it('removes a non-admin user', async () => {
+    usersRepository.findOne.mockResolvedValue({
+      id: 'u2',
+      email: 'op@plant.local',
+      role: UserRole.OPERATOR,
+      displayName: 'Jordan',
+    });
+    const service = new UsersService(
+      usersRepository as never,
+      auditService as never,
+    );
+    await expect(
+      service.remove('u2', {
+        userId: 'admin-id',
+        userEmail: 'admin@x',
+        userDisplayName: 'Admin',
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(usersRepository.remove).toHaveBeenCalled();
   });
 });

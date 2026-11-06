@@ -105,6 +105,9 @@ export interface PublicUser {
   role: string;
   displayName: string | null;
   locale: string;
+  localePinned?: boolean;
+  hasFaceTemplate?: boolean;
+  suspended?: boolean;
 }
 
 export interface RegisterRef {

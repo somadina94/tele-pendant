@@ -38,8 +38,15 @@ const bundleName = basename(bundleRel);
 const bundleBytes = readFileSync(join(exportDir, bundleRel));
 cpSync(join(exportDir, bundleRel), join(assetDir, bundleName));
 const hash = createHash('sha256').update(bundleBytes).digest('hex');
-const base =
+const configured =
   process.env.OTA_PUBLIC_URL ?? 'https://api.tele-pendant.jahbyte.com';
+const baseUrl = new URL(
+  configured.includes('://') ? configured : `https://${configured}`,
+);
+if (baseUrl.protocol !== 'https:') {
+  throw new Error('OTA_PUBLIC_URL must use https');
+}
+const base = baseUrl.origin;
 
 const manifest = {
   id: crypto.randomUUID(),

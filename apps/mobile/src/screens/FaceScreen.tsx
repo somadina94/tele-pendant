@@ -42,9 +42,8 @@ export function FaceScreen({
           onToken={onToken}
           active={isFocused}
           allowEnroll
-          allowLogin
+          allowLogin={false}
           enrollHelpTipId="tour.face.enroll"
-          loginHelpTipId="tour.face.login"
         />
       </ScrollView>
     </View>

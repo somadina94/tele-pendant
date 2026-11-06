@@ -5,11 +5,11 @@ import { AdminUserMenu } from './admin-user-menu';
 import { renderWithProviders } from '../test/render';
 
 describe('AdminUserMenu', () => {
-  it('is hidden for non-admin roles', () => {
+  it('shows change password for any signed-in role', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<AdminUserMenu />, { role: 'supervisor' });
-    expect(
-      screen.queryByRole('button', { name: 'Users' }),
-    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    expect(screen.getByText('Change password')).toBeInTheDocument();
   });
 
   it('opens user management actions for admins', async () => {
@@ -18,11 +18,11 @@ describe('AdminUserMenu', () => {
       route: '/admin?section=plc',
       role: 'admin',
     });
-    await user.click(screen.getByRole('button', { name: 'Users' }));
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
     expect(screen.getByText('Add operator')).toBeInTheDocument();
     expect(screen.getByText('Manage users')).toBeInTheDocument();
     await user.click(screen.getByText('Add operator'));
-    await user.click(screen.getByRole('button', { name: 'Users' }));
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
     await user.click(screen.getByText('Manage users'));
   });
 });

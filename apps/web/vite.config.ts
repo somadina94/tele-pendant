@@ -48,6 +48,9 @@ export default defineConfig({
     headers: webSecurityHeaders,
   },
   test: {
+    env: {
+      NODE_ENV: 'test',
+    },
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
@@ -64,10 +67,10 @@ export default defineConfig({
         'src/**/*.{test,spec}.{ts,tsx}',
       ],
       thresholds: {
-        statements: 99,
-        branches: 96,
-        functions: 97,
-        lines: 99,
+        statements: 100,
+        branches: 100,
+        functions: 100,
+        lines: 100,
       },
     },
   },

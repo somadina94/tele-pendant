@@ -232,7 +232,7 @@
   @apply max-md:hidden;
 }
 .matrix-cell {
-  @apply flex min-h-12 w-full touch-none select-none flex-row flex-nowrap items-center justify-between gap-2 px-3 py-2.5 text-sm md:min-h-16 md:w-auto md:justify-center md:gap-2 md:px-2 md:py-2 md:text-base lg:px-3;
+  @apply flex min-h-16 w-full touch-none select-none flex-row flex-nowrap items-center justify-between gap-2 px-3 py-3.5 text-base md:min-h-[4.5rem] md:w-auto md:justify-center md:gap-2 md:px-3 md:py-3 md:text-base lg:px-4;
 }
 .matrix-cell-label {
   @apply shrink-0 whitespace-nowrap text-left font-semibold leading-none md:text-left;

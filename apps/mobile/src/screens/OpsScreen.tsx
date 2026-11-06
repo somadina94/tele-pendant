@@ -2,10 +2,11 @@ import { ScrollView, Text, View } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
 import { useQuery } from '@tanstack/react-query';
 import { Check, Pause, RefreshCw } from 'lucide-react-native';
+import { canShelveAlarms, type UserRole } from '@tele-pendant/shared';
 import { apiGet, apiPost } from '../api';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import { Btn, BtnText, ErrorText, Hint, LinkText, Section } from '../ui';
+import { Btn, BtnText, Hint, LinkText, Section } from '../ui';
 
 type Alarm = {
   id: string;
@@ -22,8 +23,15 @@ type Diagnostics = {
   uptimeSec: number;
 };
 
-export function OpsScreen({ token }: { token: string }) {
+export function OpsScreen({
+  token,
+  userRole,
+}: {
+  token: string;
+  userRole: UserRole | null;
+}) {
   const { t } = useLocale();
+  const mayShelve = canShelveAlarms(userRole ?? 'operator');
   const alarms = useQuery({
     queryKey: ['alarms', token],
     queryFn: () => apiGet<Alarm[]>('/alarms', token),
@@ -60,9 +68,7 @@ export function OpsScreen({ token }: { token: string }) {
           <Hint>Safety mode: {safety?.mode ?? '—'}</Hint>
           <Hint>Watchdog OK: {String(safety?.watchdogOk ?? '—')}</Hint>
           <Hint>Uptime: {diagnostics.data?.uptimeSec ?? '—'} s</Hint>
-          {plc?.lastError ? (
-            <ErrorText>Last error: {plc.lastError}</ErrorText>
-          ) : null}
+          {plc?.lastError ? <Hint>Last PLC error: {plc.lastError}</Hint> : null}
         </>
       </HelpTip>
       <HelpTip id="tour.ops.alarms">
@@ -91,18 +97,35 @@ export function OpsScreen({ token }: { token: string }) {
                     <Check size={12} color="#3D9CFD" /> {t('ack')}
                   </Text>
                 </LinkText>
+                {mayShelve ? (
+                  <LinkText
+                    onPress={() =>
+                      void apiPost(
+                        `/alarms/${alarm.id}/shelve`,
+                        undefined,
+                        token,
+                      ).then(() => alarms.refetch())
+                    }
+                  >
+                    <Text className="text-primary">
+                      <Pause size={12} color="#3D9CFD" /> {t('shelve')}
+                    </Text>
+                  </LinkText>
+                ) : null}
+              </View>
+            ) : null}
+            {alarm.state === 'shelved' && mayShelve ? (
+              <View className="mt-1">
                 <LinkText
                   onPress={() =>
                     void apiPost(
-                      `/alarms/${alarm.id}/shelve`,
+                      `/alarms/${alarm.id}/unshelve`,
                       undefined,
                       token,
                     ).then(() => alarms.refetch())
                   }
                 >
-                  <Text className="text-primary">
-                    <Pause size={12} color="#3D9CFD" /> {t('shelve')}
-                  </Text>
+                  <Text className="text-primary">{t('unshelve')}</Text>
                 </LinkText>
               </View>
             ) : null}

@@ -1,8 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { OperatorPage } from './OperatorPage';
 import { renderWithProviders } from '../test/render';
 import * as api from '../lib/api';
+import { ThemeProvider } from '@/components/theme-provider';
+import { TourProvider } from '../lib/tour';
 
 const socket = {
   on: vi.fn(),
@@ -255,12 +259,15 @@ describe('OperatorPage', () => {
     vi.spyOn(api, 'apiPost').mockRejectedValueOnce('nope');
     fireEvent.click(screen.getByRole('button', { name: 'Reset e-stop' }));
     expect(await screen.findByText('PIN does not match')).toBeInTheDocument();
+    const stop = await screen.findByRole('button', { name: 'STOP' });
+    fireEvent.pointerDown(stop);
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
       get: () => 'hidden',
     });
-    fireEvent.pointerDown(hoist);
     document.dispatchEvent(new Event('visibilitychange'));
+    fireEvent.pointerDown(hoist);
+    fireEvent.pointerMove(stop, { clientX: 150, clientY: 150 });
     window.dispatchEvent(new Event('pagehide'));
   });
 
@@ -388,6 +395,34 @@ describe('OperatorPage', () => {
         expect.objectContaining({ value: true }),
       ),
     );
+    fireEvent.pointerMove(hoist, { clientX: 150, clientY: 50 });
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: false }),
+      ),
+    );
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: true }),
+      ),
+    );
+    fireEvent.pointerMove(hoist, { clientX: 150, clientY: 250 });
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: false }),
+      ),
+    );
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: true }),
+      ),
+    );
     fireEvent.pointerMove(hoist, { clientX: 250, clientY: 150 });
     await waitFor(() =>
       expect(api.apiPost).toHaveBeenCalledWith(
@@ -395,6 +430,85 @@ describe('OperatorPage', () => {
         expect.objectContaining({ value: false }),
       ),
     );
+  });
+
+  it('releases motion when pointer capture is lost', async () => {
+    vi.spyOn(api, 'apiPost').mockResolvedValue({ ok: true });
+    renderWithProviders(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: true }),
+      ),
+    );
+    fireEvent.lostPointerCapture(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: false }),
+      ),
+    );
+  });
+
+  it('skips coil drop when a held cell is no longer motion on hide', async () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const get = vi.spyOn(api, 'apiGet').mockResolvedValue(layout);
+    const post = vi.spyOn(api, 'apiPost').mockResolvedValue({ ok: true });
+    render(
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem={false}
+      >
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <TourProvider>
+              <OperatorPage />
+            </TourProvider>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ThemeProvider>,
+    );
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: true }),
+      ),
+    );
+    get.mockResolvedValue({
+      ...layout,
+      cells: layout.cells.map((cell) =>
+        cell.id === 'm1' ? { ...cell, isMotion: false } : cell,
+      ),
+    });
+    await client.invalidateQueries({ queryKey: ['hmi-layout'] });
+    await waitFor(() => {
+      expect(
+        client.getQueryCache().find({ queryKey: ['hmi-layout'] })?.state.data,
+      ).toBeTruthy();
+    });
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(
+      post.mock.calls.filter(
+        ([path, body]) =>
+          path === '/hmi/cells/m1/activate' &&
+          (body as { value?: boolean }).value === false,
+      ),
+    ).toHaveLength(0);
   });
 
   it('keeps the screen calm when releasing a coil fails', async () => {

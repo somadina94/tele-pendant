@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Linking, ScrollView, Text, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { ArrowDown, ArrowUp, Mic, QrCode, Scan } from 'lucide-react-native';
+import { Mic, QrCode, Scan } from 'lucide-react-native';
 import { apiPost } from '../api';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import { Btn, BtnText, Field, Hint, OkText, Row, Section } from '../ui';
+import {
+  Btn,
+  BtnText,
+  Field,
+  Hint,
+  OkText,
+  Section,
+  showErrorAlert,
+  showErrorFrom,
+} from '../ui';
 
 export function MediaScreen({ token }: { token: string }) {
   const { t } = useLocale();
@@ -15,6 +24,7 @@ export function MediaScreen({ token }: { token: string }) {
   const [result, setResult] = useState<string | null>(null);
   const [voice, setVoice] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [cameraBlocked, setCameraBlocked] = useState(false);
   const lastCode = useRef('');
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -32,7 +42,7 @@ export function MediaScreen({ token }: { token: string }) {
       );
       setResult(`${row.label}${row.routeHint ? ` · ${row.routeHint}` : ''}`);
     } catch (err) {
-      setResult(err instanceof Error ? err.message : 'Resolve failed');
+      showErrorFrom(err, 'Resolve failed', 'Media');
     }
   }
 
@@ -44,21 +54,47 @@ export function MediaScreen({ token }: { token: string }) {
         label?: string;
         reason?: string;
       }>('/media/voice', { transcript }, token);
-      setVoice(
-        res.ok
-          ? `Heard: ${transcript}. Executed: ${res.label}`
-          : `Heard: ${transcript}. Not executed: ${res.reason ?? 'unknown'}`,
-      );
+      if (res.ok) {
+        setVoice(`Heard: ${transcript}. Executed: ${res.label}`);
+      } else {
+        showErrorAlert(
+          `Not executed: ${res.reason ?? 'unknown'}`,
+          'Voice command',
+        );
+        setVoice(`Heard: ${transcript}`);
+      }
     } catch (err) {
-      setVoice(
-        `Heard: ${transcript}. Not executed: ${
-          err instanceof Error ? err.message : 'failed'
-        }`,
-      );
+      showErrorFrom(err, 'Voice command failed', 'Media');
+      setVoice(transcript ? `Heard: ${transcript}` : null);
     }
   }
 
+  async function requestCameraAccess(): Promise<boolean> {
+    const result = await requestPermission();
+    if (result.granted) {
+      setCameraBlocked(false);
+      return true;
+    }
+    const msg =
+      result.canAskAgain === false
+        ? t('cameraPermissionBlocked')
+        : t('cameraPermissionDenied');
+    setCameraBlocked(result.canAskAgain === false);
+    showErrorAlert(msg, 'Camera');
+    return false;
+  }
+
+  async function toggleScanning() {
+    if (scanning) {
+      setScanning(false);
+      return;
+    }
+    const ok = await requestCameraAccess();
+    if (ok) setScanning(true);
+  }
+
   async function listen() {
+    setVoice(null);
     try {
       const speech = (await import('expo-speech-recognition')) as {
         ExpoSpeechRecognitionModule: {
@@ -76,20 +112,25 @@ export function MediaScreen({ token }: { token: string }) {
       const recognition = speech.ExpoSpeechRecognitionModule;
       const permission = await recognition.requestPermissionsAsync();
       if (!permission.granted) {
-        setVoice('Microphone permission denied. Use UP or DOWN.');
+        showErrorAlert('Microphone permission denied.', 'Listen');
         return;
       }
       const sub = recognition.addListener('result', (event) => {
-        const transcript = event.results?.[0]?.transcript ?? '';
+        const transcript = event.results?.[0]?.transcript?.trim() ?? '';
         sub.remove();
         recognition.stop();
-        if (transcript) void command(transcript);
+        if (transcript) {
+          void command(transcript);
+        } else {
+          setVoice('Nothing heard.');
+        }
       });
       recognition.start({ lang: 'en-US', interimResults: false });
       setVoice('Listening…');
     } catch {
-      setVoice(
-        'Listen needs a local debug build (npx expo run:android). Use UP or DOWN.',
+      showErrorAlert(
+        'Listen needs a local debug build (npx expo run:android).',
+        'Listen',
       );
     }
   }
@@ -103,7 +144,7 @@ export function MediaScreen({ token }: { token: string }) {
         <>
           <Section>{t('qrTitle')}</Section>
           <Field label="Code" value={code} onChangeText={setCode} />
-          <Btn onPress={() => void resolve(code)}>
+          <Btn disabled={!code.trim()} onPress={() => void resolve(code)}>
             <QrCode size={16} color="#041018" />
             <BtnText>Resolve</BtnText>
           </Btn>
@@ -126,12 +167,28 @@ export function MediaScreen({ token }: { token: string }) {
               }}
             />
           ) : null}
-          <Btn
-            onPress={() => {
-              if (!permission?.granted) void requestPermission();
-              setScanning((on) => !on);
-            }}
-          >
+          {cameraBlocked || (permission && !permission.granted) ? (
+            <View className="mb-3 gap-2">
+              {permission?.canAskAgain === false ? (
+                <Btn onPress={() => void Linking.openSettings()}>
+                  <Scan size={16} color="#041018" />
+                  <BtnText>{t('openAppSettings')}</BtnText>
+                </Btn>
+              ) : (
+                <Btn
+                  onPress={() =>
+                    void requestCameraAccess().then(
+                      (ok) => ok && setScanning(true),
+                    )
+                  }
+                >
+                  <Scan size={16} color="#041018" />
+                  <BtnText>{t('retryCamera')}</BtnText>
+                </Btn>
+              )}
+            </View>
+          ) : null}
+          <Btn onPress={() => void toggleScanning()}>
             <Scan size={16} color="#041018" />
             <BtnText>{scanning ? t('stopCamera') : t('scanCamera')}</BtnText>
           </Btn>
@@ -147,18 +204,6 @@ export function MediaScreen({ token }: { token: string }) {
             <BtnText>{t('listen')}</BtnText>
           </Btn>
         </>
-      </HelpTip>
-      <HelpTip id="tour.media.upDown">
-        <Row>
-          <Btn className="flex-1" onPress={() => void command('up')}>
-            <ArrowUp size={16} color="#041018" />
-            <BtnText>{t('up')}</BtnText>
-          </Btn>
-          <Btn className="flex-1" onPress={() => void command('down')}>
-            <ArrowDown size={16} color="#041018" />
-            <BtnText>{t('down')}</BtnText>
-          </Btn>
-        </Row>
       </HelpTip>
       {voice ? <OkText>{voice}</OkText> : null}
     </ScrollView>
