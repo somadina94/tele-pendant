@@ -1,6 +1,6 @@
 # Tele-Pendant: Training outline
 
-Live demo hosts: web https://tele-pendant.jahbyte.com · API/Swagger https://api.tele-pendant.jahbyte.com/api · health https://api.tele-pendant.jahbyte.com/api/v1/health.
+Live demo hosts: web https://hmi.example.com · API/Swagger https://api.example.com/api · health https://api.example.com/api/v1/health.
 
 ## Session 1 (30–45 min)
 

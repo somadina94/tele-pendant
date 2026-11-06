@@ -6,7 +6,7 @@ Signed **Android** (APK / AAB) and **iOS** (IPA) installables are **not stored i
 - **Signing credentials** separately (Android keystore, Apple team/cert/profile material), also **never committed**.
 - Scripts in this repo to **produce new APK, AAB, and IPA** on your machine once credentials are configured locally.
 
-Until you install a native build, operators can use the **web HMI** on iPhone/Android browsers (https://tele-pendant.jahbyte.com).
+Until you install a native build, operators can use the **web HMI** on iPhone/Android browsers (https://hmi.example.com).
 
 ## Build scripts (repo)
 
@@ -94,8 +94,8 @@ Until an IPA is built and installed, iPhone users can use the **web HMI in Safar
 ## OTA and API URL for a build
 
 ```bash
-OTA_PUBLIC_URL=https://api.tele-pendant.jahbyte.com \
-EXPO_PUBLIC_API_URL=https://api.tele-pendant.jahbyte.com/api/v1 \
+OTA_PUBLIC_URL=https://api.example.com \
+EXPO_PUBLIC_API_URL=https://api.example.com/api/v1 \
   pnpm handover:mobile
 ```
 

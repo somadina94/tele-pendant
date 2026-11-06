@@ -4,15 +4,15 @@
 
 | Surface | URL |
 | ------- | --- |
-| Web HMI | https://tele-pendant.jahbyte.com |
-| API | https://api.tele-pendant.jahbyte.com |
-| Health | https://api.tele-pendant.jahbyte.com/api/v1/health |
-| Swagger | https://api.tele-pendant.jahbyte.com/api |
-| OTA | https://api.tele-pendant.jahbyte.com/ota/manifest |
+| Web HMI | https://hmi.example.com |
+| API | https://api.example.com |
+| Health | https://api.example.com/api/v1/health |
+| Swagger | https://api.example.com/api |
+| OTA | https://api.example.com/ota/manifest |
 
 ```env
-APP_URL=https://api.tele-pendant.jahbyte.com
-FRONTEND_URL=https://tele-pendant.jahbyte.com
+APP_URL=https://api.example.com
+FRONTEND_URL=https://hmi.example.com
 COOKIE_SECURE=true
 ```
 
@@ -74,7 +74,7 @@ Restart the API container or process. Fresh installs seed the admin user; existi
 pnpm --filter @tele-pendant/mobile dev
 ```
 
-On a physical phone, set API base to the live API (`https://api.tele-pendant.jahbyte.com/api/v1`) or your LAN URL (not `127.0.0.1`).
+On a physical phone, set API base to the live API (`https://api.example.com/api/v1`) or your LAN URL (not `127.0.0.1`).
 
 ### Handover native builds (Android + iOS)
 
@@ -103,7 +103,7 @@ pnpm --filter @tele-pendant/mobile exec expo run:android
 Publish a JS-only OTA update with no EAS account:
 
 ```bash
-OTA_PUBLIC_URL=https://api.tele-pendant.jahbyte.com pnpm --filter @tele-pendant/mobile ota:export
+OTA_PUBLIC_URL=https://api.example.com pnpm --filter @tele-pendant/mobile ota:export
 ```
 
 Optional OPC UA simulator (Modbus on port 1502 stays the default):
@@ -125,15 +125,15 @@ TLS stays on your reverse proxy and certificate. Enable HSTS on that proxy (`Str
 
 Example public hosts:
 
-- Web SPA: `https://tele-pendant.jahbyte.com` → host nginx → `127.0.0.1:$WEB_PORT` (container port 80)
-- API + Swagger/docs: `https://api.tele-pendant.jahbyte.com` → host nginx → `127.0.0.1:$PORT` (container port 3010)
+- Web SPA: `https://hmi.example.com` → host nginx → `127.0.0.1:$WEB_PORT` (container port 80)
+- API + Swagger/docs: `https://api.example.com` → host nginx → `127.0.0.1:$PORT` (container port 3010)
 
-Each hostname needs its **own** certificate (or one cert with both names in SAN). If `tele-pendant.jahbyte.com` presents a cert whose CN/SAN is only `api.tele-pendant.jahbyte.com`, browsers refuse HTTPS and curl reports `subjectAltName does not match`.
+Each hostname needs its **own** certificate (or one cert with both names in SAN). If `hmi.example.com` presents a cert whose CN/SAN is only `api.example.com`, browsers refuse HTTPS and curl reports `subjectAltName does not match`.
 
 Issue / renew both names, for example:
 
 ```bash
-sudo certbot --nginx -d tele-pendant.jahbyte.com -d api.tele-pendant.jahbyte.com
+sudo certbot --nginx -d hmi.example.com -d api.example.com
 ```
 
 Or two separate server blocks, each with its own cert, each `proxy_pass` to the matching localhost port from `.env`.
@@ -141,12 +141,12 @@ Or two separate server blocks, each with its own cert, each `proxy_pass` to the 
 The SPA calls `/api/v1` on the **same origin** as the web page. Either:
 
 1. Proxy `/api/` and `/socket.io/` on the web vhost to the API (the web container nginx already does this to `http://api:3010` on the Docker network), or
-2. Proxy those paths on the host nginx for `tele-pendant.jahbyte.com` to `127.0.0.1:$PORT`.
+2. Proxy those paths on the host nginx for `hmi.example.com` to `127.0.0.1:$PORT`.
 
 Set in server `.env`:
 
 ```env
-APP_URL=https://api.tele-pendant.jahbyte.com
-FRONTEND_URL=https://tele-pendant.jahbyte.com
+APP_URL=https://api.example.com
+FRONTEND_URL=https://hmi.example.com
 COOKIE_SECURE=true
 ```

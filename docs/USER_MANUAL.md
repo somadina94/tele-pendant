@@ -6,15 +6,15 @@ Use this on the **live** site or while the Docker **dev** stack is running. Ever
 
 | Check   | Where                                                      | Success              |
 | ------- | ---------------------------------------------------------- | -------------------- |
-| Web     | https://tele-pendant.jahbyte.com                           | Tele-Pendant loads   |
-| API     | https://api.tele-pendant.jahbyte.com/api/v1/health         | JSON `status` is `ok` |
-| Swagger | https://api.tele-pendant.jahbyte.com/api                   | Swagger UI loads     |
-| OTA     | https://api.tele-pendant.jahbyte.com/ota/manifest          | JSON `runtimeVersion` |
-| Phone   | API base `https://api.tele-pendant.jahbyte.com/api/v1`     | Sign-in works        |
+| Web     | https://hmi.example.com                           | Tele-Pendant loads   |
+| API     | https://api.example.com/api/v1/health         | JSON `status` is `ok` |
+| Swagger | https://api.example.com/api                   | Swagger UI loads     |
+| OTA     | https://api.example.com/ota/manifest          | JSON `runtimeVersion` |
+| Phone   | API base `https://api.example.com/api/v1`     | Sign-in works        |
 
-`APP_URL=https://api.tele-pendant.jahbyte.com` · `FRONTEND_URL=https://tele-pendant.jahbyte.com`
+`APP_URL=https://api.example.com` · `FRONTEND_URL=https://hmi.example.com`
 
-On live, open https://tele-pendant.jahbyte.com/operator after sign-in. The click paths below use local Docker URLs; the same menus and routes apply on the live host (replace `http://localhost:8080` with `https://tele-pendant.jahbyte.com`).
+On live, open https://hmi.example.com/operator after sign-in. The click paths below use local Docker URLs; the same menus and routes apply on the live host (replace `http://localhost:8080` with `https://hmi.example.com`).
 
 ## What is already running (local Docker)
 
@@ -25,7 +25,7 @@ On live, open https://tele-pendant.jahbyte.com/operator after sign-in. The click
 | Web       | http://localhost:8080               | Tele-Pendant page (port comes from `WEB_PORT` in `.env`; this stack uses **8080**) |
 | Simulator | host port **1502**                  | Container `tele-pendant-modbus-sim-dev` is up                                      |
 
-You are already signed in. The operator screen is http://localhost:8080/operator (live: https://tele-pendant.jahbyte.com/operator).
+You are already signed in. The operator screen is http://localhost:8080/operator (live: https://hmi.example.com/operator).
 
 Sign-in values if you get logged out (from `.env`):
 
@@ -334,17 +334,17 @@ On the phone, open the drawer and tap **Change password** at the bottom (same th
 
 The API serves `apps/api/ota` with no login.
 
-1. Open https://api.tele-pendant.jahbyte.com/ota/manifest (local: http://localhost:3010/ota/manifest).
+1. Open https://api.example.com/ota/manifest (local: http://localhost:3010/ota/manifest).
 2. **Success:** JSON with `runtimeVersion` `0.0.1`, and the header `expo-protocol-version: 1`.
-3. Point the phone `updates.url` at `https://api.tele-pendant.jahbyte.com/ota/manifest` for production builds. Replacing `manifest.json` and `assets/bundle.js` in that folder is the JavaScript update. The camera is a native module, so it still needs a binary rebuild.
+3. Point the phone `updates.url` at `https://api.example.com/ota/manifest` for production builds. Replacing `manifest.json` and `assets/bundle.js` in that folder is the JavaScript update. The camera is a native module, so it still needs a binary rebuild.
 
 ## 15. Expo handheld
 
-Use the **signed native app** the vendor sends securely (Android APK or AAB, iOS IPA). Binaries and signing keys are **not in this git repo**. To build APK, AAB, and IPA yourself after handover, run `pnpm handover:mobile` (see [MOBILE_RELEASE.md](./MOBILE_RELEASE.md)). Until then, iPhone users can use the web HMI in Safari at https://tele-pendant.jahbyte.com.
+Use the **signed native app** the vendor sends securely (Android APK or AAB, iOS IPA). Binaries and signing keys are **not in this git repo**. To build APK, AAB, and IPA yourself after handover, run `pnpm handover:mobile` (see [MOBILE_RELEASE.md](./MOBILE_RELEASE.md)). Until then, iPhone users can use the web HMI in Safari at https://hmi.example.com.
 
 Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit**.
 
-1. On the phone, set **API base** to `https://api.tele-pendant.jahbyte.com/api/v1` for the live API, or your computer’s LAN URL ending in `/api/v1` for a local stack (not `localhost` on a physical phone).
+1. On the phone, set **API base** to `https://api.example.com/api/v1` for the live API, or your computer’s LAN URL ending in `/api/v1` for a local stack (not `localhost` on a physical phone).
 2. Email and password are the same as step 0.
 3. Tap **Sign in**.
 4. **Success:** title **Tele-Pendant**, drawer navigation, **Change password**, and **Logout**. Operator may show a brief loading indicator, then banner `Safety: normal · H … mm`, **Reset PIN** and **Reset e-stop** on one row, and the same five cells.

@@ -84,7 +84,7 @@ After sign-in, the top menu on the **Operator** page links to:
 | **Audit** | Who did what and when. |
 | **Logout** | End your session. |
 
-On the **phone app**, the same areas appear as tabs/buttons in the header after you set **API base** to your server (e.g. `https://api.tele-pendant.jahbyte.com/api/v1`).
+On the **phone app**, the same areas appear as tabs/buttons in the header after you set **API base** to your server (e.g. `https://api.example.com/api/v1`).
 
 **Language:** The interface is available in **English, Spanish, French, and German** (en, es, fr, de). On the login page the menu offers the installed languages. That choice is saved on your user profile and overrides the browser language.
 
