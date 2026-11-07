@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { OperatorPage } from './OperatorPage';
 import { renderWithProviders } from '../test/render';
 import * as api from '../lib/api';
+import type { ControlLease } from '../lib/api';
 import { ThemeProvider } from '@/components/theme-provider';
 import { TourProvider } from '../lib/tour';
 
@@ -167,11 +168,20 @@ const defaultTags = {
   at: new Date().toISOString(),
 };
 
+const heldControl = {
+  held: true,
+  holderUserId: 'u1',
+  holderDisplayName: 'Op',
+  youHold: true,
+  expiresAt: new Date().toISOString(),
+};
+
 describe('OperatorPage', () => {
   beforeEach(() => {
     socket.on.mockClear();
     socket.off.mockClear();
     socket.emit.mockClear();
+    localStorage.setItem('user', JSON.stringify({ id: 'u1', email: 'op@x' }));
     socket.on.mockImplementation(
       (event: string, handler: (p: unknown) => void) => {
         if (event === 'tags.update') {
@@ -179,9 +189,43 @@ describe('OperatorPage', () => {
         }
       },
     );
-    vi.spyOn(api, 'apiGet').mockResolvedValue(layout);
-    vi.spyOn(api, 'apiPost').mockResolvedValue({ ok: true });
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      return layout as never;
+    });
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path: string) => {
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return heldControl as never;
+      }
+      return { ok: true } as never;
+    });
   });
+
+  function mockPostWithControl(
+    impl: (path: string, body?: unknown) => unknown | Promise<unknown>,
+  ) {
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path, body) => {
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        const result = await impl(String(path), body);
+        if (
+          result &&
+          typeof result === 'object' &&
+          'held' in (result as object)
+        ) {
+          return result as never;
+        }
+        return heldControl as never;
+      }
+      return (await impl(String(path), body)) as never;
+    });
+  }
+
+  function mockGetWithControl(layoutValue: unknown = layout) {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      return layoutValue as never;
+    });
+  }
 
   it('renders matrix overlays and handles motion press/release', async () => {
     const { container } = renderWithProviders(<OperatorPage />);
@@ -291,14 +335,14 @@ describe('OperatorPage', () => {
   });
 
   it('handles activate failure and logout', async () => {
-    vi.spyOn(api, 'apiGet').mockResolvedValue({
+    mockGetWithControl({
       ...layout,
       background: {
         ...layout.background,
         imageUrl: 'https://example.com/bay.png',
       },
     });
-    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+    mockPostWithControl(async (path) => {
       if (String(path).includes('/hmi/cells/')) {
         throw new Error('Motion blocked');
       }
@@ -391,7 +435,7 @@ describe('OperatorPage', () => {
   });
 
   it('shows a warning status dot for non-normal safety modes', async () => {
-    vi.spyOn(api, 'apiGet').mockResolvedValue({
+    mockGetWithControl({
       ...layout,
       safety: {
         mode: 'maintenance',
@@ -408,7 +452,7 @@ describe('OperatorPage', () => {
   });
 
   it('renders empty cell slots when matrix has gaps', async () => {
-    vi.spyOn(api, 'apiGet').mockResolvedValue({
+    mockGetWithControl({
       ...layout,
       matrix: { rows: 1, cols: 2 },
       cells: [layout.cells[0]],
@@ -448,7 +492,7 @@ describe('OperatorPage', () => {
 
   it('releases a motion cell if the pointer is up before the press returns', async () => {
     let finishPress: (value: unknown) => void = () => undefined;
-    vi.spyOn(api, 'apiPost').mockImplementation(async (path, body) => {
+    mockPostWithControl(async (path, body) => {
       const value = (body as { value?: boolean } | undefined)?.value;
       if (String(path).includes('/activate') && value) {
         return new Promise((resolve) => {
@@ -474,7 +518,7 @@ describe('OperatorPage', () => {
   });
 
   it('stops motion when the pointer leaves the button while captured', async () => {
-    vi.spyOn(api, 'apiPost').mockResolvedValue({ ok: true });
+    mockPostWithControl(async () => ({ ok: true }));
     renderWithProviders(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     HTMLElement.prototype.setPointerCapture = vi.fn();
@@ -534,7 +578,7 @@ describe('OperatorPage', () => {
   });
 
   it('releases motion when pointer capture is lost', async () => {
-    vi.spyOn(api, 'apiPost').mockResolvedValue({ ok: true });
+    mockPostWithControl(async () => ({ ok: true }));
     renderWithProviders(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     HTMLElement.prototype.setPointerCapture = vi.fn();
@@ -561,8 +605,16 @@ describe('OperatorPage', () => {
         mutations: { retry: false },
       },
     });
-    const get = vi.spyOn(api, 'apiGet').mockResolvedValue(layout);
-    const post = vi.spyOn(api, 'apiPost').mockResolvedValue({ ok: true });
+    const get = vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/safety/control') return heldControl as never;
+      return layout as never;
+    });
+    const post = vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return heldControl as never;
+      }
+      return { ok: true } as never;
+    });
     render(
       <ThemeProvider
         attribute="class"
@@ -586,11 +638,14 @@ describe('OperatorPage', () => {
         expect.objectContaining({ value: true }),
       ),
     );
-    get.mockResolvedValue({
-      ...layout,
-      cells: layout.cells.map((cell) =>
-        cell.id === 'm1' ? { ...cell, isMotion: false } : cell,
-      ),
+    get.mockImplementation(async (path) => {
+      if (path === '/safety/control') return heldControl as never;
+      return {
+        ...layout,
+        cells: layout.cells.map((cell) =>
+          cell.id === 'm1' ? { ...cell, isMotion: false } : cell,
+        ),
+      } as never;
     });
     await client.invalidateQueries({ queryKey: ['hmi-layout'] });
     await waitFor(() => {
@@ -613,7 +668,7 @@ describe('OperatorPage', () => {
   });
 
   it('keeps the screen calm when releasing a coil fails', async () => {
-    vi.spyOn(api, 'apiPost').mockImplementation(async (path, body) => {
+    mockPostWithControl(async (path, body) => {
       const value = (body as { value?: boolean } | undefined)?.value;
       if (String(path).includes('/activate') && value === false) {
         throw new Error('release failed');
@@ -672,7 +727,7 @@ describe('OperatorPage', () => {
   });
 
   it('omits speed on release when the cell disables variable speed (FEAT-A2)', async () => {
-    vi.spyOn(api, 'apiGet').mockResolvedValue({
+    mockGetWithControl({
       ...layout,
       cells: layout.cells.map((cell) =>
         cell.isMotion ? { ...cell, variableSpeed: false } : cell,
@@ -753,5 +808,376 @@ describe('OperatorPage', () => {
       expect(hoist).toHaveAttribute('data-cell-state', 'fault'),
     );
     expect(hoist).toHaveTextContent(/fault/i);
+  });
+
+  it('releases exclusive control from the banner (FEAT-A5)', async () => {
+    const freeControl = {
+      held: false,
+      holderUserId: null,
+      holderDisplayName: null,
+      youHold: false,
+      expiresAt: null,
+    };
+    mockPostWithControl(async (path) => {
+      if (path === '/safety/control/release') return freeControl;
+      if (path.startsWith('/safety/control')) return heldControl;
+      return { ok: true };
+    });
+    renderWithProviders(<OperatorPage />);
+    expect(
+      await screen.findByRole('button', { name: 'Release control' }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Release control' }));
+    expect(
+      await screen.findByRole('button', { name: 'Claim control' }),
+    ).toBeInTheDocument();
+  });
+
+  it('blocks motion and steals with PIN when another operator holds control (FEAT-A5)', async () => {
+    const otherControl = {
+      held: true,
+      holderUserId: 'u2',
+      holderDisplayName: 'Bob',
+      youHold: false,
+      expiresAt: new Date().toISOString(),
+    };
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return otherControl as never;
+      return layout as never;
+    });
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/claim') {
+        throw new Error('Control held by Bob');
+      }
+      if (path === '/safety/control/steal') return heldControl as never;
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return otherControl as never;
+      }
+      return { ok: true } as never;
+    });
+    renderWithProviders(<OperatorPage />);
+    expect(await screen.findByText(/Control held by/)).toBeInTheDocument();
+    expect(screen.getByText(/Enter your reset PIN/i)).toBeInTheDocument();
+    const hoist = screen.getByRole('button', { name: 'Hoist Up' });
+    expect(hoist).toBeDisabled();
+    fireEvent.pointerDown(hoist);
+    expect(
+      (await screen.findAllByText(/Control held by Bob/i)).length,
+    ).toBeGreaterThan(0);
+    const postCalls = (api.apiPost as unknown as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[string, unknown?]>;
+    expect(postCalls.some(([path]) => path.includes('/hmi/cells/'))).toBe(
+      false,
+    );
+    fireEvent.change(screen.getByLabelText(/Reset PIN/i), {
+      target: { value: '1234' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
+    expect(
+      await screen.findByRole('button', { name: 'Release control' }),
+    ).toBeInTheDocument();
+  });
+
+  it('claims free control and surfaces claim/release/steal errors (FEAT-A5)', async () => {
+    const freeControl = {
+      held: false,
+      holderUserId: null,
+      holderDisplayName: null,
+      youHold: false,
+      expiresAt: null,
+    };
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return freeControl as never;
+      return layout as never;
+    });
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/claim') {
+        throw new Error('Claim exclusive control before moving');
+      }
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return freeControl as never;
+      }
+      return { ok: true } as never;
+    });
+    renderWithProviders(<OperatorPage />);
+    const claimBtn = await screen.findByRole('button', {
+      name: 'Claim control',
+    });
+    fireEvent.click(claimBtn);
+    expect(
+      await screen.findByText(/Claim exclusive control before moving/i),
+    ).toBeInTheDocument();
+
+    let releaseShouldFail = false;
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/claim') return heldControl as never;
+      if (path === '/safety/control/release') {
+        if (releaseShouldFail) throw new Error('Release failed');
+        return freeControl as never;
+      }
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return heldControl as never;
+      }
+      return { ok: true } as never;
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Claim control' }));
+    expect(
+      await screen.findByRole('button', { name: 'Release control' }),
+    ).toBeInTheDocument();
+    releaseShouldFail = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Release control' }));
+    expect(await screen.findByText('Release failed')).toBeInTheDocument();
+  });
+
+  it('shows steal PIN failure and merges control from safety.state (FEAT-A5)', async () => {
+    const otherControl = {
+      held: true,
+      holderUserId: 'u2',
+      holderDisplayName: 'Bob',
+      youHold: false,
+      expiresAt: new Date().toISOString(),
+    };
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return otherControl as never;
+      return layout as never;
+    });
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/claim') {
+        throw new Error('Control held by Bob');
+      }
+      if (path === '/safety/control/steal') {
+        throw new Error('PIN does not match');
+      }
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return otherControl as never;
+      }
+      return { ok: true } as never;
+    });
+    renderWithProviders(<OperatorPage />);
+    await screen.findByRole('button', { name: 'Take control' });
+    fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
+    expect(await screen.findByText('PIN does not match')).toBeInTheDocument();
+
+    const safetyHandler = socket.on.mock.calls.find(
+      (c) => c[0] === 'safety.state',
+    )?.[1] as (p: unknown) => void;
+    safetyHandler({
+      mode: 'normal',
+      deadmanActive: false,
+      eStopActive: false,
+      watchdogOk: true,
+      control: heldControl,
+    });
+    expect(
+      await screen.findByRole('button', { name: 'Release control' }),
+    ).toBeInTheDocument();
+  });
+
+  it('heartbeats while holding control (FEAT-A5)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const heartbeat = vi.fn(async () => heldControl);
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/heartbeat') return heartbeat() as never;
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return heldControl as never;
+      }
+      return { ok: true } as never;
+    });
+    const view = renderWithProviders(<OperatorPage />);
+    await screen.findByRole('button', { name: 'Release control' });
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(heartbeat).toHaveBeenCalled();
+    view.unmount();
+    vi.useRealTimers();
+  });
+
+  it('refreshes control status when not holding and blocks free motion (FEAT-A5)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const freeControl = {
+      held: false,
+      holderUserId: null,
+      holderDisplayName: null,
+      youHold: false,
+      expiresAt: null,
+    };
+    const get = vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/safety/control') return freeControl as never;
+      return layout as never;
+    });
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/claim') {
+        throw new Error('busy');
+      }
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return freeControl as never;
+      }
+      return { ok: true } as never;
+    });
+    renderWithProviders(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    expect(hoist).toBeDisabled();
+    const controlGetsBefore = get.mock.calls.filter(
+      ([path]) => path === '/safety/control',
+    ).length;
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(
+      get.mock.calls.filter(([path]) => path === '/safety/control').length,
+    ).toBeGreaterThan(controlGetsBefore);
+    fireEvent.pointerDown(hoist);
+    expect(
+      await screen.findByText(/Claim exclusive control before moving/i),
+    ).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('tolerates a corrupt local user record when merging control (FEAT-A5)', async () => {
+    localStorage.setItem('user', '{not-json');
+    renderWithProviders(<OperatorPage />);
+    expect(
+      await screen.findByRole('button', { name: 'Release control' }),
+    ).toBeInTheDocument();
+  });
+
+  it('reads empty and missing local user ids when merging control (FEAT-A5)', async () => {
+    localStorage.removeItem('user');
+    const { unmount } = renderWithProviders(<OperatorPage />);
+    expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
+    unmount();
+    localStorage.setItem('user', JSON.stringify({ id: '   ' }));
+    renderWithProviders(<OperatorPage />);
+    expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
+  });
+
+  it('drops late control responses after unmount (FEAT-A5)', async () => {
+    let finishClaim: (value: ControlLease) => void = () => undefined;
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/claim') {
+        return new Promise((resolve) => {
+          finishClaim = resolve;
+        }) as never;
+      }
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return heldControl as never;
+      }
+      return { ok: true } as never;
+    });
+    const view = renderWithProviders(<OperatorPage />);
+    await screen.findByRole('status', { name: 'Operator' });
+    view.unmount();
+    finishClaim(heldControl);
+  });
+
+  it('shows non-Error release/steal failures and holder id fallback (FEAT-A5)', async () => {
+    const otherControl = {
+      held: true,
+      holderUserId: 'u2',
+      holderDisplayName: null,
+      youHold: false,
+      expiresAt: new Date().toISOString(),
+    };
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return otherControl as never;
+      return layout as never;
+    });
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/claim') {
+        throw new Error('Control held by u2');
+      }
+      if (path === '/safety/control/steal') {
+        return Promise.reject('bad-pin');
+      }
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return otherControl as never;
+      }
+      return { ok: true } as never;
+    });
+    renderWithProviders(<OperatorPage />);
+    expect(await screen.findByText(/Control held by/)).toBeInTheDocument();
+    expect(screen.getByText(/u2/)).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Hoist Up' }));
+    expect(
+      (await screen.findAllByText(/Control held by u2/i)).length,
+    ).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
+    expect(await screen.findByText('PIN does not match')).toBeInTheDocument();
+
+    mockPostWithControl(async (path) => {
+      if (path === '/safety/control/release') {
+        return Promise.reject('nope');
+      }
+      return heldControl;
+    });
+    const safetyHandler = socket.on.mock.calls.find(
+      (c) => c[0] === 'safety.state',
+    )?.[1] as (p: unknown) => void;
+    safetyHandler({
+      mode: 'normal',
+      deadmanActive: false,
+      eStopActive: false,
+      watchdogOk: true,
+      control: heldControl,
+    });
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Release control' }),
+    );
+    expect(await screen.findByText('Release failed')).toBeInTheDocument();
+  });
+
+  it('ignores claim refresh errors when status fetch also fails (FEAT-A5)', async () => {
+    const freeControl = {
+      held: false,
+      holderUserId: null,
+      holderDisplayName: null,
+      youHold: false,
+      expiresAt: null,
+    };
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/safety/control') throw new Error('offline');
+      return layout as never;
+    });
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/claim') {
+        throw new Error('nope');
+      }
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return freeControl as never;
+      }
+      return { ok: true } as never;
+    });
+    renderWithProviders(<OperatorPage />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Claim control' }),
+    );
+    expect(await screen.findByText('nope')).toBeInTheDocument();
+  });
+
+  it('surfaces a non-Error claim failure message (FEAT-A5)', async () => {
+    const freeControl = {
+      held: false,
+      holderUserId: null,
+      holderDisplayName: null,
+      youHold: false,
+      expiresAt: null,
+    };
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/safety/control') return freeControl as never;
+      return layout as never;
+    });
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/claim') {
+        return Promise.reject('denied');
+      }
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return freeControl as never;
+      }
+      return { ok: true } as never;
+    });
+    renderWithProviders(<OperatorPage />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Claim control' }),
+    );
+    expect(
+      await screen.findByText(/Claim exclusive control before moving/i),
+    ).toBeInTheDocument();
   });
 });

@@ -55,6 +55,10 @@ export function MediaScreen({ token }: { token: string }) {
 
   const startDeadmanHold = useCallback(
     (durationMs?: number) => {
+      // FEAT-A5: timed voice motion needs the exclusive control lease first.
+      void apiPost('/safety/control/claim', undefined, token).catch(
+        () => undefined,
+      );
       void apiPost('/safety/deadman/pulse', undefined, token).catch(
         () => undefined,
       );

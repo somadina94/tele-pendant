@@ -186,7 +186,7 @@ export class HmiService {
       !this.safetyState.canIssueMotion(opts.userId)
     ) {
       throw new ForbiddenException(
-        'Motion blocked: hold deadman and ensure normal safety mode',
+        'Motion blocked: claim control, hold deadman, and ensure normal safety mode',
       );
     }
 

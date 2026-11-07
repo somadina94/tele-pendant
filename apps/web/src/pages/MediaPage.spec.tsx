@@ -303,7 +303,7 @@ describe('MediaPage', () => {
       { ok: false },
     ];
     const post = vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
-      if (typeof path === 'string' && path.startsWith('/safety/deadman')) {
+      if (typeof path === 'string' && path.startsWith('/safety/')) {
         return {};
       }
       const next = voiceQueue.shift();
@@ -486,7 +486,7 @@ describe('MediaPage', () => {
     }) as unknown as typeof window.SpeechRecognition;
 
     vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
-      if (typeof path === 'string' && path.startsWith('/safety/deadman')) {
+      if (typeof path === 'string' && path.startsWith('/safety/')) {
         return {};
       }
       return { ok: true, label: 'Hoist Up', message: 'Hoist Up moved' };

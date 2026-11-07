@@ -39,13 +39,28 @@ export type Background = {
   imageUrl?: string | null;
 };
 
+/** FEAT-A5 exclusive Operator control lease. */
+export type ControlLease = {
+  held: boolean;
+  holderUserId: string | null;
+  holderDisplayName: string | null;
+  youHold: boolean;
+  expiresAt: string | null;
+};
+
 export type Layout = {
   matrix: { rows: number; cols: number };
   cells: Cell[];
   background: Background | null;
   overlays: Overlay[];
   registers: RegisterRef[];
-  safety: { mode: string; deadmanActive: boolean };
+  safety: {
+    mode: string;
+    deadmanActive: boolean;
+    eStopActive?: boolean;
+    watchdogOk?: boolean;
+    control?: ControlLease;
+  };
 };
 
 export type PlcConnection = {

@@ -41,7 +41,10 @@ export function translate(locale: Locale, key: string): string {
 
 const errorKeys: Record<string, string> = {
   'Motion blocked: hold deadman and ensure normal safety mode': 'err.motion',
+  'Motion blocked: claim control, hold deadman, and ensure normal safety mode':
+    'err.motion',
   'PIN does not match': 'err.pin',
+  'Claim exclusive control before moving': 'err.control',
   'Face match failed — use password login': 'err.face',
   'No face detected': 'err.noface',
   'Liveness failed — not enough head motion between frames': 'err.faceLiveness',

@@ -7,6 +7,7 @@ import { PlcModule } from '../plc/plc.module';
 import { RegisterMap } from '../registers/entities/register-map.entity';
 import { SafetyRoles } from './entities/safety-roles.entity';
 import { SafetyController } from './safety.controller';
+import { ControlLeaseService } from './providers/control-lease.service';
 import { SafetyStateService } from './providers/safety-state.service';
 
 @Module({
@@ -17,7 +18,7 @@ import { SafetyStateService } from './providers/safety-state.service';
     TypeOrmModule.forFeature([Cell, RegisterMap, SafetyRoles]),
   ],
   controllers: [SafetyController],
-  providers: [SafetyStateService],
-  exports: [SafetyStateService],
+  providers: [ControlLeaseService, SafetyStateService],
+  exports: [ControlLeaseService, SafetyStateService],
 })
 export class SafetyModule {}

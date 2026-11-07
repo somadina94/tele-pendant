@@ -178,7 +178,7 @@ export class MediaService implements OnModuleInit {
           transcript: heard,
           label,
           message:
-            'Hold deadman while Listen is active (or hold a motion button on Operator) before timed voice motion.',
+            'Claim exclusive control and hold deadman while Listen is active (or on Operator) before timed voice motion.',
         };
       }
       this.beginMotionJog(cell.id);

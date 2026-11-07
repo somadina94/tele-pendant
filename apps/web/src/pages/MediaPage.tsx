@@ -66,8 +66,14 @@ export function MediaPage() {
   const deadmanHoldUntilRef = useRef(0);
 
   const pulseDeadman = useCallback(() => {
+    // FEAT-A5: timed voice motion needs the exclusive control lease first.
+    void Promise.resolve(apiPost('/safety/control/claim')).catch(
+      () => undefined,
+    );
     getRealtimeSocket().emit('deadman.pulse');
-    void apiPost('/safety/deadman/pulse').catch(() => undefined);
+    void Promise.resolve(apiPost('/safety/deadman/pulse')).catch(
+      () => undefined,
+    );
   }, []);
 
   const releaseDeadman = useCallback(() => {

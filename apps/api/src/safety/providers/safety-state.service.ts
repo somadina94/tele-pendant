@@ -9,6 +9,10 @@ import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
 import { SafeActionPinService } from '../../users/providers/safe-action-pin.service';
 import { SafetyRoles } from '../entities/safety-roles.entity';
+import {
+  ControlLeaseService,
+  type ControlLeaseView,
+} from './control-lease.service';
 
 export type SafetyMode = 'normal' | 'safe_state' | 'e_stop' | 'comms_lost';
 
@@ -20,6 +24,8 @@ export interface SafetySnapshot {
   allowTimedMediaMotion: boolean;
   lastHeartbeatAt: string | null;
   lastClientPulseAt: string | null;
+  /** FEAT-A5 exclusive Operator control lease. */
+  control: ControlLeaseView;
 }
 
 /**
@@ -49,6 +55,7 @@ export class SafetyStateService {
   private readonly registers: Repository<RegisterMap>;
   private readonly roles: Repository<SafetyRoles>;
   private readonly safeActionPin: SafeActionPinService;
+  private readonly controlLease: ControlLeaseService;
 
   constructor(
     @Inject(PlcService) plcService: PlcService,
@@ -57,6 +64,7 @@ export class SafetyStateService {
     @InjectRepository(RegisterMap) registers: Repository<RegisterMap>,
     @InjectRepository(SafetyRoles) roles: Repository<SafetyRoles>,
     @Inject(SafeActionPinService) safeActionPin: SafeActionPinService,
+    @Inject(ControlLeaseService) controlLease: ControlLeaseService,
   ) {
     this.plcService = plcService;
     this.auditService = auditService;
@@ -64,6 +72,7 @@ export class SafetyStateService {
     this.registers = registers;
     this.roles = roles;
     this.safeActionPin = safeActionPin;
+    this.controlLease = controlLease;
   }
 
   async getRoles(): Promise<SafetyRoles> {
@@ -190,7 +199,7 @@ export class SafetyStateService {
     return this.plcService.addressFor(name, fallback);
   }
 
-  snapshot(): SafetySnapshot {
+  snapshot(forUserId?: string | null): SafetySnapshot {
     return {
       mode: this.mode,
       deadmanActive: this.deadmanActive,
@@ -199,16 +208,90 @@ export class SafetyStateService {
       allowTimedMediaMotion: this.allowTimedMedia,
       lastHeartbeatAt: this.lastHeartbeatAt?.toISOString() ?? null,
       lastClientPulseAt: this.lastClientPulseAt?.toISOString() ?? null,
+      control: this.controlLease.snapshot(forUserId),
     };
+  }
+
+  controlSnapshot(forUserId?: string | null): ControlLeaseView {
+    return this.controlLease.snapshot(forUserId);
+  }
+
+  claimControl(
+    userId: string,
+    displayName?: string | null,
+    actor?: AuditActor,
+  ): ControlLeaseView {
+    const control = this.controlLease.claim(userId, displayName);
+    void this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'safety.control_claim',
+      resource: 'control_lease',
+      result: 'success',
+    });
+    return control;
+  }
+
+  heartbeatControl(userId: string): ControlLeaseView {
+    return this.controlLease.heartbeat(userId);
+  }
+
+  releaseControl(userId: string, actor?: AuditActor): ControlLeaseView {
+    const control = this.controlLease.release(userId);
+    void this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'safety.control_release',
+      resource: 'control_lease',
+      result: 'success',
+    });
+    return control;
+  }
+
+  /**
+   * Take exclusive control from another holder. Requires reset PIN (FEAT-A5).
+   * Drops the previous holder's deadman so motion cannot continue mid-steal.
+   */
+  async stealControl(
+    pin: string,
+    userId: string,
+    displayName?: string | null,
+    actor?: AuditActor,
+  ): Promise<ControlLeaseView> {
+    const ok = await this.safeActionPin.verify(userId, pin);
+    if (!ok) {
+      await this.auditService.write({
+        ...auditWriteFields(actor),
+        action: 'safety.control_steal_denied',
+        resource: 'control_lease',
+        result: 'failure',
+      });
+      throw new ForbiddenException('PIN does not match');
+    }
+    const { control, previousUserId } = this.controlLease.steal(
+      userId,
+      displayName,
+    );
+    if (previousUserId) {
+      await this.releaseDeadman({ userId: previousUserId, force: true });
+    }
+    await this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'safety.control_steal',
+      resource: 'control_lease',
+      details: previousUserId ? `from=${previousUserId}` : undefined,
+      result: 'success',
+    });
+    return control;
   }
 
   /**
    * Client must call while holding deadman. Holder is the signed-in user
    * (and optional socket) so another session cannot ride the pulse (TP-37).
+   * FEAT-A5: pulses are ignored unless the user holds the control lease.
    */
   pulseDeadman(holder: { userId: string; socketId?: string | null }): void {
     const userId = holder.userId?.trim();
     if (!userId) return;
+    if (!this.controlLease.holds(userId)) return;
     this.lastClientPulseAt = new Date();
     this.deadmanActive = true;
     this.deadmanHolderUserId = userId;
@@ -275,9 +358,13 @@ export class SafetyStateService {
     }
   }
 
-  /** Motion only for the user who currently holds deadman (TP-37). */
+  /**
+   * Motion only for the exclusive control holder who also holds deadman
+   * (TP-37 + FEAT-A5).
+   */
   canIssueMotion(userId?: string | null): boolean {
-    if (!userId || userId !== this.deadmanHolderUserId) return false;
+    if (!userId || !this.controlLease.holds(userId)) return false;
+    if (userId !== this.deadmanHolderUserId) return false;
     return (
       this.mode === 'normal' &&
       this.deadmanActive &&

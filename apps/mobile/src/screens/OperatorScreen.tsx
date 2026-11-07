@@ -22,7 +22,7 @@ import {
 import { io, Socket } from 'socket.io-client';
 import { operatorApiError } from '../api-errors';
 import { apiGet, apiPost, getApiBase } from '../api';
-import type { Cell, Layout } from '../types';
+import type { Cell, ControlLease, Layout } from '../types';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
 import {
@@ -38,7 +38,16 @@ type SafetySnap = {
   mode: string;
   eStopActive?: boolean;
   watchdogOk?: boolean;
+  control?: ControlLease;
 };
+
+function applyControl(
+  incoming: ControlLease | null | undefined,
+  prev: ControlLease | null,
+): ControlLease | null {
+  if (!incoming) return prev;
+  return incoming;
+}
 
 function statusTone(mode: string): 'ok' | 'warn' | 'danger' {
   if (mode === 'safe_state' || mode === 'estop' || mode === 'e_stop') {
@@ -57,8 +66,14 @@ export function OperatorScreen({ token }: { token: string }) {
   const [jogSpeed, setJogSpeed] = useState<'slow' | 'fast'>('fast');
   const jogSpeedRef = useRef<'slow' | 'fast'>('fast');
   const [safety, setSafety] = useState<SafetySnap>({ mode: 'unknown' });
+  const [control, setControl] = useState<ControlLease | null>(null);
+  const controlRef = useRef<ControlLease | null>(null);
   const [height, setHeight] = useState<number | null>(null);
   const [tags, setTags] = useState<TagSnapshot | null>(null);
+
+  useEffect(() => {
+    controlRef.current = control;
+  }, [control]);
 
   useEffect(() => {
     jogSpeedRef.current = jogSpeed;
@@ -87,7 +102,12 @@ export function OperatorScreen({ token }: { token: string }) {
       auth: token ? { token } : {},
     });
     socketRef.current = socket;
-    socket.on('safety.state', (s: SafetySnap) => setSafety(s));
+    socket.on('safety.state', (s: SafetySnap) => {
+      setSafety(s);
+      if (s.control) {
+        setControl((prev) => applyControl(s.control, prev));
+      }
+    });
     socket.on('tags.update', (payload: TagSnapshot) => {
       if (typeof payload.hoistHeightMm === 'number') {
         setHeight(payload.hoistHeightMm);
@@ -98,6 +118,54 @@ export function OperatorScreen({ token }: { token: string }) {
       closed = true;
       socket?.disconnect();
       socketRef.current = null;
+    };
+  }, [token]);
+
+  /** FEAT-A5: exclusive control claim + heartbeat while Operator is open. */
+  useEffect(() => {
+    let cancelled = false;
+    const apply = (next: ControlLease) => {
+      if (!cancelled) setControl((prev) => applyControl(next, prev));
+    };
+    const refresh = async () => {
+      try {
+        apply(await apiGet<ControlLease>('/safety/control', token));
+      } catch {
+        // ignore
+      }
+    };
+    void (async () => {
+      try {
+        apply(
+          await apiPost<ControlLease>(
+            '/safety/control/claim',
+            undefined,
+            token,
+          ),
+        );
+      } catch {
+        await refresh();
+      }
+    })();
+    const id = setInterval(() => {
+      if (controlRef.current?.youHold) {
+        void apiPost<ControlLease>(
+          '/safety/control/heartbeat',
+          undefined,
+          token,
+        )
+          .then(apply)
+          .catch(() => void refresh());
+      } else {
+        void refresh();
+      }
+    }, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      void apiPost('/safety/control/release', undefined, token).catch(
+        () => undefined,
+      );
     };
   }, [token]);
 
@@ -156,6 +224,15 @@ export function OperatorScreen({ token }: { token: string }) {
 
   const pressCell = async (cell: Cell) => {
     const pressGen = holdGen.current;
+    if (cell.isMotion && !controlRef.current?.youHold) {
+      showErrorAlert(
+        controlRef.current?.held
+          ? `${t('controlHeldBy')} ${controlRef.current.holderDisplayName || controlRef.current.holderUserId}`
+          : t('err.control'),
+      );
+      void hapticMotionBlocked();
+      return;
+    }
     if (cell.isMotion) {
       heldId.current = cell.id;
       setHoldingId(cell.id);
@@ -249,6 +326,66 @@ export function OperatorScreen({ token }: { token: string }) {
       showErrorAlert(operatorApiError(err, 'reset', terror));
     }
   };
+
+  const claimControl = async () => {
+    try {
+      setControl(
+        applyControl(
+          await apiPost<ControlLease>(
+            '/safety/control/claim',
+            undefined,
+            token,
+          ),
+          null,
+        ),
+      );
+    } catch (err) {
+      showErrorAlert(err instanceof Error ? err.message : t('err.control'));
+      try {
+        setControl(
+          applyControl(
+            await apiGet<ControlLease>('/safety/control', token),
+            null,
+          ),
+        );
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const releaseControl = async () => {
+    try {
+      setControl(
+        applyControl(
+          await apiPost<ControlLease>(
+            '/safety/control/release',
+            undefined,
+            token,
+          ),
+          null,
+        ),
+      );
+    } catch (err) {
+      showErrorAlert(err instanceof Error ? err.message : 'Release failed');
+    }
+  };
+
+  const stealControl = async () => {
+    try {
+      setControl(
+        applyControl(
+          await apiPost<ControlLease>('/safety/control/steal', { pin }, token),
+          null,
+        ),
+      );
+    } catch (err) {
+      showErrorAlert(operatorApiError(err, 'reset', terror));
+    }
+  };
+
+  const youHold = Boolean(control?.youHold);
+  const controlHeldByOther = Boolean(control?.held && !youHold);
 
   const imageUrl = layoutQuery.data?.background?.imageUrl ?? '';
   const cssBackground =
@@ -359,7 +496,9 @@ export function OperatorScreen({ token }: { token: string }) {
           borderColor: palette.border,
           borderWidth: cellState === 'running' && !isEstop ? 2 : 1,
         }}
+        disabled={cell.isMotion && !youHold}
         onPressIn={() => {
+          if (cell.isMotion && !youHold) return;
           void pressCell(cell);
         }}
         onPressOut={() => {
@@ -417,9 +556,52 @@ export function OperatorScreen({ token }: { token: string }) {
         <HelpTip id="tour.operator.banner">
           <Banner>
             {t('safety')}: {safetyMode}
+            {youHold
+              ? ` · ${t('controlYou')}`
+              : controlHeldByOther
+                ? ` · ${t('controlHeldBy')} ${control?.holderDisplayName || control?.holderUserId}`
+                : ` · ${t('controlFree')}`}
             {holdingId ? ` · ${t('deadmanHold')}` : ''}
           </Banner>
         </HelpTip>
+        <View className="flex-row flex-wrap gap-2">
+          {youHold ? (
+            <Pressable
+              accessibilityRole="button"
+              className="min-h-[44px] rounded-md border border-border bg-card px-3 py-2"
+              onPress={() => void releaseControl()}
+            >
+              <Text className="text-sm text-foreground">
+                {t('releaseControl')}
+              </Text>
+            </Pressable>
+          ) : controlHeldByOther ? (
+            <Pressable
+              accessibilityRole="button"
+              className="min-h-[44px] rounded-md border border-border bg-card px-3 py-2"
+              onPress={() => void stealControl()}
+            >
+              <Text className="text-sm text-foreground">
+                {t('stealControl')}
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              className="min-h-[44px] rounded-md border border-border bg-card px-3 py-2"
+              onPress={() => void claimControl()}
+            >
+              <Text className="text-sm text-foreground">
+                {t('claimControl')}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+        {controlHeldByOther ? (
+          <Text className="text-xs text-muted-foreground">
+            {t('stealControlHint')}
+          </Text>
+        ) : null}
         <HelpTip id="tour.operator.graphic">
           <View
             className="relative h-[152px] overflow-hidden rounded-xl border border-white/10"

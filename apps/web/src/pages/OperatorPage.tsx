@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Ban, Circle, Play, ShieldAlert } from 'lucide-react';
-import { apiGet, apiPost, CellDto, HmiLayout, LiveTags } from '../lib/api';
+import {
+  apiGet,
+  apiPost,
+  CellDto,
+  ControlLease,
+  HmiLayout,
+  LiveTags,
+} from '../lib/api';
 import { useT } from '../lib/i18n';
 import {
   formatOverlay,
@@ -75,11 +82,39 @@ function releasePointerIfCaptured(
   }
 }
 
+function readLocalUserId(): string | null {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { id?: string };
+    return parsed.id?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function mergeControl(
+  incoming: ControlLease | null | undefined,
+  prev: ControlLease | null,
+): ControlLease | null {
+  if (!incoming) return prev;
+  const me = readLocalUserId();
+  return {
+    ...incoming,
+    youHold: Boolean(
+      incoming.youHold ||
+      (me && incoming.holderUserId && me === incoming.holderUserId),
+    ),
+  };
+}
+
 export function OperatorPage() {
   const queryClient = useQueryClient();
   const { t, terror } = useT();
   const [tags, setTags] = useState<LiveTags | null>(null);
   const [safety, setSafety] = useState<HmiLayout['safety'] | null>(null);
+  const [control, setControl] = useState<ControlLease | null>(null);
+  const controlRef = useRef<ControlLease | null>(null);
   const [holdingCellId, setHoldingCellId] = useState<string | null>(null);
   const heldRef = useRef<string | null>(null);
   const [jogSpeed, setJogSpeed] = useState<'slow' | 'fast'>('fast');
@@ -88,6 +123,10 @@ export function OperatorPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [photoOk, setPhotoOk] = useState(true);
   const [liveFallback, setLiveFallback] = useState(false);
+
+  useEffect(() => {
+    controlRef.current = control;
+  }, [control]);
 
   useEffect(() => {
     jogSpeedRef.current = jogSpeed;
@@ -106,12 +145,58 @@ export function OperatorPage() {
         ...payload,
         values: { ...prev?.values, ...payload.values },
       }));
-    const onSafety = (payload: HmiLayout['safety']) => setSafety(payload);
+    const onSafety = (payload: HmiLayout['safety']) => {
+      setSafety(payload);
+      if (payload.control) {
+        setControl((prev) => mergeControl(payload.control, prev));
+      }
+    };
     socket.on('tags.update', onTags);
     socket.on('safety.state', onSafety);
     return () => {
       socket.off('tags.update', onTags);
       socket.off('safety.state', onSafety);
+    };
+  }, []);
+
+  /** FEAT-A5: claim exclusive control; heartbeat while this Operator is open. */
+  useEffect(() => {
+    let cancelled = false;
+    const apply = (next: ControlLease) => {
+      if (cancelled) return;
+      setControl((prev) => mergeControl(next, prev));
+    };
+    const refresh = async () => {
+      try {
+        apply(await apiGet<ControlLease>('/safety/control'));
+      } catch {
+        // ignore transient errors
+      }
+    };
+    const claim = async () => {
+      try {
+        apply(await apiPost<ControlLease>('/safety/control/claim'));
+      } catch {
+        await refresh();
+      }
+    };
+    void claim();
+    const id = window.setInterval(() => {
+      const current = controlRef.current;
+      if (current?.youHold) {
+        void apiPost<ControlLease>('/safety/control/heartbeat')
+          .then(apply)
+          .catch(() => void refresh());
+      } else {
+        void refresh();
+      }
+    }, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      void Promise.resolve(apiPost('/safety/control/release')).catch(
+        () => undefined,
+      );
     };
   }, []);
 
@@ -169,6 +254,14 @@ export function OperatorPage() {
 
   async function pressCell(cell: CellDto) {
     setMessage(null);
+    if (cell.isMotion && !controlRef.current?.youHold) {
+      setMessage(
+        controlRef.current?.held
+          ? `${t('controlHeldBy')} ${controlRef.current.holderDisplayName || controlRef.current.holderUserId}`
+          : t('err.control'),
+      );
+      return;
+    }
     if (cell.isMotion) {
       heldRef.current = cell.id;
       setHoldingCellId(cell.id);
@@ -259,7 +352,60 @@ export function OperatorPage() {
     }
   }
 
+  async function claimControl() {
+    setMessage(null);
+    try {
+      setControl(
+        mergeControl(
+          await apiPost<ControlLease>('/safety/control/claim'),
+          null,
+        ),
+      );
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : t('err.control'));
+      try {
+        setControl(
+          mergeControl(await apiGet<ControlLease>('/safety/control'), null),
+        );
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  async function releaseControl() {
+    setMessage(null);
+    try {
+      setControl(
+        mergeControl(
+          await apiPost<ControlLease>('/safety/control/release'),
+          null,
+        ),
+      );
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Release failed');
+    }
+  }
+
+  async function stealControl() {
+    setMessage(null);
+    try {
+      setControl(
+        mergeControl(
+          await apiPost<ControlLease>('/safety/control/steal', {
+            pin: safePin,
+          }),
+          null,
+        ),
+      );
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'PIN does not match');
+    }
+  }
+
   const layout = layoutQuery.data;
+  const youHold = Boolean(control?.youHold);
+  const controlHeldByOther = Boolean(control?.held && !youHold);
   const needsLive = useMemo(() => operatorNeedsLiveTags(layout), [layout]);
   const showJogSpeed = useMemo(
     () =>
@@ -343,8 +489,13 @@ export function OperatorPage() {
           `state-${cellState}`,
           isEstop && 'estop',
         )}
+        disabled={cell.isMotion && !youHold}
         onPointerDown={(e) => {
           e.preventDefault();
+          if (cell.isMotion && !youHold) {
+            void pressCell(cell);
+            return;
+          }
           trySetPointerCapture(e.currentTarget, e.pointerId);
           void pressCell(cell);
         }}
@@ -405,6 +556,16 @@ export function OperatorPage() {
             <span className="text-sm">
               {t('safety')}: <strong>{mode}</strong>
             </span>
+            {youHold ? (
+              <Badge variant="secondary">{t('controlYou')}</Badge>
+            ) : controlHeldByOther ? (
+              <Badge variant="outline">
+                {t('controlHeldBy')}{' '}
+                {control?.holderDisplayName || control?.holderUserId}
+              </Badge>
+            ) : (
+              <Badge variant="outline">{t('controlFree')}</Badge>
+            )}
             {safety?.deadmanActive || holdingCellId ? (
               <Badge variant="secondary">{t('deadmanHold')}</Badge>
             ) : null}
@@ -413,6 +574,37 @@ export function OperatorPage() {
                 {t('estop')}
               </Badge>
             ) : null}
+            {youHold ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => void releaseControl()}
+              >
+                {t('releaseControl')}
+              </Button>
+            ) : controlHeldByOther ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => void stealControl()}
+              >
+                {t('stealControl')}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => void claimControl()}
+              >
+                {t('claimControl')}
+              </Button>
+            )}
           </div>
         </HelpTip>
 
@@ -541,6 +733,11 @@ export function OperatorPage() {
                 >
                   {t('resetEstop')}
                 </Button>
+                {controlHeldByOther ? (
+                  <span className="basis-full text-xs text-muted-foreground">
+                    {t('stealControlHint')}
+                  </span>
+                ) : null}
               </div>
             </HelpTip>
             {showJogSpeed ? (

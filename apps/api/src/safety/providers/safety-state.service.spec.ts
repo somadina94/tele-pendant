@@ -1,3 +1,4 @@
+import { ControlLeaseService } from './control-lease.service';
 import { SafetyStateService } from './safety-state.service';
 
 describe('SafetyStateService', () => {
@@ -37,6 +38,7 @@ describe('SafetyStateService', () => {
   };
 
   let service: SafetyStateService;
+  let controlLease: ControlLeaseService;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -54,6 +56,7 @@ describe('SafetyStateService', () => {
         return Boolean(expected && pin.trim() === expected);
       },
     );
+    controlLease = new ControlLeaseService();
     service = new SafetyStateService(
       plcService as never,
       auditService as never,
@@ -61,8 +64,18 @@ describe('SafetyStateService', () => {
       registers as never,
       roles as never,
       safeActionPin as never,
+      controlLease,
     );
   });
+
+  function claimAs(userId: string, name = userId): void {
+    service.claimControl(userId, name);
+  }
+
+  function pulseHeld(userId = 'u1', socketId?: string): void {
+    if (!controlLease.holds(userId)) claimAs(userId);
+    service.pulseDeadman({ userId, socketId });
+  }
 
   it('stores the timed-motion flag and reads it back', async () => {
     process.env.SAFE_ACTION_PIN = '1234';
@@ -144,6 +157,7 @@ describe('SafetyStateService', () => {
   });
 
   it('blocks motion until deadman pulse and releases', async () => {
+    claimAs('u1', 'Alice');
     expect(service.canIssueMotion('u1')).toBe(false);
     service.pulseDeadman({ userId: 'u1' });
     expect(service.canIssueMotion('u1')).toBe(true);
@@ -153,7 +167,65 @@ describe('SafetyStateService', () => {
     expect(service.snapshot().lastClientPulseAt).toBeNull();
   });
 
+  it('ignores deadman pulse without exclusive control (FEAT-A5)', () => {
+    service.pulseDeadman({ userId: 'u1' });
+    expect(service.snapshot().deadmanActive).toBe(false);
+    expect(service.canIssueMotion('u1')).toBe(false);
+    claimAs('u1', 'Alice');
+    service.pulseDeadman({ userId: 'u1' });
+    expect(service.canIssueMotion('u1')).toBe(true);
+    expect(service.canIssueMotion('u2')).toBe(false);
+  });
+
+  it('steals control with PIN and drops prior deadman (FEAT-A5)', async () => {
+    process.env.SAFE_ACTION_PIN = '1234';
+    claimAs('u1', 'Alice');
+    service.pulseDeadman({ userId: 'u1' });
+    expect(service.canIssueMotion('u1')).toBe(true);
+    await expect(
+      service.stealControl('wrong', 'u2', 'Bob', { userEmail: 'bob@x' }),
+    ).rejects.toThrow('PIN does not match');
+    const control = await service.stealControl('1234', 'u2', 'Bob', {
+      userEmail: 'bob@x',
+    });
+    expect(control.youHold).toBe(true);
+    expect(service.snapshot().deadmanActive).toBe(false);
+    expect(service.canIssueMotion('u1')).toBe(false);
+    service.pulseDeadman({ userId: 'u2' });
+    expect(service.canIssueMotion('u2')).toBe(true);
+    delete process.env.SAFE_ACTION_PIN;
+  });
+
+  it('heartbeats and releases exclusive control (FEAT-A5)', () => {
+    claimAs('u1', 'Alice');
+    expect(service.controlSnapshot('u1').youHold).toBe(true);
+    expect(service.heartbeatControl('u1').youHold).toBe(true);
+    expect(service.releaseControl('u1', { userEmail: 'a@x' }).held).toBe(false);
+    expect(service.controlSnapshot('u1').held).toBe(false);
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'safety.control_release',
+        result: 'success',
+      }),
+    );
+  });
+
+  it('steals when control is free (no prior holder deadman drop)', async () => {
+    process.env.SAFE_ACTION_PIN = '1234';
+    const control = await service.stealControl('1234', 'u1', 'Alice');
+    expect(control.youHold).toBe(true);
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'safety.control_steal',
+        details: undefined,
+        result: 'success',
+      }),
+    );
+    delete process.env.SAFE_ACTION_PIN;
+  });
+
   it('ignores empty pulse and non-holder release (TP-37)', async () => {
+    claimAs('u1', 'Alice');
     service.pulseDeadman({ userId: '  ' });
     expect(service.snapshot().deadmanActive).toBe(false);
     service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
@@ -174,7 +246,7 @@ describe('SafetyStateService', () => {
       { primaryRegister: { kind: 'coil', address: 7 } },
       { primaryRegister: { kind: 'holding', address: 8 } },
     ]);
-    service.pulseDeadman({ userId: 'u1' });
+    pulseHeld();
     await service.tick();
     driver.writeCoil.mockClear();
     await service.releaseDeadman({ userId: 'u1' });
@@ -190,7 +262,7 @@ describe('SafetyStateService', () => {
     cells.find.mockResolvedValue([
       { primaryRegister: { kind: 'coil', address: 7 } },
     ]);
-    service.pulseDeadman({ userId: 'u1' });
+    pulseHeld();
     driver.writeCoil
       .mockRejectedValueOnce(new Error('link down'))
       .mockResolvedValue(undefined);
@@ -204,7 +276,7 @@ describe('SafetyStateService', () => {
 
   it('release returns early when PLC is disconnected', async () => {
     driver.isConnected.mockReturnValue(false);
-    service.pulseDeadman({ userId: 'u1' });
+    pulseHeld();
     driver.writeCoil.mockClear();
     await service.releaseDeadman({ userId: 'u1' });
     expect(service.canIssueMotion('u1')).toBe(false);
@@ -215,7 +287,7 @@ describe('SafetyStateService', () => {
     cells.find.mockResolvedValue([
       { primaryRegister: { kind: 'coil', address: 7 } },
     ]);
-    service.pulseDeadman({ userId: 'u1' });
+    pulseHeld();
     driver.writeCoil.mockRejectedValueOnce('boom');
     await service.releaseDeadman({ userId: 'u1' });
     expect(service.canIssueMotion('u1')).toBe(false);
@@ -292,7 +364,7 @@ describe('SafetyStateService', () => {
   });
 
   it('writes heartbeat and deadman coil while active', async () => {
-    service.pulseDeadman({ userId: 'u1' });
+    pulseHeld();
     const snap = await service.tick();
     expect(snap.mode).toBe('normal');
     expect(driver.writeRegister).toHaveBeenCalled();
@@ -304,7 +376,7 @@ describe('SafetyStateService', () => {
     jest.useFakeTimers();
     const now = Date.now();
     jest.setSystemTime(now);
-    service.pulseDeadman({ userId: 'u1' });
+    pulseHeld();
     jest.setSystemTime(now + 5000);
     await service.tick();
     expect(service.snapshot().deadmanActive).toBe(false);
@@ -371,11 +443,11 @@ describe('SafetyStateService', () => {
       { primaryRegister: { kind: 'holding', address: 8 } },
       { primaryRegister: null },
     ]);
-    service.pulseDeadman({ userId: 'u1' });
+    pulseHeld();
     jest.useFakeTimers();
     const now = Date.now();
     jest.setSystemTime(now);
-    service.pulseDeadman({ userId: 'u1' });
+    pulseHeld();
     jest.setSystemTime(now + 5000);
     await service.tick();
     expect(driver.writeCoil).toHaveBeenCalledWith(7, false);

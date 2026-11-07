@@ -162,7 +162,17 @@ export interface HmiLayout {
     deadmanActive: boolean;
     eStopActive: boolean;
     watchdogOk: boolean;
+    control?: ControlLease;
   };
+}
+
+/** FEAT-A5 exclusive Operator control lease. */
+export interface ControlLease {
+  held: boolean;
+  holderUserId: string | null;
+  holderDisplayName: string | null;
+  youHold: boolean;
+  expiresAt: string | null;
 }
 
 export interface LiveTags {

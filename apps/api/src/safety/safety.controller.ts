@@ -22,6 +22,7 @@ import {
   ResetEStopDto,
   SaveSafetyRolesDto,
 } from './dtos/save-safety-roles.dto';
+import { StealControlDto } from './dtos/steal-control.dto';
 
 @ApiTags('safety')
 @Controller('safety')
@@ -36,8 +37,66 @@ export class SafetyController {
   @Get()
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Current software safety snapshot' })
-  get() {
-    return this.safetyState.snapshot();
+  get(@Req() req: Request & { user: JwtPayload }) {
+    return this.safetyState.snapshot(req.user.sub);
+  }
+
+  @Get('control')
+  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Exclusive Operator control lease status (FEAT-A5)',
+  })
+  control(@Req() req: Request & { user: JwtPayload }) {
+    return this.safetyState.controlSnapshot(req.user.sub);
+  }
+
+  @Post('control/claim')
+  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Claim exclusive control when free (FEAT-A5)',
+  })
+  claimControl(@Req() req: Request & { user: JwtPayload }) {
+    const actor = auditActorFromRequest(req.user, req.ip);
+    return this.safetyState.claimControl(
+      req.user.sub,
+      req.user.displayName || req.user.email,
+      actor,
+    );
+  }
+
+  @Post('control/heartbeat')
+  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Keep exclusive control alive while Operator is open (FEAT-A5)',
+  })
+  heartbeatControl(@Req() req: Request & { user: JwtPayload }) {
+    return this.safetyState.heartbeatControl(req.user.sub);
+  }
+
+  @Post('control/release')
+  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Release exclusive control (FEAT-A5)' })
+  releaseControl(@Req() req: Request & { user: JwtPayload }) {
+    const actor = auditActorFromRequest(req.user, req.ip);
+    return this.safetyState.releaseControl(req.user.sub, actor);
+  }
+
+  @Post('control/steal')
+  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Steal exclusive control with reset PIN confirmation (FEAT-A5)',
+  })
+  stealControl(
+    @Body() body: StealControlDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    const actor = auditActorFromRequest(req.user, req.ip);
+    return this.safetyState.stealControl(
+      body.pin ?? '',
+      req.user.sub,
+      req.user.displayName || req.user.email,
+      actor,
+    );
   }
 
   @Get('roles')
