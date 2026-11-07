@@ -81,8 +81,7 @@ export function OpsScreen({
           <View className="mb-2">
             <Hint>
               [{normalizeAlarmSeverity(alarm.definition.severity)}]{' '}
-              {alarm.definition.name} —{' '}
-              {alarm.state} (value {alarm.value})
+              {alarm.definition.name} — {alarm.state} (value {alarm.value})
             </Hint>
             {alarm.state === 'active' ? (
               <View className="mt-1 flex-row gap-4">

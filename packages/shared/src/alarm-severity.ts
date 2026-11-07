@@ -17,6 +17,9 @@ export function normalizeAlarmSeverity(
   return DEFAULT_ALARM_SEVERITY;
 }
 
-export function alarmSeveritySelectOptions(): { value: AlarmSeverity; label: string }[] {
+export function alarmSeveritySelectOptions(): {
+  value: AlarmSeverity;
+  label: string;
+}[] {
   return ALARM_SEVERITIES.map((value) => ({ value, label: value }));
 }

@@ -74,9 +74,7 @@ export class AuthService implements OnModuleInit {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const plantPin = this.safeActionPin.plantPinFallback();
-    const safeActionPinHash = plantPin
-      ? await bcrypt.hash(plantPin, 12)
-      : null;
+    const safeActionPinHash = plantPin ? await bcrypt.hash(plantPin, 12) : null;
     await this.usersRepository.save(
       this.usersRepository.create({
         email,

@@ -137,8 +137,7 @@ export class AuthController {
   @HttpCode(200)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
-    summary:
-      'Set or change personal reset PIN (operator, supervisor, admin)',
+    summary: 'Set or change personal reset PIN (operator, supervisor, admin)',
   })
   changeSafeActionPin(
     @Body() body: ChangeSafeActionPinDto,

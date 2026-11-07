@@ -168,9 +168,9 @@ export function AccountMenu() {
             </SheetTitle>
             <SheetDescription>
               Used only to clear e-stop after STOP (not your login password).
-              Each operator, supervisor, and admin sets their own PIN (at least 4
-              characters). If you still use the plant default from install, enter
-              it as Current when changing.
+              Each operator, supervisor, and admin sets their own PIN (at least
+              4 characters). If you still use the plant default from install,
+              enter it as Current when changing.
             </SheetDescription>
           </SheetHeader>
           <form

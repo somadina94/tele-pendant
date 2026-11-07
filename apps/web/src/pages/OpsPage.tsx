@@ -124,49 +124,33 @@ export function OpsPage() {
                     a.definition.severity,
                   );
                   return (
-                  <TableRow key={a.id}>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          severity === 'critical'
-                            ? 'destructive'
-                            : 'secondary'
-                        }
-                      >
-                        {severity}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{a.definition.name}</TableCell>
-                    <TableCell>{a.state}</TableCell>
-                    <TableCell>{a.value}</TableCell>
-                    <TableCell>
-                      {a.state === 'active' ? (
-                        <HelpTip id="tour.ops.ack">
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                void apiPost(`/alarms/${a.id}/ack`)
-                                  .then(() => {
-                                    toastOk(t('ack'));
-                                    return alarms.refetch();
-                                  })
-                                  .catch((err: Error) => toastErr(err.message))
-                              }
-                            >
-                              <CheckCheck /> {t('ack')}
-                            </Button>
-                            {mayShelve ? (
+                    <TableRow key={a.id}>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            severity === 'critical'
+                              ? 'destructive'
+                              : 'secondary'
+                          }
+                        >
+                          {severity}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{a.definition.name}</TableCell>
+                      <TableCell>{a.state}</TableCell>
+                      <TableCell>{a.value}</TableCell>
+                      <TableCell>
+                        {a.state === 'active' ? (
+                          <HelpTip id="tour.ops.ack">
+                            <div className="flex gap-2">
                               <Button
                                 type="button"
                                 size="sm"
-                                variant="ghost"
+                                variant="outline"
                                 onClick={() =>
-                                  void apiPost(`/alarms/${a.id}/shelve`)
+                                  void apiPost(`/alarms/${a.id}/ack`)
                                     .then(() => {
-                                      toastOk(t('shelve'));
+                                      toastOk(t('ack'));
                                       return alarms.refetch();
                                     })
                                     .catch((err: Error) =>
@@ -174,30 +158,48 @@ export function OpsPage() {
                                     )
                                 }
                               >
-                                <Pause /> {t('shelve')}
+                                <CheckCheck /> {t('ack')}
                               </Button>
-                            ) : null}
-                          </div>
-                        </HelpTip>
-                      ) : a.state === 'shelved' && mayShelve ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            void apiPost(`/alarms/${a.id}/unshelve`)
-                              .then(() => {
-                                toastOk(t('unshelve'));
-                                return alarms.refetch();
-                              })
-                              .catch((err: Error) => toastErr(err.message))
-                          }
-                        >
-                          {t('unshelve')}
-                        </Button>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
+                              {mayShelve ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    void apiPost(`/alarms/${a.id}/shelve`)
+                                      .then(() => {
+                                        toastOk(t('shelve'));
+                                        return alarms.refetch();
+                                      })
+                                      .catch((err: Error) =>
+                                        toastErr(err.message),
+                                      )
+                                  }
+                                >
+                                  <Pause /> {t('shelve')}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </HelpTip>
+                        ) : a.state === 'shelved' && mayShelve ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              void apiPost(`/alarms/${a.id}/unshelve`)
+                                .then(() => {
+                                  toastOk(t('unshelve'));
+                                  return alarms.refetch();
+                                })
+                                .catch((err: Error) => toastErr(err.message))
+                            }
+                          >
+                            {t('unshelve')}
+                          </Button>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
               </TableBody>

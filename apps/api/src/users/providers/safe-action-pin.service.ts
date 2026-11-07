@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -63,7 +62,7 @@ export class SafeActionPinService {
     } else {
       const current = (currentPin ?? '').trim();
       if (current) {
-        const ok = await this.matchesPlantPin(current);
+        const ok = this.matchesPlantPin(current);
         if (!ok) {
           throw new UnauthorizedException('Current reset PIN is incorrect');
         }
