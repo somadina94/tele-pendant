@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="Yard overview schematic">
+  <rect width="640" height="360" fill="#0b1016"/>
+  <rect x="0" y="250" width="640" height="110" fill="#151b24"/>
+
+  <!-- Road / rails -->
+  <rect x="0" y="268" width="640" height="10" fill="#2a3340"/>
+  <rect x="0" y="290" width="640" height="10" fill="#2a3340"/>
+  <g stroke="#4a5666" stroke-width="2">
+    <line x1="40" y1="273" x2="40" y2="278"/>
+    <line x1="100" y1="273" x2="100" y2="278"/>
+    <line x1="160" y1="273" x2="160" y2="278"/>
+    <line x1="220" y1="273" x2="220" y2="278"/>
+    <line x1="280" y1="273" x2="280" y2="278"/>
+    <line x1="340" y1="273" x2="340" y2="278"/>
+    <line x1="400" y1="273" x2="400" y2="278"/>
+    <line x1="460" y1="273" x2="460" y2="278"/>
+    <line x1="520" y1="273" x2="520" y2="278"/>
+    <line x1="580" y1="273" x2="580" y2="278"/>
+  </g>
+
+  <!-- Warehouse -->
+  <rect x="40" y="120" width="160" height="130" fill="#243041"/>
+  <polygon points="40,120 120,70 200,120" fill="#334357"/>
+  <rect x="70" y="170" width="40" height="80" fill="#0f141c"/>
+  <rect x="130" y="150" width="45" height="35" fill="#7ec8e8" opacity="0.35"/>
+
+  <!-- Containers -->
+  <rect x="240" y="200" width="70" height="50" rx="2" fill="#3d7a6a"/>
+  <rect x="320" y="200" width="70" height="50" rx="2" fill="#7a5b3d"/>
+  <rect x="400" y="200" width="70" height="50" rx="2" fill="#3d5a7a"/>
+  <rect x="260" y="160" width="70" height="40" rx="2" fill="#5a7a3d"/>
+
+  <!-- Mobile crane silhouette -->
+  <rect x="500" y="210" width="90" height="40" rx="4" fill="#8a939f"/>
+  <rect x="520" y="190" width="28" height="20" fill="#6b7380"/>
+  <line x1="548" y1="190" x2="600" y2="120" stroke="#c5ced8" stroke-width="5"/>
+  <line x1="600" y1="120" x2="600" y2="195" stroke="#d7dee8" stroke-width="2"/>
+  <rect x="585" y="195" width="30" height="18" rx="2" fill="#6b8cae"/>
+
+  <text x="320" y="40" text-anchor="middle" fill="#9fb0c3" font-family="system-ui, sans-serif" font-size="14" letter-spacing="3">YARD OVERVIEW</text>
+  <text x="40" y="340" fill="#6a7788" font-family="system-ui, sans-serif" font-size="11">Sample plant graphic - FEAT-HMI</text>
+</svg>
