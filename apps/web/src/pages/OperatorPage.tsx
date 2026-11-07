@@ -349,6 +349,14 @@ export function OperatorPage() {
               <span className="plant-metric-unit">mm</span>
             </div>
             <div className="plant-metric">
+              <span className="plant-metric-label">Trolley</span>
+              <span className="plant-metric-value">
+                {tags?.trolleyPositionMm ??
+                  tagValueForRegister(tags, 'holding.trolleyPosition')}
+              </span>
+              <span className="plant-metric-unit">mm</span>
+            </div>
+            <div className="plant-metric">
               <span className="plant-metric-label">Load</span>
               <span className="plant-metric-value">{tags?.loadKg ?? '—'}</span>
               <span className="plant-metric-unit">kg</span>

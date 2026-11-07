@@ -207,12 +207,12 @@ From Operator, click **Config** (http://localhost:8080/admin). Sign in as the ad
 - **Real plant PLC:** full step-by-step (example IPs, ports, unit id, register addresses, and where to get each value from the machine) is in [REAL_PLC_WIRING.md](./REAL_PLC_WIRING.md).
 - **Cells (3 PLC addresses each):**
   - `[0,1] Hoist Up`; primary `coil.hoistUp` / feedback `discrete.motorRunning` / status `holding.hoistHeightMm`
-  - `[1,0] Trolley L`; primary `coil.trolleyLeft`
+  - `[1,0] Trolley L`; primary `coil.trolleyLeft` / feedback `discrete.motorRunning` / status `holding.trolleyPosition`
   - `[1,1] STOP`; primary `coil.eStop`
-  - `[1,2] Trolley R`; primary `coil.trolleyRight`
+  - `[1,2] Trolley R`; primary `coil.trolleyRight` / feedback `discrete.motorRunning` / status `holding.trolleyPosition`
   - `[2,1] Hoist Down`; primary `coil.hoistDown` / feedback `discrete.motorRunning` / status `holding.hoistHeightMm`
 - **Add a cell** is an empty form. Pick a primary register, fill the label, and click **Add cell**.
-- **Live labels** lists **Height**, **Load**, and **Motor** with **X**, **Y**, **Format**, and a register. Those three feed the fixed **cluster readout** on Operator (they do not float on the graphic). **Add a label** posts a free-position overlay (use X/Y for placement).
+- **Live labels** lists **Height**, **Load**, **Trolley**, and **Motor** with **X**, **Y**, **Format**, and a register. Those feed the fixed **cluster readout** on Operator (they do not float on the graphic). **Add a label** posts a free-position overlay (use X/Y for placement).
 - **Background** has **Name**, a CSS background, and an image URL. If the image URL is filled, Operator uses that picture. If it is empty, Operator uses the CSS background.
 - **Users** (admin only): table of accounts with **Name**, **Email**, **Role**, **Status** (**Active** / **Suspended**), and **Edit** / **Suspend** or **Activate** / **Remove** on operator and supervisor rows. The seeded **admin** row shows **Protected**; you cannot suspend or remove yourself. Below the table, **Add user** creates an operator or supervisor (display name, email, password at least 8 characters, role). **Success:** toast **Added** with the name or email. Suspended users cannot sign in until an admin **Activate**s them. Removing a user deletes the account.
 

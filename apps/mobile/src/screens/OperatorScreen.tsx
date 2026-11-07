@@ -352,6 +352,14 @@ export function OperatorScreen({ token }: { token: string }) {
                   unit: 'mm',
                 },
                 {
+                  label: 'Trolley',
+                  value: String(
+                    tags?.trolleyPositionMm ??
+                      tagValueForRegister(tags, 'holding.trolleyPosition'),
+                  ),
+                  unit: 'mm',
+                },
+                {
                   label: 'Load',
                   value: String(tags?.loadKg ?? '—'),
                   unit: 'kg',

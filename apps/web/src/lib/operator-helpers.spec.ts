@@ -27,6 +27,12 @@ describe('operator helpers', () => {
       tagValueForRegister({ ...tags, motorRunning: false }, 'motorRunning'),
     ).toBe('IDLE');
     expect(tagValueForRegister(tags, 'holding.speedPct')).toBe(55);
+    expect(
+      tagValueForRegister(
+        { ...tags, trolleyPositionMm: 90 },
+        'holding.trolleyPosition',
+      ),
+    ).toBe(90);
     expect(tagValueForRegister(tags, 'unknown')).toBe('—');
     expect(
       tagValueForRegister(

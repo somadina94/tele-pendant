@@ -55,6 +55,7 @@ export class HmiSeedService implements OnModuleInit {
     }
     await this.ensureRuntimeRegisters();
     await this.ensureTrolleyFeedback();
+    await this.ensureTrolleyOverlay();
     await this.ensureSafetyRoles();
   }
 
@@ -178,6 +179,11 @@ export class HmiSeedService implements OnModuleInit {
     return row;
   }
 
+  /**
+   * TP-15: Trolley L/R must show motor run/idle + trolley position on the
+   * matrix badges (same pattern as hoist height). Force-correct bindings so
+   * older DBs / wrong Config saves still light up on boot.
+   */
   private async ensureTrolleyFeedback(): Promise<void> {
     const motor = await this.registers.findOne({
       where: { name: 'discrete.motorRunning' },
@@ -187,22 +193,61 @@ export class HmiSeedService implements OnModuleInit {
     });
     if (!motor && !position) return;
     const rows = await this.cells.find({
-      relations: { primaryRegister: true },
+      relations: {
+        primaryRegister: true,
+        feedbackRegister: true,
+        statusRegister: true,
+      },
     });
     for (const cell of rows) {
       const name = cell.primaryRegister?.name;
       if (name !== 'coil.trolleyLeft' && name !== 'coil.trolleyRight') continue;
       let dirty = false;
-      if (motor && !cell.feedbackRegister) {
+      if (motor && cell.feedbackRegister?.id !== motor.id) {
         cell.feedbackRegister = motor;
         dirty = true;
       }
-      if (position && !cell.statusRegister) {
+      if (position && cell.statusRegister?.id !== position.id) {
         cell.statusRegister = position;
         dirty = true;
       }
       if (dirty) await this.cells.save(cell);
     }
+  }
+
+  /** TP-15: plant graphic gets a trolley travel overlay when missing. */
+  private async ensureTrolleyOverlay(): Promise<void> {
+    const position = await this.registers.findOne({
+      where: { name: 'holding.trolleyPosition' },
+    });
+    if (!position) return;
+    const background = await this.backgrounds.findOne({
+      where: { active: true },
+    });
+    if (!background) return;
+    const existing = await this.overlays.find({
+      where: { background: { id: background.id } },
+      relations: { register: true },
+    });
+    if (
+      existing.some(
+        (row) =>
+          row.register?.name === 'holding.trolleyPosition' ||
+          row.label.trim().toLowerCase() === 'trolley',
+      )
+    ) {
+      return;
+    }
+    await this.overlays.save(
+      this.overlays.create({
+        label: 'Trolley',
+        xPct: 72,
+        yPct: 48,
+        format: '{value} mm',
+        background,
+        register: position,
+      }),
+    );
   }
 
   private async ensureSafetyRoles(): Promise<void> {
@@ -277,6 +322,13 @@ export class HmiSeedService implements OnModuleInit {
       'bool',
       'r',
     );
+    const trolleyPosition = await this.upsertRegister(
+      'holding.trolleyPosition',
+      DEMO_CRANE_MAP.holdings.trolleyPosition,
+      'holding',
+      'uint16',
+      'r',
+    );
 
     const bg = await this.backgrounds.save(
       this.backgrounds.create({
@@ -313,15 +365,15 @@ export class HmiSeedService implements OnModuleInit {
         background: bg,
         register: motorRunning,
       }),
+      this.overlays.create({
+        label: 'Trolley',
+        xPct: 72,
+        yPct: 48,
+        format: '{value} mm',
+        background: bg,
+        register: trolleyPosition,
+      }),
     ]);
-
-    const trolleyPosition = await this.upsertRegister(
-      'holding.trolleyPosition',
-      DEMO_CRANE_MAP.holdings.trolleyPosition,
-      'holding',
-      'uint16',
-      'r',
-    );
 
     const cellDefs: Array<{
       row: number;

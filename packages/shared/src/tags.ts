@@ -2,6 +2,8 @@ export interface TagSnapshot {
   hoistHeightMm: number;
   loadKg: number;
   speedPct: number;
+  /** Demo / plant trolley travel (holding.trolleyPosition). */
+  trolleyPositionMm?: number;
   motorRunning: boolean;
   values?: Record<string, number | boolean>;
 }
@@ -19,6 +21,7 @@ export function isClusterMetricRegister(registerName?: string | null): boolean {
   return (
     registerName.includes('hoistHeight') ||
     registerName.includes('loadKg') ||
+    registerName.includes('trolleyPosition') ||
     registerName.includes('motorRunning')
   );
 }
@@ -37,6 +40,9 @@ export function tagValueForRegister(
   }
   if (registerName.includes('hoistHeight')) return tags.hoistHeightMm;
   if (registerName.includes('loadKg')) return tags.loadKg;
+  if (registerName.includes('trolleyPosition')) {
+    return tags.trolleyPositionMm ?? '—';
+  }
   if (registerName.includes('motorRunning'))
     return tags.motorRunning ? 'RUN' : 'IDLE';
   if (registerName.includes('speed')) return tags.speedPct;

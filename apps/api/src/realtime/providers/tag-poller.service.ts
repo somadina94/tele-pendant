@@ -63,6 +63,10 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
         'holding.speedPct',
         DEMO_CRANE_MAP.holdings.speedPct,
       );
+      const trolleyAddr = await this.plcService.addressFor(
+        'holding.trolleyPosition',
+        DEMO_CRANE_MAP.holdings.trolleyPosition,
+      );
       const motorAddr = await this.plcService.addressFor(
         'discrete.motorRunning',
         DEMO_CRANE_MAP.discretes.motorRunning,
@@ -78,6 +82,10 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
       const [height] = await driver.readHoldingRegisters(heightAddr, 1);
       const [loadKg] = await driver.readHoldingRegisters(loadAddr, 1);
       const [speed] = await driver.readHoldingRegisters(speedAddr, 1);
+      const [trolleyPosition] = await driver.readHoldingRegisters(
+        trolleyAddr,
+        1,
+      );
       const [motorRunning] = await driver.readDiscreteInputs(motorAddr, 1);
       const [fault] = await driver.readDiscreteInputs(faultAddr, 1);
       const [commsOk] = await driver.readDiscreteInputs(commsAddr, 1);
@@ -87,6 +95,7 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
         hoistHeightMm: height ?? 0,
         loadKg: loadKg ?? 0,
         speedPct: speed ?? 0,
+        trolleyPositionMm: trolleyPosition ?? 0,
         motorRunning: Boolean(motorRunning),
         fault: Boolean(fault),
         commsOk: Boolean(commsOk),

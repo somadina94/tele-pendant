@@ -44,15 +44,19 @@ setInterval(() => {
   }
 
   const canMove = deadman;
+  let speed = 0;
   if (canMove && up) {
     height = Math.min(5000, height + 25);
     setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.motorRunning, true);
+    speed = 70;
   } else if (canMove && down) {
     height = Math.max(0, height - 25);
     setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.motorRunning, true);
+    speed = 70;
   } else if (canMove && (left || right)) {
     setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.motorRunning, true);
-    travel = left ? Math.max(0, travel - 10) : Math.min(5000, travel + 10);
+    travel = left ? Math.max(0, travel - 25) : Math.min(5000, travel + 25);
+    speed = 70;
   } else {
     setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.motorRunning, false);
   }
@@ -65,6 +69,7 @@ setInterval(() => {
     travel,
     DEMO_CRANE_MAP.holdings.trolleyPosition * 2,
   );
+  buffers.holding.writeUInt16BE(speed, DEMO_CRANE_MAP.holdings.speedPct * 2);
 }, 200);
 
 netServer.listen(port, host, () => {

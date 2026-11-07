@@ -165,6 +165,7 @@ export interface LiveTags {
   hoistHeightMm: number;
   loadKg: number;
   speedPct: number;
+  trolleyPositionMm?: number;
   motorRunning: boolean;
   fault: boolean;
   commsOk: boolean;
