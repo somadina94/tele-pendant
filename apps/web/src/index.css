@@ -233,6 +233,33 @@
 }
 .matrix-cell {
   @apply flex min-h-11 w-full touch-none select-none flex-row flex-nowrap items-center justify-between gap-1.5 px-2.5 py-2 text-sm md:min-h-12 md:w-auto md:justify-center md:gap-1.5 md:px-2.5 md:py-2 md:text-sm lg:px-3;
+  /* FEAT-A1 colour tokens — always paired with .matrix-cell-state text. */
+  --matrix-state-idle-bg: hsl(210 40% 96%);
+  --matrix-state-idle-fg: hsl(215 25% 27%);
+  --matrix-state-idle-bd: hsl(214 32% 80%);
+  --matrix-state-running-bg: hsl(152 60% 92%);
+  --matrix-state-running-fg: hsl(160 84% 20%);
+  --matrix-state-running-bd: hsl(152 70% 40%);
+  --matrix-state-blocked-bg: hsl(38 92% 92%);
+  --matrix-state-blocked-fg: hsl(24 70% 28%);
+  --matrix-state-blocked-bd: hsl(32 95% 44%);
+  --matrix-state-fault-bg: hsl(271 70% 94%);
+  --matrix-state-fault-fg: hsl(271 60% 30%);
+  --matrix-state-fault-bd: hsl(271 65% 48%);
+}
+.dark .matrix-cell {
+  --matrix-state-idle-bg: hsl(217 33% 18%);
+  --matrix-state-idle-fg: hsl(210 40% 92%);
+  --matrix-state-idle-bd: hsl(215 25% 35%);
+  --matrix-state-running-bg: hsl(160 50% 16%);
+  --matrix-state-running-fg: hsl(152 70% 70%);
+  --matrix-state-running-bd: hsl(152 60% 40%);
+  --matrix-state-blocked-bg: hsl(32 45% 16%);
+  --matrix-state-blocked-fg: hsl(38 95% 70%);
+  --matrix-state-blocked-bd: hsl(32 90% 45%);
+  --matrix-state-fault-bg: hsl(271 40% 18%);
+  --matrix-state-fault-fg: hsl(271 80% 78%);
+  --matrix-state-fault-bd: hsl(271 55% 52%);
 }
 .matrix-cell-label {
   @apply shrink-0 whitespace-nowrap text-left font-semibold leading-none md:text-left;
@@ -240,8 +267,53 @@
 .matrix-cell-meta {
   @apply shrink-0 whitespace-nowrap text-right text-[10px] font-normal leading-none opacity-80 md:text-left md:text-[10px];
 }
-.matrix-cell.holding {
-  @apply ring-2 ring-emerald-500;
+.matrix-cell-state {
+  @apply inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide;
+}
+.matrix-cell.state-idle:not(.estop) {
+  background-color: var(--matrix-state-idle-bg) !important;
+  border-color: var(--matrix-state-idle-bd) !important;
+  color: var(--matrix-state-idle-fg) !important;
+}
+.matrix-cell.state-running:not(.estop) {
+  background-color: var(--matrix-state-running-bg) !important;
+  border-color: var(--matrix-state-running-bd) !important;
+  color: var(--matrix-state-running-fg) !important;
+  box-shadow: 0 0 0 2px var(--matrix-state-running-bd);
+}
+.matrix-cell.state-blocked:not(.estop) {
+  background-color: var(--matrix-state-blocked-bg) !important;
+  border-color: var(--matrix-state-blocked-bd) !important;
+  color: var(--matrix-state-blocked-fg) !important;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgb(0 0 0 / 0.06) 4px,
+    rgb(0 0 0 / 0.06) 8px
+  );
+}
+.matrix-cell.state-fault:not(.estop) {
+  background-color: var(--matrix-state-fault-bg) !important;
+  border-color: var(--matrix-state-fault-bd) !important;
+  color: var(--matrix-state-fault-fg) !important;
+  box-shadow: 0 0 0 2px var(--matrix-state-fault-bd);
+}
+.matrix-cell.state-idle .matrix-cell-state {
+  background: rgb(0 0 0 / 0.06);
+}
+.matrix-cell.state-running .matrix-cell-state {
+  background: rgb(0 0 0 / 0.08);
+}
+.matrix-cell.state-blocked .matrix-cell-state {
+  background: rgb(0 0 0 / 0.1);
+}
+.matrix-cell.state-fault .matrix-cell-state {
+  background: rgb(0 0 0 / 0.1);
+}
+.matrix-cell.estop .matrix-cell-state {
+  background: rgb(255 255 255 / 0.22);
+  color: #fff;
 }
 .matrix-cell.estop {
   @apply md:sticky md:top-0 md:z-[5];

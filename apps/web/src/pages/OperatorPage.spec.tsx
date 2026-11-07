@@ -632,4 +632,50 @@ describe('OperatorPage', () => {
     );
     expect(hoist).toHaveTextContent('Hoist Up');
   });
+
+  it('maps matrix cells through idle / running / blocked / fault (FEAT-A1)', async () => {
+    renderWithProviders(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    const stop = screen.getByRole('button', { name: 'STOP' });
+    expect(hoist).toHaveAttribute('data-cell-state', 'idle');
+    expect(hoist).toHaveTextContent(/idle/i);
+    expect(stop).toHaveAttribute('data-cell-state', 'idle');
+
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(hoist).toHaveAttribute('data-cell-state', 'running'),
+    );
+    expect(hoist).toHaveTextContent(/^[\s\S]*run[\s\S]*$/i);
+    fireEvent.pointerUp(hoist);
+
+    const safetyHandler = socket.on.mock.calls.find(
+      (c) => c[0] === 'safety.state',
+    )?.[1] as (p: unknown) => void;
+    const tagsHandler = socket.on.mock.calls.find(
+      (c) => c[0] === 'tags.update',
+    )?.[1] as (p: unknown) => void;
+
+    safetyHandler({
+      mode: 'e_stop',
+      deadmanActive: false,
+      eStopActive: true,
+      watchdogOk: true,
+    });
+    await waitFor(() =>
+      expect(hoist).toHaveAttribute('data-cell-state', 'blocked'),
+    );
+    expect(hoist).toHaveTextContent(/blocked/i);
+    expect(stop).toHaveAttribute('data-cell-state', 'running');
+
+    tagsHandler({
+      ...defaultTags,
+      fault: true,
+      at: new Date().toISOString(),
+    });
+    await waitFor(() =>
+      expect(hoist).toHaveAttribute('data-cell-state', 'fault'),
+    );
+    expect(hoist).toHaveTextContent(/fault/i);
+  });
 });

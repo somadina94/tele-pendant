@@ -5,6 +5,9 @@ export interface TagSnapshot {
   /** Demo / plant trolley travel (holding.trolleyPosition). */
   trolleyPositionMm?: number;
   motorRunning: boolean;
+  /** Plant fault discrete when present (FEAT-A1). */
+  fault?: boolean;
+  commsOk?: boolean;
   values?: Record<string, number | boolean>;
 }
 

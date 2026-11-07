@@ -12,7 +12,10 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import {
   isOperatorScreenReady,
+  MATRIX_CELL_STATE_CODE,
+  MATRIX_CELL_STATE_I18N,
   operatorNeedsLiveTags,
+  resolveMatrixCellUiState,
   tagValueForRegister,
   type TagSnapshot,
 } from '@tele-pendant/shared';
@@ -22,9 +25,15 @@ import { apiGet, apiPost, getApiBase } from '../api';
 import type { Cell, Layout } from '../types';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
-import { ESTOP, operatorCell } from '../hmi-styles';
+import { ESTOP, matrixCellStatePalette } from '../hmi-styles';
 import { useTheme } from '../theme';
 import { Banner, Card, showErrorAlert } from '../ui';
+
+type SafetySnap = {
+  mode: string;
+  eStopActive?: boolean;
+  watchdogOk?: boolean;
+};
 
 function statusTone(mode: string): 'ok' | 'warn' | 'danger' {
   if (mode === 'safe_state' || mode === 'estop' || mode === 'e_stop') {
@@ -37,10 +46,10 @@ function statusTone(mode: string): 'ok' | 'warn' | 'danger' {
 export function OperatorScreen({ token }: { token: string }) {
   const { t, terror } = useLocale();
   const { theme } = useTheme();
-  const cellPalette = operatorCell(theme === 'dark');
+  const statePalette = matrixCellStatePalette(theme === 'dark');
   const [pin, setPin] = useState('');
   const [holdingId, setHoldingId] = useState<string | null>(null);
-  const [safetyMode, setSafetyMode] = useState('unknown');
+  const [safety, setSafety] = useState<SafetySnap>({ mode: 'unknown' });
   const [height, setHeight] = useState<number | null>(null);
   const [tags, setTags] = useState<TagSnapshot | null>(null);
   const [photoOk, setPhotoOk] = useState(true);
@@ -67,7 +76,7 @@ export function OperatorScreen({ token }: { token: string }) {
       auth: token ? { token } : {},
     });
     socketRef.current = socket;
-    socket.on('safety.state', (s: { mode: string }) => setSafetyMode(s.mode));
+    socket.on('safety.state', (s: SafetySnap) => setSafety(s));
     socket.on('tags.update', (payload: TagSnapshot) => {
       if (typeof payload.hoistHeightMm === 'number') {
         setHeight(payload.hoistHeightMm);
@@ -220,6 +229,7 @@ export function OperatorScreen({ token }: { token: string }) {
   // RN View only accepts solid colors (not CSS gradients).
   const solidBackground =
     cssBackground && !/[()]/.test(cssBackground) ? cssBackground : '';
+  const safetyMode = safety.mode;
   const tone = statusTone(safetyMode);
   useEffect(() => {
     setPhotoOk(true);
@@ -432,29 +442,37 @@ export function OperatorScreen({ token }: { token: string }) {
               grid.cells.map((cell) => {
                 if (!cell) return null;
                 const isEstop = cell.style === 'estop';
-                const holding = holdingId === cell.id;
-                const labelColor = isEstop
-                  ? ESTOP.foreground
-                  : cellPalette.foreground;
+                const cellState = resolveMatrixCellUiState({
+                  style: cell.style,
+                  isMotion: cell.isMotion,
+                  isHolding: holdingId === cell.id,
+                  safety,
+                  tags,
+                  statusRegisterName: cell.statusRegister?.name,
+                });
+                const palette = isEstop
+                  ? {
+                      background: ESTOP.background,
+                      border: ESTOP.border,
+                      foreground: ESTOP.foreground,
+                      chip: 'rgba(255,255,255,0.22)',
+                    }
+                  : statePalette[cellState];
+                const stateLabel = t(MATRIX_CELL_STATE_I18N[cellState]);
                 const metaColor = isEstop
                   ? 'rgba(255,255,255,0.85)'
-                  : cellPalette.meta;
+                  : palette.foreground;
                 return (
                   <Pressable
                     key={cell.id}
                     accessibilityRole="button"
                     accessibilityLabel={cell.label}
+                    accessibilityHint={`${MATRIX_CELL_STATE_CODE[cellState]}: ${stateLabel}`}
                     className="min-h-16 w-full flex-row flex-nowrap items-center justify-between gap-2 rounded-md border px-3 py-3.5"
                     style={{
-                      backgroundColor: isEstop
-                        ? ESTOP.background
-                        : cellPalette.background,
-                      borderColor: holding
-                        ? '#3dd68c'
-                        : isEstop
-                          ? ESTOP.border
-                          : cellPalette.border,
-                      borderWidth: holding ? 2 : 1,
+                      backgroundColor: palette.background,
+                      borderColor: palette.border,
+                      borderWidth: cellState === 'running' && !isEstop ? 2 : 1,
                     }}
                     onPressIn={() => {
                       void pressCell(cell);
@@ -466,9 +484,19 @@ export function OperatorScreen({ token }: { token: string }) {
                     <Text
                       numberOfLines={1}
                       className="shrink-0 text-base font-semibold"
-                      style={{ color: labelColor }}
+                      style={{ color: palette.foreground }}
                     >
                       {cell.label}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                      style={{
+                        color: palette.foreground,
+                        backgroundColor: palette.chip,
+                      }}
+                    >
+                      {MATRIX_CELL_STATE_CODE[cellState]} · {stateLabel}
                     </Text>
                     {cell.feedbackRegister || cell.statusRegister ? (
                       <Text

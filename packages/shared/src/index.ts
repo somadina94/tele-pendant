@@ -29,6 +29,17 @@ export {
 export { isOperatorScreenReady, operatorNeedsLiveTags } from './operator-ready';
 export type { OperatorLayoutLike } from './operator-ready';
 export type { TagSnapshot } from './tags';
+export {
+  MATRIX_CELL_STATE_CODE,
+  MATRIX_CELL_STATE_I18N,
+  resolveMatrixCellUiState,
+} from './matrix-cell-state';
+export type {
+  MatrixCellSafetyLike,
+  MatrixCellStateInput,
+  MatrixCellTagsLike,
+  MatrixCellUiState,
+} from './matrix-cell-state';
 export { tourStepsFor } from './tour';
 export type { TourScreen } from './tour';
 export { ASSISTANT_SUGGESTION_GROUPS } from './assistant-suggestions';

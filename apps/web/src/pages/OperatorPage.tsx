@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Ban, Circle, Play, ShieldAlert } from 'lucide-react';
 import { apiGet, apiPost, CellDto, HmiLayout, LiveTags } from '../lib/api';
 import { useT } from '../lib/i18n';
 import {
@@ -10,7 +10,11 @@ import {
 } from '../lib/operator-helpers';
 import {
   isOperatorScreenReady,
+  MATRIX_CELL_STATE_CODE,
+  MATRIX_CELL_STATE_I18N,
   operatorNeedsLiveTags,
+  resolveMatrixCellUiState,
+  type MatrixCellUiState,
 } from '@tele-pendant/shared';
 import { getRealtimeSocket } from '../lib/realtime';
 import { HelpTip } from '../lib/tour';
@@ -22,6 +26,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+
+const CELL_STATE_ICON: Record<MatrixCellUiState, typeof Circle> = {
+  idle: Circle,
+  running: Play,
+  blocked: Ban,
+  fault: AlertTriangle,
+};
 
 function pointerLeftElement(
   element: Element,
@@ -426,17 +437,37 @@ export function OperatorPage() {
                 gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
               }}
             >
-              {grid.cells.map((cell, idx) =>
-                cell ? (
+              {grid.cells.map((cell, idx) => {
+                if (!cell) {
+                  return (
+                    <div
+                      key={`empty-${idx}`}
+                      className="matrix-grid-hole"
+                      aria-hidden
+                    />
+                  );
+                }
+                const cellState = resolveMatrixCellUiState({
+                  style: cell.style,
+                  isMotion: cell.isMotion,
+                  isHolding: holdingCellId === cell.id,
+                  safety: safety ?? layout.safety,
+                  tags,
+                  statusRegisterName: cell.statusRegister?.name,
+                });
+                const StateIcon = CELL_STATE_ICON[cellState];
+                const stateLabel = t(MATRIX_CELL_STATE_I18N[cellState]);
+                return (
                   <Button
                     key={cell.id}
                     type="button"
                     variant={
                       cell.style === 'estop' ? 'destructive' : 'secondary'
                     }
+                    data-cell-state={cellState}
                     className={cn(
                       'matrix-cell h-auto',
-                      holdingCellId === cell.id && 'holding',
+                      `state-${cellState}`,
                       cell.style === 'estop' && 'estop',
                     )}
                     onPointerDown={(e) => {
@@ -471,8 +502,14 @@ export function OperatorPage() {
                       }
                     }}
                     aria-label={cell.label}
+                    aria-description={`${MATRIX_CELL_STATE_CODE[cellState]}: ${stateLabel}`}
+                    title={`${MATRIX_CELL_STATE_CODE[cellState]} · ${stateLabel}`}
                   >
                     <span className="matrix-cell-label">{cell.label}</span>
+                    <span className="matrix-cell-state">
+                      <StateIcon className="size-2.5" strokeWidth={2.5} />
+                      {stateLabel}
+                    </span>
                     {(cell.feedbackRegister || cell.statusRegister) && (
                       <span className="matrix-cell-meta">
                         {cell.feedbackRegister
@@ -497,14 +534,8 @@ export function OperatorPage() {
                       </span>
                     )}
                   </Button>
-                ) : (
-                  <div
-                    key={`empty-${idx}`}
-                    className="matrix-grid-hole"
-                    aria-hidden
-                  />
-                ),
-              )}
+                );
+              })}
             </div>
           </HelpTip>
           <HelpTip id="tour.operator.holdHint">
