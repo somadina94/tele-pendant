@@ -187,23 +187,34 @@ export function PageTourBar({ screen }: { screen: TourScreen }) {
   );
 }
 
-export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
+export function HelpTip({
+  id,
+  children,
+  className,
+}: {
+  id: string;
+  children: ReactNode;
+  className?: string;
+}) {
   const { enabled, currentStepId } = useTour();
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const highlighted = currentStepId === id;
 
-  if (!enabled) return <>{children}</>;
+  if (!enabled) {
+    return className ? <div className={className}>{children}</div> : <>{children}</>;
+  }
 
   return (
     <div
       className={cn(
         'relative',
+        className,
         highlighted && 'rounded-md ring-2 ring-ring ring-offset-2',
       )}
       data-tour-id={id}
     >
-      <div>{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
       <TooltipProvider>
         <Tooltip open={highlighted ? false : open} onOpenChange={setOpen}>
           <TooltipTrigger asChild>

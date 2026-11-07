@@ -656,7 +656,10 @@ export function OperatorPage() {
               ))}
             </div>
           ) : null}
-          <HelpTip id="tour.operator.graphic">
+          <HelpTip
+            id="tour.operator.graphic"
+            className="operator-plant-slot"
+          >
             <div
               className="plant-graphic"
               data-feat="hmi-graphic"

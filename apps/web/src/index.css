@@ -140,9 +140,14 @@
   @apply flex min-h-0 w-full flex-1 flex-col gap-1.5 md:gap-2;
 }
 
-/* HMI plant graphic — primary visual; grows on desktop, controls stay compact. */
+/* Grows so the matrix sits on STOP with no dead gap underneath. */
+.operator-plant-slot {
+  @apply flex min-h-0 w-full flex-1 flex-col;
+}
+
+/* HMI plant graphic — fills the plant slot; controls stay natural height below. */
 .plant-graphic {
-  @apply relative isolate h-[11rem] max-h-[11rem] min-h-0 w-full shrink-0 overflow-hidden rounded-xl border border-white/10 md:h-auto md:max-h-none md:min-h-[14rem] md:flex-1 md:rounded-2xl;
+  @apply relative isolate h-[11rem] max-h-[11rem] min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-white/10 md:h-full md:max-h-none md:min-h-[16rem] md:rounded-2xl;
   background:
     radial-gradient(120% 80% at 50% 110%, rgba(120, 160, 190, 0.18), transparent 55%),
     radial-gradient(90% 70% at 50% -10%, rgba(255, 255, 255, 0.08), transparent 50%),
@@ -377,7 +382,7 @@
   @apply flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden md:gap-2;
 }
 .operator-matrix-card {
-  @apply flex min-h-0 w-full shrink-0 flex-col overflow-hidden;
+  @apply mt-auto flex min-h-0 w-full shrink-0 flex-col overflow-hidden;
 }
 .operator-matrix-toolbar-wrap {
   @apply flex flex-col gap-1 overflow-y-auto md:gap-1.5;
@@ -388,9 +393,7 @@
 /* TP-25 + FEAT-A3: short viewports shrink plant; never drop cells below 44px. */
 @media (min-width: 768px) and (max-height: 800px) {
   .plant-graphic {
-    flex: 1 1 auto;
-    min-height: 11rem;
-    max-height: none;
+    min-height: 12rem;
   }
   .plant-cluster-chrome {
     padding-top: 0.4rem;
@@ -421,14 +424,21 @@
 }
 @media (min-width: 768px) and (max-height: 700px) {
   .plant-graphic {
-    min-height: 9rem;
+    min-height: 10rem;
   }
 }
 @media (max-width: 767px) {
+  .operator-plant-slot {
+    flex: none;
+  }
   .plant-graphic {
     height: 10rem;
     max-height: 10rem;
     min-height: 10rem;
+    flex: none;
+  }
+  .operator-matrix-card {
+    margin-top: 0;
   }
 }
 .matrix-cell.estop,
