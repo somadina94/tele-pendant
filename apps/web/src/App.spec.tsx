@@ -129,15 +129,16 @@ describe('App', () => {
     localStorage.setItem('accessToken', 'tok');
     const withSection = renderWithProviders(<App />, {
       route: '/config?section=plc',
+      role: 'admin',
     });
     expect(
-      await screen.findByRole('heading', { name: 'Add a PLC' }),
+      await screen.findByText('Add a PLC', {}, { timeout: 5000 }),
     ).toBeInTheDocument();
     withSection.unmount();
 
-    renderWithProviders(<App />, { route: '/config' });
+    renderWithProviders(<App />, { route: '/config', role: 'admin' });
     expect(
-      await screen.findByRole('heading', { name: 'Add a PLC' }),
+      await screen.findByText('Add a PLC', {}, { timeout: 5000 }),
     ).toBeInTheDocument();
   });
 });

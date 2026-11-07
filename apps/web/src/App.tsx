@@ -100,6 +100,7 @@ export function App() {
             </RequireRole>
           }
         />
+        <Route path="/config" element={<ConfigAliasRedirect />} />
         <Route path="/config/*" element={<ConfigAliasRedirect />} />
         <Route path="/ops" element={<OpsPage />} />
         <Route path="/media" element={<MediaPage />} />

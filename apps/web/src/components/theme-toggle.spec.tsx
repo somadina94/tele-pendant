@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 
 const setTheme = vi.fn();
 
-vi.mock('next-themes', () => ({
+vi.mock('@/components/theme-provider', () => ({
   useTheme: () => ({
     resolvedTheme: 'light',
     theme: 'light',

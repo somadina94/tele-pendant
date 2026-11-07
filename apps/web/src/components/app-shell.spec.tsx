@@ -12,9 +12,10 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 
-vi.mock('next-themes', async () => {
-  const actual =
-    await vi.importActual<typeof import('next-themes')>('next-themes');
+vi.mock('@/components/theme-provider', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/components/theme-provider')
+  >('@/components/theme-provider');
   return {
     ...actual,
     useTheme: () => ({
@@ -57,16 +58,6 @@ describe('shell chrome', () => {
   });
 
   it('toggles theme and sidebar including keyboard and logout', async () => {
-    const setTheme = vi.fn();
-    vi.doMock('next-themes', () => ({
-      useTheme: () => ({
-        resolvedTheme: 'light',
-        setTheme,
-        theme: 'light',
-      }),
-      ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
-    }));
-
     renderWithProviders(
       <Routes>
         <Route element={<AppShell />}>

@@ -89,7 +89,7 @@ import {
 } from './tooltip';
 import { ThemeProvider } from '@/components/theme-provider';
 
-vi.mock('next-themes', () => ({
+vi.mock('@/components/theme-provider', () => ({
   useTheme: () => ({
     theme: 'system',
     setTheme: vi.fn(),

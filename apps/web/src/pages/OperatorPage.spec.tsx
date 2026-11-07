@@ -431,6 +431,21 @@ describe('OperatorPage', () => {
     );
   });
 
+  it('still starts hold when setPointerCapture throws (TP-31)', async () => {
+    renderWithProviders(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    HTMLElement.prototype.setPointerCapture = vi.fn(() => {
+      throw new DOMException('InvalidStateError');
+    });
+    HTMLElement.prototype.releasePointerCapture = vi.fn(() => {
+      throw new DOMException('InvalidStateError');
+    });
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => true);
+    fireEvent.pointerDown(hoist);
+    await waitFor(() => expect(api.apiPost).toHaveBeenCalled());
+    fireEvent.pointerUp(hoist);
+  });
+
   it('releases a motion cell if the pointer is up before the press returns', async () => {
     let finishPress: (value: unknown) => void = () => undefined;
     vi.spyOn(api, 'apiPost').mockImplementation(async (path, body) => {

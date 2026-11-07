@@ -37,16 +37,30 @@ function pointerLeftElement(
   );
 }
 
+function trySetPointerCapture(target: HTMLElement, pointerId: number): void {
+  try {
+    if (typeof target.setPointerCapture === 'function') {
+      target.setPointerCapture(pointerId);
+    }
+  } catch {
+    // TP-31: touch/synthetic pointers can throw InvalidStateError.
+  }
+}
+
 function releasePointerIfCaptured(
   target: HTMLElement,
   pointerId: number,
 ): void {
-  if (
-    typeof target.releasePointerCapture === 'function' &&
-    typeof target.hasPointerCapture === 'function' &&
-    target.hasPointerCapture(pointerId)
-  ) {
-    target.releasePointerCapture(pointerId);
+  try {
+    if (
+      typeof target.releasePointerCapture === 'function' &&
+      typeof target.hasPointerCapture === 'function' &&
+      target.hasPointerCapture(pointerId)
+    ) {
+      target.releasePointerCapture(pointerId);
+    }
+  } catch {
+    // TP-31: release can throw if capture was never held.
   }
 }
 
@@ -427,11 +441,7 @@ export function OperatorPage() {
                     )}
                     onPointerDown={(e) => {
                       e.preventDefault();
-                      if (
-                        typeof e.currentTarget.setPointerCapture === 'function'
-                      ) {
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                      }
+                      trySetPointerCapture(e.currentTarget, e.pointerId);
                       void pressCell(cell);
                     }}
                     onPointerMove={(e) => {
