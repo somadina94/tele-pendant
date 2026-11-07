@@ -17,7 +17,7 @@ Authorization: Bearer {{accessToken}}
 GET {{baseUrl}}/api/{{apiVersion}}/plc/holding/0
 Authorization: Bearer {{accessToken}}
 
-### Write deadman coil ON
+### Write deadman coil ON (admin maintenance only — TP-36)
 # @name deadmanOn
 POST {{baseUrl}}/api/{{apiVersion}}/plc/coil
 Authorization: Bearer {{accessToken}}
@@ -26,4 +26,15 @@ Content-Type: application/json
 {
   "address": 10,
   "value": true
+}
+
+### Write holding (admin maintenance only — TP-36)
+# @name writeHolding
+POST {{baseUrl}}/api/{{apiVersion}}/plc/holding
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "address": 0,
+  "value": 100
 }
