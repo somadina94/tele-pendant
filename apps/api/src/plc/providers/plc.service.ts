@@ -36,6 +36,9 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
   private lastConnectionId: string | null = null;
   private lastError: string | null = null;
   private reconnecting: Promise<void> | null = null;
+  /** Bumped on every intentional connect/disconnect so poller reconnect cannot race a swap (TP-41). */
+  private connectGeneration = 0;
+  private connectInFlight: Promise<PlcHealth> | null = null;
   private addressCacheAt = 0;
   private addressCache = new Map<string, number>();
 
@@ -177,6 +180,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
         );
       }
     } else if (this.active?.id === saved.id) {
+      this.connectGeneration += 1;
       await this.getDriver().disconnect();
       this.activeProtocol = 'modbus-tcp';
       this.active = null;
@@ -247,8 +251,24 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
   }
 
   async connect(id: string): Promise<PlcHealth> {
+    const generation = ++this.connectGeneration;
+    const work = this.performConnect(id, generation).finally(() => {
+      if (this.connectInFlight === work) this.connectInFlight = null;
+    });
+    this.connectInFlight = work;
+    return work;
+  }
+
+  private async performConnect(
+    id: string,
+    generation: number,
+  ): Promise<PlcHealth> {
     const connection = await this.connections.findOneByOrFail({ id });
+    if (generation !== this.connectGeneration) return this.health();
+
     await this.getDriver().disconnect();
+    if (generation !== this.connectGeneration) return this.health();
+
     this.activeProtocol = 'modbus-tcp';
     try {
       if (connection.protocol === 'opcua') {
@@ -264,6 +284,10 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
           host: connection.host,
           port: connection.port,
         });
+        if (generation !== this.connectGeneration) {
+          await this.opc.disconnect();
+          return this.health();
+        }
         this.activeProtocol = 'opcua';
       } else {
         await this.driver.connect({
@@ -272,6 +296,10 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
           unitId: connection.unitId,
           timeoutMs: 3000,
         });
+        if (generation !== this.connectGeneration) {
+          await this.driver.disconnect();
+          return this.health();
+        }
       }
       this.active = connection;
       this.lastConnectionId = connection.id;
@@ -282,6 +310,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
       }
       await this.connections.save(all);
     } catch (err) {
+      if (generation !== this.connectGeneration) return this.health();
       this.activeProtocol = 'modbus-tcp';
       this.active = null;
       this.lastError = err instanceof Error ? err.message : 'connect failed';
@@ -293,9 +322,15 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
   /**
    * The TCP client does not reconnect after the simulator restarts.
    * The poller calls this whenever the socket is down.
+   * TP-41: wait out an in-flight Use-this-PLC connect instead of starting a
+   * second reconnect that fights the swap.
    */
   async reconnectIfNeeded(): Promise<void> {
     if (this.getDriver().isConnected()) return;
+    if (this.connectInFlight) {
+      await this.connectInFlight.catch(() => undefined);
+      return;
+    }
     if (!this.reconnecting) {
       this.reconnecting = this.tryReconnect().finally(() => {
         this.reconnecting = null;
@@ -305,6 +340,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async tryReconnect(): Promise<void> {
+    const generation = this.connectGeneration;
     try {
       let id = this.lastConnectionId ?? this.active?.id ?? null;
       if (!id) {
@@ -315,6 +351,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
         id = enabled?.id ?? null;
       }
       if (!id) return;
+      if (generation !== this.connectGeneration) return;
       await this.connect(id);
       this.logger.log('PLC reconnected');
     } catch (err) {

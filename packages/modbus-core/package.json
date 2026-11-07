@@ -32,7 +32,8 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "memory-driver.ts"
+      "memory-driver.ts",
+      "tcp-driver.ts"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",

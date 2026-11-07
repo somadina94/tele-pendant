@@ -199,6 +199,116 @@ describe('PlcService configuration', () => {
     ).rejects.toThrow(/did not connect: connect failed/);
   });
 
+  it('skips poller reconnect while a Use-this-PLC connect is still open (TP-41)', async () => {
+    jest.spyOn(service.getDriver(), 'isConnected').mockReturnValue(false);
+    type Health = {
+      connected: boolean;
+      connectionId: string | null;
+      label: string | null;
+      host: string | null;
+      port: number | null;
+      lastError: string | null;
+    };
+    let resolveConnect!: (value: Health) => void;
+    const connectPromise = new Promise<Health>((resolve) => {
+      resolveConnect = resolve;
+    });
+    const perform = jest
+      .spyOn(
+        service as unknown as {
+          performConnect: (id: string, generation: number) => Promise<Health>;
+        },
+        'performConnect',
+      )
+      .mockReturnValue(connectPromise);
+
+    const first = service.connect('a');
+    const wait = service.reconnectIfNeeded();
+    resolveConnect({
+      connected: true,
+      connectionId: 'a',
+      label: 'a',
+      host: '1',
+      port: 502,
+      lastError: null,
+    });
+    await first;
+    await wait;
+    expect(perform).toHaveBeenCalledTimes(1);
+  });
+
+  it('abandons a superseded connect when a newer swap starts (TP-41)', async () => {
+    connections.findOneByOrFail.mockImplementation(
+      async ({ id }: { id: string }) => ({
+        id,
+        label: id,
+        host: '10.0.0.8',
+        port: 502,
+        unitId: 1,
+        protocol: 'modbus-tcp',
+      }),
+    );
+    jest.spyOn(service.getDriver(), 'disconnect').mockResolvedValue(undefined);
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const driverConnect = jest
+      .spyOn(
+        (
+          service as unknown as {
+            driver: { connect: (o: unknown) => Promise<void> };
+          }
+        ).driver,
+        'connect',
+      )
+      .mockImplementation(async () => {
+        if (driverConnect.mock.calls.length === 1) await firstGate;
+      });
+
+    const first = service.connect('old');
+    const second = service.connect('new');
+    releaseFirst();
+    await first;
+    await second;
+    expect(driverConnect.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(
+      (service as unknown as { active: { id: string } | null }).active?.id,
+    ).toBe('new');
+  });
+
+  it('coalesces reconnect attempts when the socket is down', async () => {
+    const isConnected = jest
+      .spyOn(service.getDriver(), 'isConnected')
+      .mockReturnValue(false);
+    connections.findOne.mockResolvedValue({ id: 'sim' });
+    const connect = jest
+      .spyOn(service, 'connect')
+      .mockImplementation(async () => {
+        isConnected.mockReturnValue(true);
+        return {
+          connected: true,
+          connectionId: 'sim',
+          label: 'sim',
+          host: '127.0.0.1',
+          port: 1502,
+          lastError: null,
+        };
+      });
+    await Promise.all([
+      service.reconnectIfNeeded(),
+      service.reconnectIfNeeded(),
+    ]);
+    expect(connect).toHaveBeenCalledTimes(1);
+    await service.reconnectIfNeeded();
+    expect(connect).toHaveBeenCalledTimes(1);
+
+    isConnected.mockReturnValue(false);
+    connect.mockRejectedValueOnce(new Error('down'));
+    await service.reconnectIfNeeded();
+    expect(connect).toHaveBeenCalledTimes(2);
+  });
+
   it('reads register addresses from the database and refreshes after a save', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));

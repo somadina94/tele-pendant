@@ -4,64 +4,85 @@ import { ModbusConnectionOptions, ModbusDriver } from './driver.interface';
 
 /**
  * Modbus TCP client driver (jsmodbus).
+ *
+ * TP-41: each connect/disconnect bumps `generation` so a superseded socket's
+ * delayed `close`/`error` cannot clear `connected` on the active session.
  */
 export class TcpModbusDriver implements ModbusDriver {
   private socket: net.Socket | null = null;
   private client: InstanceType<typeof Modbus.client.TCP> | null = null;
   private connected = false;
+  private generation = 0;
 
   async connect(options: ModbusConnectionOptions): Promise<void> {
-    if (this.connected) {
-      await this.disconnect();
-    }
+    await this.disconnect();
+    const generation = ++this.generation;
 
     const socket = new net.Socket();
     const client = new Modbus.client.TCP(socket, options.unitId);
     const timeoutMs = options.timeoutMs ?? 3000;
 
-    await new Promise<void>((resolve, reject) => {
-      const onError = (err: Error) => {
-        cleanup();
-        reject(err);
-      };
-      const onConnect = () => {
-        cleanup();
-        this.connected = true;
-        resolve();
-      };
-      const timer = setTimeout(() => {
-        cleanup();
-        socket.destroy();
-        reject(
-          new Error(
-            `Modbus connect timeout to ${options.host}:${options.port}`,
-          ),
-        );
-      }, timeoutMs);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onError = (err: Error) => {
+          cleanup();
+          reject(err);
+        };
+        const onConnect = () => {
+          cleanup();
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          cleanup();
+          socket.destroy();
+          reject(
+            new Error(
+              `Modbus connect timeout to ${options.host}:${options.port}`,
+            ),
+          );
+        }, timeoutMs);
 
-      const cleanup = () => {
-        clearTimeout(timer);
-        socket.off('error', onError);
-        socket.off('connect', onConnect);
-      };
+        const cleanup = () => {
+          clearTimeout(timer);
+          socket.off('error', onError);
+          socket.off('connect', onConnect);
+        };
 
-      socket.once('error', onError);
-      socket.once('connect', onConnect);
-      socket.connect({ host: options.host, port: options.port });
-    });
+        socket.once('error', onError);
+        socket.once('connect', onConnect);
+        socket.connect({ host: options.host, port: options.port });
+      });
+    } catch (err) {
+      if (this.generation === generation) {
+        this.connected = false;
+        this.socket = null;
+        this.client = null;
+      }
+      socket.destroy();
+      throw err;
+    }
+
+    if (this.generation !== generation) {
+      socket.destroy();
+      throw new Error('Modbus connect superseded');
+    }
 
     socket.on('close', () => {
+      if (this.generation !== generation || this.socket !== socket) return;
       this.connected = false;
     });
     socket.on('error', () => {
+      if (this.generation !== generation || this.socket !== socket) return;
       this.connected = false;
     });
 
     this.socket = socket;
     this.client = client;
+    this.connected = true;
   }
 
   async disconnect(): Promise<void> {
+    this.generation += 1;
     const socket = this.socket;
     this.socket = null;
     this.client = null;
