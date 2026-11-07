@@ -351,6 +351,14 @@ describe('AlarmEngineService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
     registers.findOneBy.mockResolvedValue({ id: 'r', kind: 'holding' });
     await service.createDefinition({ name: 'Plain', registerId: 'r' });
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'alarm.create',
+        resource: 'Plain',
+        details: expect.stringContaining('severity=warning'),
+        result: 'success',
+      }),
+    );
     const created = await service.createDefinition({
       name: ' High ',
       registerId: 'r',
@@ -370,6 +378,14 @@ describe('AlarmEngineService', () => {
       enabled: true,
     });
     expect(named.compareOp).toBe('gt');
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'alarm.create',
+        resource: 'Load',
+        details: expect.stringContaining('severity=critical'),
+        result: 'success',
+      }),
+    );
 
     definitions.findOneBy.mockResolvedValue(null);
     await expect(
@@ -390,6 +406,14 @@ describe('AlarmEngineService', () => {
     };
     definitions.findOneBy.mockResolvedValue(row);
     await service.updateDefinition('d2', {});
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'alarm.update',
+        resource: 'Load',
+        details: expect.stringContaining('severity=warning'),
+        result: 'success',
+      }),
+    );
     await expect(
       service.updateDefinition('d2', { name: '  ' }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -421,5 +445,60 @@ describe('AlarmEngineService', () => {
       id: 'd2',
     });
     expect(definitions.remove).toHaveBeenCalledWith(row);
+  });
+
+  it('rejects free-text severity and audits the denial (TP-21)', async () => {
+    registers.findOneBy.mockResolvedValue({ id: 'r', kind: 'holding' });
+    await expect(
+      service.createDefinition({
+        name: 'Overload',
+        registerId: 'r',
+        severity: 'urgent',
+        actor: {
+          userId: 'u1',
+          userEmail: 'admin@example.com',
+          ip: '127.0.0.1',
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(definitions.save).not.toHaveBeenCalled();
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'alarm.create_denied',
+        resource: 'Overload',
+        details: 'invalid severity=urgent',
+        result: 'failure',
+        userEmail: 'admin@example.com',
+      }),
+    );
+
+    const row = {
+      id: 'd2',
+      name: 'Load',
+      severity: 'warning',
+      compareOp: 'eq' as const,
+      threshold: 1,
+      enabled: true,
+      register: { id: 'r' },
+    };
+    definitions.findOneBy.mockResolvedValue(row);
+    await expect(
+      service.updateDefinition('d2', {
+        severity: 'major',
+        actor: {
+          userId: 'u1',
+          userEmail: 'admin@example.com',
+          ip: '127.0.0.1',
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'alarm.update_denied',
+        resource: 'Load',
+        details: 'invalid severity=major',
+        result: 'failure',
+      }),
+    );
   });
 });

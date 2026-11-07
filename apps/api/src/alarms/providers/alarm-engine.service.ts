@@ -8,7 +8,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DEMO_CRANE_MAP } from '@tele-pendant/modbus-core';
-import { normalizeAlarmSeverity } from '@tele-pendant/shared';
+import {
+  type AlarmSeverity,
+  tryParseAlarmSeverity,
+} from '@tele-pendant/shared';
 import { Repository } from 'typeorm';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
 import { AuditService } from '../../audit/providers/audit.service';
@@ -130,6 +133,33 @@ export class AlarmEngineService implements OnModuleInit {
   private alarmAuditResource(event: AlarmEvent): string {
     const name = event.definition?.name?.trim();
     return name && name.length > 0 ? name : event.id;
+  }
+
+  /** TP-21: reject free-text severity; audit the denied write. */
+  private async resolveWritableSeverity(
+    severity: string | undefined,
+    deniedAction: 'alarm.create_denied' | 'alarm.update_denied',
+    resource: string,
+    actor?: AuditActor,
+  ): Promise<AlarmSeverity> {
+    const parsed = tryParseAlarmSeverity(severity);
+    if (!parsed.ok) {
+      await this.auditService.write({
+        ...auditWriteFields(actor),
+        action: deniedAction,
+        resource,
+        details: `invalid severity=${parsed.raw}`,
+        result: 'failure',
+      });
+      throw new BadRequestException(
+        'Severity must be info, warning, or critical',
+      );
+    }
+    return parsed.value;
+  }
+
+  private definitionAuditDetails(row: AlarmDefinition): string {
+    return `severity=${row.severity};op=${row.compareOp};threshold=${row.threshold};enabled=${row.enabled}`;
   }
 
   async ack(id: string, actor?: AuditActor) {
@@ -264,13 +294,19 @@ export class AlarmEngineService implements OnModuleInit {
     if (!['eq', 'gt', 'lt', 'neq'].includes(compareOp)) {
       throw new BadRequestException('Operator must be eq, gt, lt, or neq');
     }
+    const severity = await this.resolveWritableSeverity(
+      input.severity,
+      'alarm.create_denied',
+      name,
+      input.actor,
+    );
     const register = await this.registers.findOneBy({ id: input.registerId });
     if (!register) throw new NotFoundException('Register not found');
     return this.definitions
       .save(
         this.definitions.create({
           name,
-          severity: normalizeAlarmSeverity(input.severity),
+          severity,
           compareOp,
           threshold: Number.isFinite(input.threshold)
             ? Number(input.threshold)
@@ -284,6 +320,7 @@ export class AlarmEngineService implements OnModuleInit {
           ...auditWriteFields(input.actor),
           action: 'alarm.create',
           resource: saved.name,
+          details: this.definitionAuditDetails(saved),
           result: 'success',
         });
         return saved;
@@ -310,7 +347,12 @@ export class AlarmEngineService implements OnModuleInit {
       row.name = name;
     }
     if (input.severity !== undefined) {
-      row.severity = normalizeAlarmSeverity(input.severity);
+      row.severity = await this.resolveWritableSeverity(
+        input.severity,
+        'alarm.update_denied',
+        row.name,
+        input.actor,
+      );
     }
     if (input.compareOp !== undefined) {
       if (!['eq', 'gt', 'lt', 'neq'].includes(input.compareOp)) {
@@ -333,6 +375,7 @@ export class AlarmEngineService implements OnModuleInit {
         ...auditWriteFields(input.actor),
         action: 'alarm.update',
         resource: saved.name,
+        details: this.definitionAuditDetails(saved),
         result: 'success',
       });
       return saved;

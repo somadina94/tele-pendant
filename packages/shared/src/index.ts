@@ -50,8 +50,9 @@ export {
   DEFAULT_ALARM_SEVERITY,
   alarmSeveritySelectOptions,
   normalizeAlarmSeverity,
+  tryParseAlarmSeverity,
 } from './alarm-severity';
-export type { AlarmSeverity } from './alarm-severity';
+export type { AlarmSeverity, AlarmSeverityParseResult } from './alarm-severity';
 
 export const WS_EVENTS = {
   TAGS_UPDATE: 'tags.update',
