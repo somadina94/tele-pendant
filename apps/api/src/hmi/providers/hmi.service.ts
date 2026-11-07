@@ -192,8 +192,12 @@ export class HmiService {
   }
 
   async updateCell(id: string, input: CellInput, actor?: Actor): Promise<Cell> {
-    const row = await this.cells.findOneBy({ id });
+    const row = await this.cells.findOne({
+      where: { id },
+      relations: { primaryRegister: true },
+    });
     if (!row) throw new NotFoundException('Cell not found');
+    await this.assertStopCellNotDemoted(row, input);
     const fields = await this.cellFields(input);
     Object.assign(row, fields);
     const saved = await this.cells.save(row);
@@ -213,11 +217,7 @@ export class HmiService {
       relations: { primaryRegister: true },
     });
     if (!row) throw new NotFoundException('Cell not found');
-    if (
-      row.requiresSafeAction ||
-      row.primaryRegister?.name === 'coil.eStop' ||
-      row.style === 'estop'
-    ) {
+    if (this.isProtectedStopCell(row)) {
       throw new ForbiddenException('The STOP cell cannot be deleted');
     }
     await this.cells.delete({ id });
@@ -229,6 +229,37 @@ export class HmiService {
       result: 'success',
     });
     return { ok: true };
+  }
+
+  /** STOP / e-stop cells must stay e-stop and cannot be deleted (TP-07). */
+  private isProtectedStopCell(row: {
+    requiresSafeAction?: boolean;
+    style?: string;
+    primaryRegister?: { name?: string } | null;
+  }): boolean {
+    return (
+      Boolean(row.requiresSafeAction) ||
+      row.style === 'estop' ||
+      row.primaryRegister?.name === 'coil.eStop'
+    );
+  }
+
+  private async assertStopCellNotDemoted(
+    row: Cell,
+    input: CellInput,
+  ): Promise<void> {
+    if (!this.isProtectedStopCell(row)) return;
+    const primary = await this.registerById(input.primaryRegisterId);
+    const stillProtected =
+      input.requiresSafeAction === true &&
+      input.style.trim() === 'estop' &&
+      primary.name === 'coil.eStop' &&
+      input.isMotion === false;
+    if (!stillProtected) {
+      throw new ForbiddenException(
+        'The STOP cell cannot be changed away from e-stop',
+      );
+    }
   }
 
   async createOverlay(

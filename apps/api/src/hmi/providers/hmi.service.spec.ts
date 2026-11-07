@@ -280,7 +280,13 @@ describe('HmiService', () => {
       statusRegisterId: null,
     });
 
-    cells.findOneBy.mockResolvedValue({ id: 'c9', label: 'Old' });
+    cells.findOne.mockResolvedValue({
+      id: 'c9',
+      label: 'Old',
+      style: 'default',
+      requiresSafeAction: false,
+      primaryRegister: { name: 'coil.other' },
+    });
     const updated = await service.updateCell('c9', cellInput);
     expect(updated.label).toBe('Spare');
     expect(auditService.write).toHaveBeenCalledWith(
@@ -303,13 +309,53 @@ describe('HmiService', () => {
       service.createCell({ ...cellInput, col: 33, primaryRegisterId: 'p' }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
-    cells.findOneBy.mockResolvedValue(null);
+    cells.findOne.mockResolvedValue(null);
     await expect(
       service.updateCell('missing', cellInput),
     ).rejects.toBeInstanceOf(NotFoundException);
     cells.findOne.mockResolvedValue(null);
     await expect(service.deleteCell('missing')).rejects.toBeInstanceOf(
       NotFoundException,
+    );
+  });
+
+  it('refuses to demote or delete the STOP cell (TP-07)', async () => {
+    registers.findOneBy.mockImplementation(async ({ id }: { id: string }) => ({
+      id,
+      name: id === 'estop' ? 'coil.eStop' : 'coil.hoistUp',
+    }));
+    cells.findOne.mockResolvedValue({
+      id: 'stop',
+      label: 'STOP',
+      style: 'estop',
+      requiresSafeAction: true,
+      isMotion: false,
+      primaryRegister: { name: 'coil.eStop' },
+    });
+    await expect(
+      service.updateCell('stop', {
+        row: 0,
+        col: 0,
+        label: 'Not STOP',
+        style: 'motion',
+        isMotion: true,
+        requiresSafeAction: false,
+        primaryRegisterId: 'hoist',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    const kept = await service.updateCell('stop', {
+      row: 1,
+      col: 1,
+      label: 'STOP',
+      style: 'estop',
+      isMotion: false,
+      requiresSafeAction: true,
+      primaryRegisterId: 'estop',
+    });
+    expect(kept.label).toBe('STOP');
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'cell.update' }),
     );
   });
 
