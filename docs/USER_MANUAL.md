@@ -311,7 +311,7 @@ Do this only after the banner is **normal** again. One alarm cannot be both acke
 2. Open **Ops** while the alarm is still **active**. **Shelve** is beside **Ack**.
 3. Click **Shelve**. Do not click **Ack**.
 4. **Success:** the state text is **shelved**.
-5. Click **Unshelve** to bring it back, or reset e-stop. When the e-stop coil clears, a shelved alarm clears too.
+5. Click **Unshelve** to bring it back, or reset e-stop. When the e-stop coil clears, a shelved alarm clears too (including after an API restart — open alarms are reloaded into the engine on boot).
 
 ## 12. Account menu: change password
 
@@ -366,7 +366,7 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 ## Languages, alarms, trends, safety roles, and OPC UA
 
 - The **Language** menu on the sign-in page follows the browser until you pick English, Español, Français, or Deutsch. That choice is saved on your user and then wins over the browser. The phone uses the device language the same way. To add a language: copy `packages/shared/i18n/en.json` to a new code, translate keys, register it in `packages/shared/src/i18n.ts`, and add it to the web/mobile pickers.
-- **Config** can create, edit, and delete alarm definitions (register, operator, threshold, severity). **Ops** acknowledges, shelves, and unshelves alarms. A shelved alarm clears when the condition recovers.
+- **Config** can create, edit, and delete alarm definitions (register, operator, threshold, severity). **Ops** acknowledges, shelves, and unshelves alarms. A shelved alarm clears when the condition recovers; after an API restart the engine reloads active/acked/shelved rows so that still works.
 - Mark a register **Trend**. **Ops** draws an SVG line for each trended series. Height and load start trended.
 - **Safety roles** bind E-stop, deadman, heartbeat, and safe-state to registers. Losing the deadman, the link, or e-stop clears the primary coil of every motion cell.
 - **Protocol** is Modbus TCP by default (simulator port 1502). OPC UA is optional: `docker compose -f docker-compose.dev.yml --profile opcua up opcua-sim`, then set the connection to OPC UA and fill each register’s node id (`ns=1;s=HoistUp` and the matching names).

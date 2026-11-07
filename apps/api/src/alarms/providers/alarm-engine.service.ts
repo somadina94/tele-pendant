@@ -50,6 +50,30 @@ export class AlarmEngineService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.seedDefaults();
+    await this.reloadOpenEvents();
+  }
+
+  /**
+   * TP-09: open/shelved events live in SQLite, but evaluate() only tracks them
+   * in `activeByDef`. Reload that map on boot so recovered conditions still clear
+   * after an API restart (and we do not raise duplicates).
+   */
+  private async reloadOpenEvents(): Promise<void> {
+    const open = await this.events.find({
+      where: [{ state: 'active' }, { state: 'acked' }, { state: 'shelved' }],
+      order: { createdAt: 'DESC' },
+    });
+    this.activeByDef.clear();
+    for (const event of open) {
+      const defId = event.definition?.id;
+      if (!defId || this.activeByDef.has(defId)) continue;
+      this.activeByDef.set(defId, event.id);
+    }
+    if (this.activeByDef.size > 0) {
+      this.logger.log(
+        `Reloaded ${this.activeByDef.size} open alarm(s) into the engine`,
+      );
+    }
   }
 
   private async seedDefaults(): Promise<void> {

@@ -106,6 +106,52 @@ describe('AlarmEngineService', () => {
     expect(definitions.save).not.toHaveBeenCalled();
   });
 
+  it('reloads shelved alarms on init so they clear after restart (TP-09)', async () => {
+    // Mimic order: { createdAt: 'DESC' } — newest open row wins per definition.
+    events.find.mockResolvedValueOnce([
+      {
+        id: 'e-shelved',
+        state: 'shelved',
+        definition: { id: 'd1' },
+        createdAt: new Date('2026-06-01'),
+      },
+      {
+        id: 'e-old',
+        state: 'shelved',
+        definition: { id: 'd1' },
+        createdAt: new Date('2026-01-01'),
+      },
+      { id: 'e-orphan', state: 'active', definition: null },
+    ]);
+    await service.onModuleInit();
+
+    driver.readCoils.mockResolvedValue([false]);
+    events.findOne.mockResolvedValue({ id: 'e-shelved', state: 'shelved' });
+    await service.evaluate();
+    expect(events.findOne).toHaveBeenCalledWith({ where: { id: 'e-shelved' } });
+    expect(events.save).toHaveBeenCalledWith(
+      expect.objectContaining({ state: 'cleared' }),
+    );
+  });
+
+  it('does not raise a duplicate after reloading an open alarm (TP-09)', async () => {
+    events.find.mockResolvedValueOnce([
+      {
+        id: 'e-active',
+        state: 'active',
+        definition: { id: 'd1' },
+        createdAt: new Date('2026-06-01'),
+      },
+    ]);
+    await service.onModuleInit();
+    events.save.mockClear();
+    gateway.broadcast.mockClear();
+    driver.readCoils.mockResolvedValue([true]);
+    await service.evaluate();
+    expect(events.save).not.toHaveBeenCalled();
+    expect(gateway.broadcast).not.toHaveBeenCalled();
+  });
+
   it('lists active and acks/shelves events', async () => {
     events.findOneByOrFail.mockResolvedValue({
       id: 'e1',
