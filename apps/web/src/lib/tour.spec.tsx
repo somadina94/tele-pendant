@@ -245,26 +245,49 @@ describe('tour helpers', () => {
 
   it('skips layout measure after walkthrough unmounts', () => {
     localStorage.setItem('tourEnabled', '1');
-    let outerCb: FrameRequestCallback | null = null;
+    const queued: FrameRequestCallback[] = [];
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-      outerCb = cb;
-      return 42;
+      queued.push(cb);
+      return queued.length;
     });
     vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(
       () => undefined,
     );
 
-    const { unmount } = renderWithProviders(
-      <>
-        <PageTourBar screen="login" />
-        <HelpTip id="tour.login.language">
-          <span>lang</span>
-        </HelpTip>
-      </>,
-    );
+    const { unmount } = renderWithProviders(<PageTourBar screen="login" />);
     fireEvent.click(screen.getByRole('button', { name: 'Start tour' }));
+    expect(queued.length).toBeGreaterThan(0);
     unmount();
-    expect(() => outerCb?.(0)).not.toThrow();
+    for (const cb of queued) {
+      expect(() => cb(0)).not.toThrow();
+    }
+  });
+
+  it('falls back when the tour target never mounts', () => {
+    localStorage.setItem('tourEnabled', '1');
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(0);
+      return 1;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(
+      () => undefined,
+    );
+    vi.spyOn(window, 'setTimeout').mockImplementation(((
+      handler: TimerHandler,
+    ) => {
+      if (typeof handler === 'function') handler();
+      return 1;
+    }) as typeof setTimeout);
+
+    renderWithProviders(<PageTourBar screen="login" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start tour' }));
+
+    const card = document.querySelector(
+      '[role="dialog"] .pointer-events-auto',
+    ) as HTMLElement | null;
+    expect(card).not.toBeNull();
+    expect(card!.style.bottom).toBe('16px');
+    expect(card!.style.top).toBe('');
   });
 
   it('toggles HelpTip popover when tour is on', () => {
@@ -292,6 +315,16 @@ describe('tour helpers', () => {
     );
     expect(screen.queryByRole('button', { name: /Help:/ })).toBeNull();
     expect(screen.getByText('plain')).toBeInTheDocument();
+  });
+
+  it('keeps HelpTip className wrapper when tour is off', () => {
+    const { container } = renderWithProviders(
+      <HelpTip id="tour.login.email" className="plant-slot">
+        <span>wrapped</span>
+      </HelpTip>,
+    );
+    expect(container.querySelector('.plant-slot')).toHaveTextContent('wrapped');
+    expect(screen.queryByRole('button', { name: /Help:/ })).toBeNull();
   });
 
   it('prev does not go below zero and stop clears', () => {

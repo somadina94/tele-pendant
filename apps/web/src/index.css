@@ -145,9 +145,9 @@
   @apply flex min-h-0 w-full flex-1 flex-col;
 }
 
-/* HMI plant graphic — fills the plant slot; controls stay natural height below. */
+/* HMI plant graphic — fills leftover height on phone through desktop (STOP stays docked). */
 .plant-graphic {
-  @apply relative isolate h-[11rem] max-h-[11rem] min-h-0 w-full flex-1 overflow-hidden rounded-xl border border-white/10 md:h-full md:max-h-none md:min-h-[16rem] md:rounded-2xl;
+  @apply relative isolate h-full min-h-[10rem] w-full flex-1 overflow-hidden rounded-xl border border-white/10 md:min-h-[16rem] md:rounded-2xl;
   background:
     radial-gradient(120% 80% at 50% 110%, rgba(120, 160, 190, 0.18), transparent 55%),
     radial-gradient(90% 70% at 50% -10%, rgba(255, 255, 255, 0.08), transparent 50%),
@@ -382,7 +382,7 @@
   @apply flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden md:gap-2;
 }
 .operator-matrix-card {
-  @apply mt-auto flex min-h-0 w-full shrink-0 flex-col overflow-hidden;
+  @apply relative z-0 mt-auto flex min-h-0 w-full shrink-0 flex-col overflow-visible;
 }
 .operator-matrix-toolbar-wrap {
   @apply flex flex-col gap-1 overflow-y-auto md:gap-1.5;
@@ -427,18 +427,21 @@
     min-height: 10rem;
   }
 }
-@media (max-width: 767px) {
-  .operator-plant-slot {
-    flex: none;
-  }
+/* Tall phones (iPhone / Pixel / Z Fold cover): keep plant flex growth; only shrink mins on short height. */
+@media (max-width: 767px) and (max-height: 700px) {
   .plant-graphic {
-    height: 10rem;
-    max-height: 10rem;
-    min-height: 10rem;
-    flex: none;
+    min-height: 8rem;
   }
-  .operator-matrix-card {
-    margin-top: 0;
+  .plant-cluster-chrome {
+    padding-top: 0.35rem;
+    padding-bottom: 0.15rem;
+  }
+  .plant-mimic-stage {
+    top: 1.75rem;
+    bottom: 3.25rem;
+  }
+  .plant-metric-value {
+    font-size: 0.8125rem;
   }
 }
 .matrix-cell.estop,

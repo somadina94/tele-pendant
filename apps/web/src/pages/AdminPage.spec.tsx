@@ -2,7 +2,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { AdminPage } from './AdminPage';
 import { renderWithProviders } from '../test/render';
+import { PageTourBar, useTour } from '../lib/tour';
 import * as api from '../lib/api';
+
+function ConfigTourControls() {
+  const tour = useTour();
+  return (
+    <div>
+      <PageTourBar screen="config" />
+      <button type="button" onClick={() => tour.startWalkthrough('config')}>
+        start-config-tour
+      </button>
+      <button type="button" onClick={() => tour.nextStep()}>
+        next-config-tour
+      </button>
+    </div>
+  );
+}
 
 const layout = {
   matrix: { rows: 1, cols: 1 },
@@ -1157,5 +1173,133 @@ describe('AdminPage', () => {
       target: { files: [] },
     });
     expect(upload).toHaveBeenCalledTimes(2);
+  });
+
+  it('advances config tour sections with the walkthrough', async () => {
+    localStorage.setItem('tourEnabled', '1');
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') {
+        return [
+          {
+            id: '1',
+            label: 'sim',
+            host: '127.0.0.1',
+            port: 1502,
+            enabled: true,
+            isSimulator: true,
+          },
+        ];
+      }
+      return adminGetFallback(path);
+    });
+
+    unmountAdmin();
+    const view = renderWithProviders(
+      <>
+        <ConfigTourControls />
+        <AdminPage />
+      </>,
+      { route: '/admin?section=plc', role: 'admin' },
+    );
+    unmountAdmin = view.unmount;
+
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('sim')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'start-config-tour' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'next-config-tour' }));
+    await waitFor(() =>
+      expect(screen.getAllByText(/coil\.up/).length).toBeGreaterThan(0),
+    );
+  });
+
+  it('ignores non-config tour steps while Admin is open', async () => {
+    localStorage.setItem('tourEnabled', '1');
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') {
+        return [
+          {
+            id: '1',
+            label: 'sim',
+            host: '127.0.0.1',
+            port: 1502,
+            enabled: true,
+            isSimulator: true,
+          },
+        ];
+      }
+      return adminGetFallback(path);
+    });
+
+    function LoginTourStart() {
+      const tour = useTour();
+      return (
+        <button type="button" onClick={() => tour.startWalkthrough('login')}>
+          start-login-tour
+        </button>
+      );
+    }
+
+    unmountAdmin();
+    const view = renderWithProviders(
+      <>
+        <LoginTourStart />
+        <AdminPage />
+      </>,
+      { route: '/admin?section=plc', role: 'admin' },
+    );
+    unmountAdmin = view.unmount;
+
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('sim')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'start-login-tour' }));
+    expect(screen.getByDisplayValue('sim')).toBeInTheDocument();
+  });
+
+  it('skips config tour sections the role cannot open', async () => {
+    localStorage.setItem('tourEnabled', '1');
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') {
+        return [
+          {
+            id: '1',
+            label: 'sim',
+            host: '127.0.0.1',
+            port: 1502,
+            enabled: true,
+            isSimulator: true,
+          },
+        ];
+      }
+      return adminGetFallback(path);
+    });
+
+    unmountAdmin();
+    const view = renderWithProviders(
+      <>
+        <ConfigTourControls />
+        <AdminPage />
+      </>,
+      { route: '/admin?section=alarms', role: 'operator' },
+    );
+    unmountAdmin = view.unmount;
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /Alarm definitions/i }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'start-config-tour' }));
+    for (let i = 0; i < 5; i += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'next-config-tour' }));
+    }
+    expect(
+      screen.getByRole('heading', { name: /Alarm definitions/i }),
+    ).toBeInTheDocument();
   });
 });

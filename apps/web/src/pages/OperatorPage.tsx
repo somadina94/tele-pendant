@@ -656,10 +656,7 @@ export function OperatorPage() {
               ))}
             </div>
           ) : null}
-          <HelpTip
-            id="tour.operator.graphic"
-            className="operator-plant-slot"
-          >
+          <HelpTip id="tour.operator.graphic" className="operator-plant-slot">
             <div
               className="plant-graphic"
               data-feat="hmi-graphic"
@@ -858,7 +855,9 @@ export function OperatorPage() {
                 </div>
               </HelpTip>
               <HelpTip id="tour.operator.holdHint">
-                <p className="sr-only">{t('holdHint')}</p>
+                <p className="px-0.5 text-[11px] leading-snug text-muted-foreground">
+                  {t('holdHint')}
+                </p>
               </HelpTip>
             </CardContent>
           </Card>

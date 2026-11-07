@@ -1,4 +1,11 @@
-import { FormEvent, useEffect, useId, useState, type ReactNode } from 'react';
+import {
+  FormEvent,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, Loader2, Plus, Save, Trash2 } from 'lucide-react';
@@ -13,7 +20,7 @@ import {
   RegisterRef,
 } from '@/lib/api';
 import { useT } from '@/lib/i18n';
-import { HelpTip } from '@/lib/tour';
+import { HelpTip, useTour } from '@/lib/tour';
 import { toastErr, toastOk } from '@/lib/toast';
 import { PageSpinner } from '@/components/page-spinner';
 import { Button } from '@/components/ui/button';
@@ -229,10 +236,22 @@ function AdminSelect({
   );
 }
 
+const CONFIG_TOUR_SECTION: Record<string, ConfigSectionId> = {
+  'tour.config.plc': 'plc',
+  'tour.config.registers': 'registers',
+  'tour.config.cells': 'cells',
+  'tour.config.labels': 'labels',
+  'tour.config.background': 'background',
+  'tour.config.codes': 'codes',
+  'tour.config.alarms': 'alarms',
+  'tour.config.safety': 'safety',
+};
+
 export function AdminPage() {
   const queryClient = useQueryClient();
   const { t } = useT();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { walkthroughActive, currentStepId } = useTour();
   const [notes, setNotes] = useState<Record<string, Note>>({});
   const [labelFormKey, setLabelFormKey] = useState(0);
   const layoutQuery = useQuery({
@@ -294,17 +313,6 @@ export function AdminPage() {
     await queryClient.invalidateQueries({ queryKey: ['hmi-layout'] });
   }
 
-  if (layoutQuery.isLoading || connections.isLoading) {
-    return <PageSpinner label={t('hmiConfig')} />;
-  }
-
-  const layout = layoutQuery.data;
-  const registers = layout?.registers ?? [];
-  const plcRows = connections.data ?? [];
-  const cells = layout?.cells ?? [];
-  const overlays = layout?.overlays ?? [];
-  const alarms = alarmDefs.data ?? [];
-
   const role = getStoredUserRole() ?? 'supervisor';
   const showUsers = canManageUsers(role);
   const allowedSections = new Set(
@@ -315,6 +323,33 @@ export function AdminPage() {
     showUsers,
     allowedSections,
   );
+
+  useLayoutEffect(() => {
+    if (!walkthroughActive || !currentStepId) return;
+    const next = CONFIG_TOUR_SECTION[currentStepId];
+    if (!next) return;
+    if (next === section) return;
+    if (!configSectionIdsForRole(role).includes(next)) return;
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.set('section', next);
+        return params;
+      },
+      { replace: true },
+    );
+  }, [walkthroughActive, currentStepId, section, role, setSearchParams]);
+
+  if (layoutQuery.isLoading || connections.isLoading) {
+    return <PageSpinner label={t('hmiConfig')} />;
+  }
+
+  const layout = layoutQuery.data;
+  const registers = layout?.registers ?? [];
+  const plcRows = connections.data ?? [];
+  const cells = layout?.cells ?? [];
+  const overlays = layout?.overlays ?? [];
+  const alarms = alarmDefs.data ?? [];
 
   return (
     <div className="flex min-w-0 flex-col gap-6">

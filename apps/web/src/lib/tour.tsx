@@ -8,6 +8,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import { CircleHelp } from 'lucide-react';
 import { tourStepsFor, type TourScreen } from '@tele-pendant/shared';
 import { useT } from './i18n';
@@ -202,34 +204,45 @@ export function HelpTip({
   const highlighted = currentStepId === id;
 
   if (!enabled) {
-    return className ? <div className={className}>{children}</div> : <>{children}</>;
+    return className ? (
+      <div className={className}>{children}</div>
+    ) : (
+      <>{children}</>
+    );
   }
 
   return (
     <div
       className={cn(
-        'relative',
+        'relative overflow-visible',
         className,
         highlighted && 'rounded-md ring-2 ring-ring ring-offset-2',
       )}
       data-tour-id={id}
     >
-      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-      <TooltipProvider>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-visible">
+        {children}
+      </div>
+      <TooltipProvider delayDuration={200}>
         <Tooltip open={highlighted ? false : open} onOpenChange={setOpen}>
           <TooltipTrigger asChild>
             <Button
               type="button"
               variant="secondary"
               size="icon"
-              className="absolute -right-1 -top-1 z-10 size-5 min-h-5 min-w-5 rounded-full md:-right-1.5 md:-top-1.5"
+              className="absolute right-1 top-1 z-[60] size-5 min-h-5 min-w-5 rounded-full shadow-sm"
               aria-label={`Help: ${id}`}
               onClick={() => setOpen((v) => !v)}
             >
               <CircleHelp className="size-3" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-xs">
+          <TooltipContent
+            side="bottom"
+            sideOffset={6}
+            collisionPadding={12}
+            className="z-[80] max-w-xs"
+          >
             {t(id)}
           </TooltipContent>
         </Tooltip>
@@ -283,6 +296,8 @@ export function WalkthroughOverlay({ screen }: { screen: TourScreen }) {
     stopWalkthrough,
   } = useTour();
   const { t } = useT();
+  const [searchParams] = useSearchParams();
+  const searchKey = searchParams.toString();
   const cardRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(
     null,
@@ -294,24 +309,19 @@ export function WalkthroughOverlay({ screen }: { screen: TourScreen }) {
       return;
     }
 
-    const target = document.querySelector(
-      `[data-tour-id="${CSS.escape(currentStepId)}"]`,
-    ) as HTMLElement | null;
-    if (!target) {
-      setCoords(null);
-      return;
-    }
-
-    target.scrollIntoView({
-      block: 'nearest',
-      inline: 'nearest',
-      behavior: 'smooth',
-    });
-
     let cancelled = false;
-    const measure = () => {
+    let attempts = 0;
+    let frame = 0;
+    let scrollTimer = 0;
+
+    const measure = (target: HTMLElement) => {
       if (cancelled) return;
       const rect = target.getBoundingClientRect();
+      if ((rect.width < 2 || rect.height < 2) && attempts < 40) {
+        attempts += 1;
+        frame = window.requestAnimationFrame(() => measure(target));
+        return;
+      }
       const width = Math.min(448, window.innerWidth - 16);
       const height = cardRef.current?.offsetHeight ?? 200;
       setCoords(
@@ -322,17 +332,47 @@ export function WalkthroughOverlay({ screen }: { screen: TourScreen }) {
       );
     };
 
-    const frame = window.requestAnimationFrame(() => {
-      measure();
-      window.requestAnimationFrame(measure);
-    });
-    window.addEventListener('resize', measure);
+    const findAndPlace = () => {
+      if (cancelled) return;
+      const target = document.querySelector(
+        `[data-tour-id="${CSS.escape(currentStepId)}"]`,
+      ) as HTMLElement | null;
+      if (!target) {
+        if (attempts < 40) {
+          attempts += 1;
+          frame = window.requestAnimationFrame(findAndPlace);
+        } else {
+          setCoords(null);
+        }
+        return;
+      }
+      target.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest',
+        behavior: 'smooth',
+      });
+      measure(target);
+      frame = window.requestAnimationFrame(() => measure(target));
+      window.clearTimeout(scrollTimer);
+      scrollTimer = window.setTimeout(() => measure(target), 180);
+    };
+
+    findAndPlace();
+    window.addEventListener('resize', findAndPlace);
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(frame);
-      window.removeEventListener('resize', measure);
+      window.clearTimeout(scrollTimer);
+      window.removeEventListener('resize', findAndPlace);
     };
-  }, [walkthroughActive, walkthroughScreen, screen, currentStepId, stepIndex]);
+  }, [
+    walkthroughActive,
+    walkthroughScreen,
+    screen,
+    currentStepId,
+    stepIndex,
+    searchKey,
+  ]);
 
   if (
     !walkthroughActive ||
@@ -348,15 +388,15 @@ export function WalkthroughOverlay({ screen }: { screen: TourScreen }) {
     .replace('{current}', String(stepIndex + 1))
     .replace('{total}', String(stepIds.length));
 
-  return (
+  return createPortal(
     <div
-      className="pointer-events-none fixed inset-0 z-40 bg-black/40"
+      className="pointer-events-none fixed inset-0 z-[60] bg-black/40"
       role="dialog"
       aria-modal="true"
     >
       <Card
         ref={cardRef}
-        className="pointer-events-auto absolute w-[min(100%-1rem,28rem)] max-w-md shadow-lg"
+        className="pointer-events-auto absolute z-[61] w-[min(100%-1rem,28rem)] max-w-md shadow-lg"
         style={
           coords
             ? { top: coords.top, left: coords.left }
@@ -392,6 +432,7 @@ export function WalkthroughOverlay({ screen }: { screen: TourScreen }) {
           )}
         </CardFooter>
       </Card>
-    </div>
+    </div>,
+    document.body,
   );
 }
