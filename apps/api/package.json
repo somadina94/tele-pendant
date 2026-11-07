@@ -117,6 +117,7 @@
       "auth/providers/face.util.ts",
       "assistant/providers/assistant.service.ts",
       "ota/ota-code-signing.ts",
+      "common/cors-origins.ts",
       "!**/*.module.ts",
       "!**/*.spec.ts",
       "!**/dtos/**"

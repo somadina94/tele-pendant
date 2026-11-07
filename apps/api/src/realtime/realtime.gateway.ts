@@ -10,12 +10,14 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { corsOriginDelegate } from '../common/cors-origins';
 import { ACCESS_TOKEN_COOKIE } from '../common/constants';
 import { AuthService, JwtPayload } from '../auth/providers/auth.service';
 import { SafetyStateService } from '../safety/providers/safety-state.service';
 
 @WebSocketGateway({
-  cors: { origin: true, credentials: true },
+  // TP-44: same allowlist as HTTP CORS (FRONTEND_URL + localhost in dev).
+  cors: { origin: corsOriginDelegate, credentials: true },
   namespace: '/realtime',
 })
 export class RealtimeGateway

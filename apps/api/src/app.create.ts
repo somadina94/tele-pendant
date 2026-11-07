@@ -5,6 +5,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
+import { corsOriginDelegate } from './common/cors-origins';
 import {
   clientExpectsExpoSignature,
   loadOtaPrivateKeyPem,
@@ -171,8 +172,9 @@ export function appCreate(app: INestApplication): void {
     SwaggerModule.setup('api', app, document);
   }
 
+  // TP-44: do not reflect arbitrary Origin with credentials.
   app.enableCors({
-    origin: true,
+    origin: corsOriginDelegate,
     credentials: true,
   });
 }
