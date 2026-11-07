@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class SaveSafetyRolesDto {
   @ApiPropertyOptional()
@@ -26,6 +26,12 @@ export class SaveSafetyRolesDto {
   @IsOptional()
   @IsBoolean()
   allowTimedMediaMotion?: boolean;
+
+  /** TP-42: personal reset PIN (or plant fallback) required to change safety roles. */
+  @ApiProperty({ minLength: 1, maxLength: 64 })
+  @IsString()
+  @MinLength(1)
+  pin!: string;
 }
 
 export class ResetEStopDto {

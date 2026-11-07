@@ -857,10 +857,26 @@ describe('AdminPage', () => {
     fireEvent.change(screen.getByLabelText('Safe state'), {
       target: { value: '' },
     });
+    put.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Save safety roles' }));
+    expect(
+      await screen.findByText('Reset PIN is required to save safety roles'),
+    ).toBeInTheDocument();
+    expect(put).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('safety roles reset pin'), {
+      target: { value: '1234' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save safety roles' }));
     await screen.findByText('Saved safety roles.');
-    expect(put).toHaveBeenCalled();
+    expect(put).toHaveBeenCalledWith(
+      '/safety/roles',
+      expect.objectContaining({ pin: '1234' }),
+    );
 
+    fireEvent.change(screen.getByLabelText('safety roles reset pin'), {
+      target: { value: '1234' },
+    });
     put.mockRejectedValueOnce(new Error('roles'));
     fireEvent.click(screen.getByRole('button', { name: 'Save safety roles' }));
     await screen.findByText('roles');

@@ -51,9 +51,16 @@ export class SafetyController {
 
   @Put('roles')
   @Roles(UserRole.SUPERVISOR, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Bind safety roles to registers' })
-  saveRoles(@Body() body: SaveSafetyRolesDto) {
-    return this.safetyState.saveRoles(body);
+  @ApiOperation({
+    summary:
+      'Bind safety roles to registers (requires reset PIN; audited — TP-42)',
+  })
+  saveRoles(
+    @Body() body: SaveSafetyRolesDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    const actor = auditActorFromRequest(req.user, req.ip);
+    return this.safetyState.saveRoles(body, actor);
   }
 
   @Post('deadman/pulse')

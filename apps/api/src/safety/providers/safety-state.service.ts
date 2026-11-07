@@ -72,13 +72,32 @@ export class SafetyStateService {
     return this.roles.save(this.roles.create({}));
   }
 
-  async saveRoles(input: {
-    eStopRegisterId?: string | null;
-    deadmanRegisterId?: string | null;
-    heartbeatRegisterId?: string | null;
-    safeStateRegisterId?: string | null;
-    allowTimedMediaMotion?: boolean;
-  }): Promise<SafetyRoles> {
+  /**
+   * TP-42: changing safety role bindings (incl. timed media motion) requires the
+   * signed-in user's reset PIN and is always audited.
+   */
+  async saveRoles(
+    input: {
+      eStopRegisterId?: string | null;
+      deadmanRegisterId?: string | null;
+      heartbeatRegisterId?: string | null;
+      safeStateRegisterId?: string | null;
+      allowTimedMediaMotion?: boolean;
+      pin: string;
+    },
+    actor?: AuditActor,
+  ): Promise<SafetyRoles> {
+    const ok = await this.safeActionPin.verify(actor?.userId, input.pin);
+    if (!ok) {
+      await this.auditService.write({
+        ...auditWriteFields(actor),
+        action: 'safety.roles_denied',
+        resource: 'safety_roles',
+        result: 'failure',
+      });
+      throw new ForbiddenException('PIN does not match');
+    }
+
     const row = await this.getRoles();
     row.eStopRegisterId = input.eStopRegisterId || null;
     row.deadmanRegisterId = input.deadmanRegisterId || null;
@@ -88,7 +107,21 @@ export class SafetyStateService {
       row.allowTimedMediaMotion = input.allowTimedMediaMotion;
       this.allowTimedMedia = input.allowTimedMediaMotion;
     }
-    return this.roles.save(row);
+    const saved = await this.roles.save(row);
+    await this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'safety.roles_update',
+      resource: 'safety_roles',
+      details: [
+        `allowTimedMediaMotion=${Boolean(saved.allowTimedMediaMotion)}`,
+        `eStop=${saved.eStopRegisterId ?? ''}`,
+        `deadman=${saved.deadmanRegisterId ?? ''}`,
+        `heartbeat=${saved.heartbeatRegisterId ?? ''}`,
+        `safeState=${saved.safeStateRegisterId ?? ''}`,
+      ].join(';'),
+      result: 'success',
+    });
+    return saved;
   }
 
   async allowTimedMediaMotion(): Promise<boolean> {

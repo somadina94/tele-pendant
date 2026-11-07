@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../api';
 import type {
@@ -1087,6 +1087,7 @@ function SafetyBlock({
   const [heartbeat, setHeartbeat] = useState('');
   const [safeState, setSafe] = useState('');
   const [allowTimedDraft, setAllowTimedDraft] = useState<boolean | null>(null);
+  const [pin, setPin] = useState('');
   const [note, setNote] = useState('');
   const current = roles.data;
   const timedOn =
@@ -1157,9 +1158,27 @@ function SafetyBlock({
         ]}
         onChange={(v) => setAllowTimedDraft(v === 'yes')}
       />
+      <Text className="mt-3 mb-1 text-xs text-muted-foreground">
+        {t('safePin')} (required to save)
+      </Text>
+      <TextInput
+        className="mb-2 rounded-lg border border-border bg-card px-3 py-2.5 text-foreground"
+        secureTextEntry
+        autoCapitalize="none"
+        value={pin}
+        onChangeText={setPin}
+        placeholder={t('safePin')}
+      />
       <Pressable
         className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-        onPress={() =>
+        onPress={() => {
+          if (!pin.trim()) {
+            showErrorFrom(
+              new Error('Reset PIN is required to save safety roles'),
+              'Save failed',
+            );
+            return;
+          }
           void apiPut(
             '/safety/roles',
             {
@@ -1170,12 +1189,16 @@ function SafetyBlock({
               safeStateRegisterId:
                 safeState || current?.safeStateRegisterId || '',
               allowTimedMediaMotion: timedOn,
+              pin: pin.trim(),
             },
             token,
           )
-            .then(() => setNote('Saved safety roles.'))
-            .catch((err: unknown) => showErrorFrom(err, 'Save failed'))
-        }
+            .then(() => {
+              setPin('');
+              setNote('Saved safety roles.');
+            })
+            .catch((err: unknown) => showErrorFrom(err, 'Save failed'));
+        }}
       >
         <Text className="font-bold text-primary-foreground">
           Save safety roles

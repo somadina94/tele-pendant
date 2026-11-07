@@ -65,9 +65,19 @@ describe('SafetyStateService', () => {
   });
 
   it('stores the timed-motion flag and reads it back', async () => {
+    process.env.SAFE_ACTION_PIN = '1234';
     roles.find.mockResolvedValueOnce([]);
-    await service.saveRoles({ allowTimedMediaMotion: true });
+    await service.saveRoles(
+      { allowTimedMediaMotion: true, pin: '1234' },
+      { userEmail: 'admin@x' },
+    );
     expect(service.snapshot().allowTimedMediaMotion).toBe(true);
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'safety.roles_update',
+        result: 'success',
+      }),
+    );
     roles.find.mockResolvedValueOnce([
       { id: 'role-1', allowTimedMediaMotion: false },
     ]);
@@ -76,6 +86,25 @@ describe('SafetyStateService', () => {
       { id: 'role-1', allowTimedMediaMotion: true },
     ]);
     await expect(service.allowTimedMediaMotion()).resolves.toBe(true);
+    delete process.env.SAFE_ACTION_PIN;
+  });
+
+  it('rejects safety role saves with a wrong PIN and audits denial (TP-42)', async () => {
+    process.env.SAFE_ACTION_PIN = '1234';
+    await expect(
+      service.saveRoles(
+        { allowTimedMediaMotion: true, pin: 'wrong' },
+        { userEmail: 'sup@x' },
+      ),
+    ).rejects.toThrow('PIN does not match');
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'safety.roles_denied',
+        result: 'failure',
+      }),
+    );
+    expect(roles.save).not.toHaveBeenCalled();
+    delete process.env.SAFE_ACTION_PIN;
   });
 
   it('resets e-stop only when the PIN matches', async () => {
@@ -341,19 +370,23 @@ describe('SafetyStateService', () => {
     jest.setSystemTime(now + 5000);
     await service.tick();
     expect(driver.writeCoil).toHaveBeenCalledWith(7, false);
+    process.env.SAFE_ACTION_PIN = '1234';
     await service.saveRoles({
       eStopRegisterId: '',
       deadmanRegisterId: '',
       heartbeatRegisterId: '',
       safeStateRegisterId: '',
+      pin: '1234',
     });
     const saved = await service.saveRoles({
       eStopRegisterId: 'estop',
       deadmanRegisterId: 'dead',
       heartbeatRegisterId: 'beat',
       safeStateRegisterId: 'safe',
+      pin: '1234',
     });
     expect(saved.eStopRegisterId).toBe('estop');
+    delete process.env.SAFE_ACTION_PIN;
     roles.find.mockResolvedValue([]);
     const created = await service.getRoles();
     expect(created.id).toBe('role-1');

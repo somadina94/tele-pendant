@@ -789,10 +789,21 @@ function SafetySection({
   const allowTimedMediaMotion =
     draft.allowTimedMediaMotion ?? roles?.allowTimedMediaMotion ?? false;
   const timedId = useId();
+  const pinId = useId();
+  const [pin, setPin] = useState('');
   const [note, setNote] = useState<Note | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!pin.trim()) {
+      const failure = {
+        ok: false as const,
+        text: 'Reset PIN is required to save safety roles',
+      };
+      setNote(failure);
+      toastErr(failure.text);
+      return;
+    }
     try {
       await apiPut('/safety/roles', {
         eStopRegisterId,
@@ -800,8 +811,10 @@ function SafetySection({
         heartbeatRegisterId,
         safeStateRegisterId,
         allowTimedMediaMotion,
+        pin: pin.trim(),
       });
       await queryClient.invalidateQueries({ queryKey: ['safety-roles'] });
+      setPin('');
       const success = { ok: true as const, text: 'Saved safety roles.' };
       setNote(success);
       toastOk(success.text);
@@ -870,6 +883,22 @@ function SafetySection({
               }
             />
             <Label htmlFor={timedId}>{t('allowTimedMedia')}</Label>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={pinId}>{t('safePin')}</Label>
+            <Input
+              id={pinId}
+              type="password"
+              autoComplete="off"
+              aria-label="safety roles reset pin"
+              value={pin}
+              onChange={(event) => setPin(event.target.value)}
+              placeholder={t('safePin')}
+            />
+            <p className="text-xs text-muted-foreground">
+              Required to save. Uses your personal reset PIN (or plant PIN until
+              you set one).
+            </p>
           </div>
           <Button type="submit">
             <Save />
