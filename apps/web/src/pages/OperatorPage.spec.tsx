@@ -231,6 +231,10 @@ describe('OperatorPage', () => {
     const { container } = renderWithProviders(<OperatorPage />);
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
     expect(screen.getByText('Bay')).toBeInTheDocument();
+    expect(container.querySelector('[data-feat="hmi-mimic"]')).toBeTruthy();
+    expect(
+      screen.getByRole('img', { name: 'Crane mimic' }),
+    ).toBeInTheDocument();
     expect(
       (container.querySelector('.plant-graphic') as HTMLElement).style
         .background,

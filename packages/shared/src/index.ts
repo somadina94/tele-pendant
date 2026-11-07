@@ -30,6 +30,12 @@ export { isOperatorScreenReady, operatorNeedsLiveTags } from './operator-ready';
 export type { OperatorLayoutLike } from './operator-ready';
 export type { TagSnapshot } from './tags';
 export {
+  CRANE_MIMIC_LOAD_KG,
+  CRANE_MIMIC_TRAVEL_MM,
+  resolveCraneMimicView,
+} from './crane-mimic';
+export type { CraneMimicSafetyLike, CraneMimicView } from './crane-mimic';
+export {
   MATRIX_CELL_STATE_CODE,
   MATRIX_CELL_STATE_I18N,
   resolveMatrixCellUiState,

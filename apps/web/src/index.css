@@ -131,9 +131,27 @@
   }
 }
 
-/* HMI plant graphic — digital instrument cluster */
+/* FEAT-HMI: tablet / wide — mimic beside matrix */
+.operator-hmi-split {
+  @apply flex min-h-0 flex-col gap-1.5 md:gap-3;
+}
+@media (min-width: 1100px) {
+  .operator-hmi-split {
+    @apply grid grid-cols-2 items-stretch gap-3;
+  }
+  .operator-hmi-split .plant-graphic {
+    height: min(48svh, 20rem);
+    max-height: 20rem;
+    min-height: 14rem;
+  }
+  .operator-hmi-split .operator-matrix-card {
+    @apply h-full;
+  }
+}
+
+/* HMI plant graphic — digital instrument cluster + crane mimic */
 .plant-graphic {
-  @apply relative isolate h-[8.25rem] max-h-[8.25rem] min-h-0 w-full overflow-hidden rounded-xl border border-white/10 md:h-[min(28svh,14rem)] md:max-h-[240px] md:min-h-[7.5rem] md:rounded-2xl;
+  @apply relative isolate h-[9.5rem] max-h-[9.5rem] min-h-0 w-full overflow-hidden rounded-xl border border-white/10 md:h-[min(32svh,16rem)] md:max-h-[280px] md:min-h-[9rem] md:rounded-2xl;
   background:
     radial-gradient(120% 80% at 50% 110%, rgba(120, 160, 190, 0.18), transparent 55%),
     radial-gradient(90% 70% at 50% -10%, rgba(255, 255, 255, 0.08), transparent 50%),
@@ -190,8 +208,26 @@
   @apply bg-rose-400;
   box-shadow: 0 0 8px rgba(251, 113, 133, 0.75);
 }
+.plant-mimic-stage {
+  @apply absolute inset-x-0 bottom-[3.6rem] top-9 z-[8] flex items-center justify-center px-1 md:bottom-[4.25rem] md:top-10 md:px-2;
+}
+.plant-mimic-stage .crane-mimic {
+  @apply h-full w-full max-h-full;
+}
+.crane-mimic-motor-run {
+  animation: crane-motor-pulse 1.1s ease-in-out infinite;
+}
+@keyframes crane-motor-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
 .plant-overlay-stage {
-  @apply absolute inset-x-0 bottom-[5.75rem] top-11 z-[10] hidden overflow-hidden md:bottom-[6.25rem] md:top-12 md:block;
+  @apply pointer-events-none absolute inset-x-0 bottom-[5.75rem] top-11 z-[10] hidden overflow-hidden md:bottom-[6.25rem] md:top-12 md:block;
 }
 .plant-overlay {
   @apply absolute z-10 flex min-w-[4.5rem] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-white/18 bg-black/70 px-2.5 py-1.5 text-center shadow-[0_8px_20px_rgba(0,0,0,0.35)];

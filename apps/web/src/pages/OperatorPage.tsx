@@ -25,6 +25,7 @@ import {
 } from '@tele-pendant/shared';
 import { getRealtimeSocket } from '../lib/realtime';
 import { HelpTip } from '../lib/tour';
+import { CraneMimic } from '@/components/crane-mimic';
 import { PageSpinner } from '@/components/page-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -548,7 +549,10 @@ export function OperatorPage() {
   }
 
   return (
-    <div className="operator-shell mx-auto flex w-full max-w-5xl flex-col gap-1.5 md:gap-3">
+    <div
+      className="operator-shell mx-auto flex w-full max-w-6xl flex-col gap-1.5 md:gap-3"
+      data-feat="hmi-shell"
+    >
       <div className="operator-body">
         <HelpTip id="tour.operator.banner">
           <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-1.5">
@@ -614,204 +618,211 @@ export function OperatorPage() {
           </Alert>
         ) : null}
 
-        <HelpTip id="tour.operator.graphic">
-          <div
-            className="plant-graphic"
-            style={cssBackground ? { background: cssBackground } : undefined}
-          >
-            {imageUrl && photoOk ? (
-              <img
-                alt="Plant background"
-                src={imageUrl}
-                onError={() => setPhotoOk(false)}
-              />
-            ) : null}
-            <div className="plant-cluster-chrome">
-              <h2 className="plant-cluster-title">
-                {layout.background?.name ?? t('plantGraphic')}
-              </h2>
-              <div
-                className={cn(
-                  'plant-cluster-status',
-                  safety?.eStopActive && 'estop-mark',
-                )}
-              >
-                <span
+        <div className="operator-hmi-split">
+          <HelpTip id="tour.operator.graphic">
+            <div
+              className="plant-graphic"
+              data-feat="hmi-graphic"
+              style={cssBackground ? { background: cssBackground } : undefined}
+            >
+              {imageUrl && photoOk ? (
+                <img
+                  alt="Plant background"
+                  src={imageUrl}
+                  onError={() => setPhotoOk(false)}
+                />
+              ) : null}
+              <div className="plant-cluster-chrome">
+                <h2 className="plant-cluster-title">
+                  {layout.background?.name ?? t('plantGraphic')}
+                </h2>
+                <div
                   className={cn(
-                    'plant-cluster-status-dot',
-                    (safety?.eStopActive || mode === 'safe_state') && 'danger',
-                    !safety?.eStopActive &&
-                      mode !== 'normal' &&
-                      mode !== 'safe_state' &&
-                      'warn',
+                    'plant-cluster-status',
+                    safety?.eStopActive && 'estop-mark',
                   )}
-                />
-                {mode}
-              </div>
-            </div>
-            <div className="plant-overlay-stage">
-              {(layout.overlays ?? [])
-                .filter((o) => !isClusterMetricRegister(o.register?.name))
-                .map((o) => (
-                  <div
-                    key={o.id}
-                    className="plant-overlay"
-                    style={{ left: `${o.xPct}%`, top: `${o.yPct}%` }}
-                  >
-                    <span className="plant-overlay-label">{o.label}</span>
-                    <strong className="plant-overlay-value">
-                      {formatOverlay(
-                        o.format,
-                        tagValueForRegister(tags, o.register?.name),
-                      )}
-                    </strong>
-                  </div>
-                ))}
-            </div>
-            <div className="plant-readout">
-              <div className="plant-metric">
-                <span className="plant-metric-label">Height</span>
-                <span className="plant-metric-value">
-                  {tags?.hoistHeightMm ?? '—'}
-                </span>
-                <span className="plant-metric-unit">mm</span>
-              </div>
-              <div className="plant-metric">
-                <span className="plant-metric-label">Trolley</span>
-                <span className="plant-metric-value">
-                  {tags?.trolleyPositionMm ??
-                    tagValueForRegister(tags, 'holding.trolleyPosition')}
-                </span>
-                <span className="plant-metric-unit">mm</span>
-              </div>
-              <div className="plant-metric">
-                <span className="plant-metric-label">Load</span>
-                <span className="plant-metric-value">
-                  {tags?.loadKg ?? '—'}
-                </span>
-                <span className="plant-metric-unit">kg</span>
-              </div>
-              <div className="plant-metric">
-                <span className="plant-metric-label">Motor</span>
-                <span className="plant-metric-value">
-                  {tags?.motorRunning ? 'RUN' : 'IDLE'}
-                </span>
-                <span className="plant-metric-unit">status</span>
-              </div>
-            </div>
-          </div>
-        </HelpTip>
-
-        <Card className="operator-matrix-card overflow-visible">
-          <CardHeader className="hidden space-y-0 px-4 py-1.5 md:block md:space-y-0 md:py-2">
-            <CardTitle className="text-sm">{t('controlMatrix')}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 px-2 pb-2 pt-2 md:space-y-1.5 md:px-3 md:pb-3 md:pt-0">
-            <HelpTip id="tour.operator.safePin">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <Label
-                  htmlFor="safe-pin"
-                  className="shrink-0 whitespace-nowrap text-xs md:text-sm"
                 >
-                  {t('safePin')}
-                </Label>
-                <Input
-                  id="safe-pin"
-                  className="h-11 min-h-11 min-w-[5rem] max-w-[11rem] flex-1 basis-28 md:max-w-[9rem]"
-                  value={safePin}
-                  onChange={(e) => setSafePin(e.target.value)}
-                  type="password"
-                  placeholder={t('safePin')}
-                  autoComplete="off"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-11 min-h-11 shrink-0 px-2 text-xs md:px-3 md:text-sm"
-                  onClick={() => void resetEStop()}
-                >
-                  {t('resetEstop')}
-                </Button>
-                {controlHeldByOther ? (
-                  <span className="basis-full text-xs text-muted-foreground">
-                    {t('stealControlHint')}
+                  <span
+                    className={cn(
+                      'plant-cluster-status-dot',
+                      (safety?.eStopActive || mode === 'safe_state') &&
+                        'danger',
+                      !safety?.eStopActive &&
+                        mode !== 'normal' &&
+                        mode !== 'safe_state' &&
+                        'warn',
+                    )}
+                  />
+                  {mode}
+                </div>
+              </div>
+              <div className="plant-mimic-stage" aria-hidden={false}>
+                <CraneMimic tags={tags} safety={safety ?? layout.safety} />
+              </div>
+              <div className="plant-overlay-stage">
+                {(layout.overlays ?? [])
+                  .filter((o) => !isClusterMetricRegister(o.register?.name))
+                  .map((o) => (
+                    <div
+                      key={o.id}
+                      className="plant-overlay"
+                      style={{ left: `${o.xPct}%`, top: `${o.yPct}%` }}
+                    >
+                      <span className="plant-overlay-label">{o.label}</span>
+                      <strong className="plant-overlay-value">
+                        {formatOverlay(
+                          o.format,
+                          tagValueForRegister(tags, o.register?.name),
+                        )}
+                      </strong>
+                    </div>
+                  ))}
+              </div>
+              <div className="plant-readout">
+                <div className="plant-metric">
+                  <span className="plant-metric-label">Height</span>
+                  <span className="plant-metric-value">
+                    {tags?.hoistHeightMm ?? '—'}
                   </span>
-                ) : null}
+                  <span className="plant-metric-unit">mm</span>
+                </div>
+                <div className="plant-metric">
+                  <span className="plant-metric-label">Trolley</span>
+                  <span className="plant-metric-value">
+                    {tags?.trolleyPositionMm ??
+                      tagValueForRegister(tags, 'holding.trolleyPosition')}
+                  </span>
+                  <span className="plant-metric-unit">mm</span>
+                </div>
+                <div className="plant-metric">
+                  <span className="plant-metric-label">Load</span>
+                  <span className="plant-metric-value">
+                    {tags?.loadKg ?? '—'}
+                  </span>
+                  <span className="plant-metric-unit">kg</span>
+                </div>
+                <div className="plant-metric">
+                  <span className="plant-metric-label">Motor</span>
+                  <span className="plant-metric-value">
+                    {tags?.motorRunning ? 'RUN' : 'IDLE'}
+                  </span>
+                  <span className="plant-metric-unit">status</span>
+                </div>
               </div>
-            </HelpTip>
-            {showJogSpeed ? (
-              <div
-                className="flex flex-wrap items-center gap-2"
-                role="group"
-                aria-label={t('jogSpeed')}
-              >
-                <span className="text-xs text-muted-foreground md:text-sm">
-                  {t('jogSpeed')}
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={jogSpeed === 'slow' ? 'default' : 'outline'}
-                  className="h-11 min-h-11"
-                  aria-pressed={jogSpeed === 'slow'}
-                  onClick={() => setJogSpeed('slow')}
+            </div>
+          </HelpTip>
+
+          <Card className="operator-matrix-card overflow-visible">
+            <CardHeader className="hidden space-y-0 px-4 py-1.5 md:block md:space-y-0 md:py-2">
+              <CardTitle className="text-sm">{t('controlMatrix')}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1 px-2 pb-2 pt-2 md:space-y-1.5 md:px-3 md:pb-3 md:pt-0">
+              <HelpTip id="tour.operator.safePin">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <Label
+                    htmlFor="safe-pin"
+                    className="shrink-0 whitespace-nowrap text-xs md:text-sm"
+                  >
+                    {t('safePin')}
+                  </Label>
+                  <Input
+                    id="safe-pin"
+                    className="h-11 min-h-11 min-w-[5rem] max-w-[11rem] flex-1 basis-28 md:max-w-[9rem]"
+                    value={safePin}
+                    onChange={(e) => setSafePin(e.target.value)}
+                    type="password"
+                    placeholder={t('safePin')}
+                    autoComplete="off"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-11 min-h-11 shrink-0 px-2 text-xs md:px-3 md:text-sm"
+                    onClick={() => void resetEStop()}
+                  >
+                    {t('resetEstop')}
+                  </Button>
+                  {controlHeldByOther ? (
+                    <span className="basis-full text-xs text-muted-foreground">
+                      {t('stealControlHint')}
+                    </span>
+                  ) : null}
+                </div>
+              </HelpTip>
+              {showJogSpeed ? (
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  role="group"
+                  aria-label={t('jogSpeed')}
                 >
-                  {t('jogSlow')}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={jogSpeed === 'fast' ? 'default' : 'outline'}
-                  className="h-11 min-h-11"
-                  aria-pressed={jogSpeed === 'fast'}
-                  onClick={() => setJogSpeed('fast')}
+                  <span className="text-xs text-muted-foreground md:text-sm">
+                    {t('jogSpeed')}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={jogSpeed === 'slow' ? 'default' : 'outline'}
+                    className="h-11 min-h-11"
+                    aria-pressed={jogSpeed === 'slow'}
+                    onClick={() => setJogSpeed('slow')}
+                  >
+                    {t('jogSlow')}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={jogSpeed === 'fast' ? 'default' : 'outline'}
+                    className="h-11 min-h-11"
+                    aria-pressed={jogSpeed === 'fast'}
+                    onClick={() => setJogSpeed('fast')}
+                  >
+                    {t('jogFast')}
+                  </Button>
+                </div>
+              ) : null}
+              <HelpTip id="tour.operator.matrix">
+                <div
+                  className="matrix-grid"
+                  style={{
+                    gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
+                  }}
                 >
-                  {t('jogFast')}
-                </Button>
-              </div>
-            ) : null}
-            <HelpTip id="tour.operator.matrix">
-              <div
-                className="matrix-grid"
-                style={{
-                  gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
-                }}
-              >
-                {grid.cells.map((cell, idx) => {
-                  if (!cell) {
-                    return (
-                      <div
-                        key={`empty-${idx}`}
-                        className="matrix-grid-hole"
-                        aria-hidden
-                      />
-                    );
-                  }
-                  // FEAT-A3: STOP lives in the fixed dock, not the scrolling matrix.
-                  if (
-                    stopCell &&
-                    (cell.id === stopCell.id || cell.style === 'estop')
-                  ) {
-                    return (
-                      <div
-                        key={`stop-slot-${cell.id}`}
-                        className="matrix-grid-hole"
-                        aria-hidden
-                      />
-                    );
-                  }
-                  return renderMatrixCell(cell);
-                })}
-              </div>
-            </HelpTip>
-            <HelpTip id="tour.operator.holdHint">
-              <p className="hidden text-xs text-muted-foreground md:block">
-                {t('holdHint')}
-              </p>
-            </HelpTip>
-          </CardContent>
-        </Card>
+                  {grid.cells.map((cell, idx) => {
+                    if (!cell) {
+                      return (
+                        <div
+                          key={`empty-${idx}`}
+                          className="matrix-grid-hole"
+                          aria-hidden
+                        />
+                      );
+                    }
+                    // FEAT-A3: STOP lives in the fixed dock, not the scrolling matrix.
+                    if (
+                      stopCell &&
+                      (cell.id === stopCell.id || cell.style === 'estop')
+                    ) {
+                      return (
+                        <div
+                          key={`stop-slot-${cell.id}`}
+                          className="matrix-grid-hole"
+                          aria-hidden
+                        />
+                      );
+                    }
+                    return renderMatrixCell(cell);
+                  })}
+                </div>
+              </HelpTip>
+              <HelpTip id="tour.operator.holdHint">
+                <p className="hidden text-xs text-muted-foreground md:block">
+                  {t('holdHint')}
+                </p>
+              </HelpTip>
+            </CardContent>
+          </Card>
+        </div>
       </div>
       {stopCell ? (
         <div className="matrix-stop-dock" data-feat="a3-stop-dock">

@@ -30,6 +30,7 @@ import {
   hapticMotionBlocked,
   isMotionBlockedError,
 } from '../haptics';
+import { CraneMimic } from '../crane-mimic';
 import { ESTOP, matrixCellStatePalette } from '../hmi-styles';
 import { useTheme } from '../theme';
 import { Banner, Card, showErrorAlert } from '../ui';
@@ -604,14 +605,14 @@ export function OperatorScreen({ token }: { token: string }) {
         ) : null}
         <HelpTip id="tour.operator.graphic">
           <View
-            className="relative h-[152px] overflow-hidden rounded-xl border border-white/10"
+            className="relative h-[200px] overflow-hidden rounded-xl border border-white/10"
             style={{ backgroundColor: solidBackground || '#07090c' }}
           >
             {imageUrl && photoOk ? (
               <Image
                 source={{ uri: imageUrl }}
                 className="absolute inset-0 h-full w-full"
-                style={{ opacity: 0.32 }}
+                style={{ opacity: 0.28 }}
                 onError={() => setPhotoOk(false)}
               />
             ) : null}
@@ -621,7 +622,7 @@ export function OperatorScreen({ token }: { token: string }) {
                 backgroundColor: 'rgba(0,0,0,0.35)',
               }}
             />
-            <View className="z-10 flex-row items-center justify-between px-3.5 pb-2 pt-3">
+            <View className="z-10 flex-row items-center justify-between px-3.5 pb-1 pt-2.5">
               <Text
                 className="flex-1 text-[10px] font-medium uppercase text-white/70"
                 style={{ letterSpacing: 2.8 }}
@@ -648,6 +649,9 @@ export function OperatorScreen({ token }: { token: string }) {
                   {safetyMode}
                 </Text>
               </View>
+            </View>
+            <View className="absolute inset-x-0 bottom-14 top-9 z-[8] px-1">
+              <CraneMimic tags={tags} safety={safety} />
             </View>
             <View className="absolute inset-x-0 bottom-0 z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1">
               {(
