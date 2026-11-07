@@ -275,6 +275,8 @@ function WalkthroughModal({ screen }: { screen: TourScreen }) {
     .replace('{current}', String(stepIndex + 1))
     .replace('{total}', String(stepIds.length));
 
+  // TP-24: center (not bottom-dock) so the control matrix stays visible;
+  // single Done control — Next only when more steps remain.
   return (
     <Modal
       visible
@@ -283,26 +285,26 @@ function WalkthroughModal({ screen }: { screen: TourScreen }) {
       onRequestClose={stopWalkthrough}
     >
       <View
-        className="flex-1 justify-end bg-black/55 p-4"
+        className="flex-1 justify-center bg-black/55 p-4"
         pointerEvents="box-none"
       >
         <View className="gap-2.5 rounded-xl border border-border bg-card p-4">
           <Hint>{stepLabel}</Hint>
           <Text className="leading-5 text-foreground">{t(currentStepId)}</Text>
           <View className="flex-row flex-wrap items-center justify-end gap-3">
-            <Pressable
-              onPress={prevStep}
-              disabled={stepIndex === 0}
-              className="px-1 py-2"
-            >
-              <LinkText>{t('tour.back')}</LinkText>
-            </Pressable>
+            {stepIndex > 0 ? (
+              <Pressable onPress={prevStep} className="px-1 py-2">
+                <LinkText>{t('tour.back')}</LinkText>
+              </Pressable>
+            ) : null}
             <Pressable onPress={stopWalkthrough} className="px-1 py-2">
               <LinkText>{t('tour.done')}</LinkText>
             </Pressable>
-            <Btn onPress={nextStep}>
-              <BtnText>{last ? t('tour.done') : t('tour.next')}</BtnText>
-            </Btn>
+            {last ? null : (
+              <Btn onPress={nextStep}>
+                <BtnText>{t('tour.next')}</BtnText>
+              </Btn>
+            )}
           </View>
         </View>
       </View>

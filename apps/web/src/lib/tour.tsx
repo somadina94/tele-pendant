@@ -2,7 +2,9 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -225,6 +227,39 @@ export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
   );
 }
 
+/** TP-24: place the card above lower-half targets so the matrix stays usable. */
+export function placeTourCard(
+  target: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'width'>,
+  cardWidth: number,
+  cardHeight: number,
+  viewport: { width: number; height: number } = {
+    width: 1280,
+    height: 800,
+  },
+): { top: number; left: number } {
+  const gap = 12;
+  const margin = 8;
+  const preferAbove = target.top > viewport.height * 0.4;
+  const spaceAbove = target.top - margin;
+  const spaceBelow = viewport.height - target.bottom - margin;
+  const canFitAbove = spaceAbove >= cardHeight + gap;
+  const canFitBelow = spaceBelow >= cardHeight + gap;
+  let placeAbove: boolean;
+  if (preferAbove && canFitAbove) placeAbove = true;
+  else if (!preferAbove && canFitBelow) placeAbove = false;
+  else if (canFitBelow) placeAbove = false;
+  else placeAbove = spaceAbove >= spaceBelow;
+
+  const top = placeAbove
+    ? Math.max(margin, target.top - cardHeight - gap)
+    : Math.min(viewport.height - cardHeight - margin, target.bottom + gap);
+  const left = Math.min(
+    Math.max(margin, target.left + target.width / 2 - cardWidth / 2),
+    viewport.width - cardWidth - margin,
+  );
+  return { top, left };
+}
+
 export function WalkthroughOverlay({ screen }: { screen: TourScreen }) {
   const {
     walkthroughActive,
@@ -237,6 +272,56 @@ export function WalkthroughOverlay({ screen }: { screen: TourScreen }) {
     stopWalkthrough,
   } = useTour();
   const { t } = useT();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+
+  useLayoutEffect(() => {
+    if (!walkthroughActive || walkthroughScreen !== screen || !currentStepId) {
+      setCoords(null);
+      return;
+    }
+
+    const target = document.querySelector(
+      `[data-tour-id="${CSS.escape(currentStepId)}"]`,
+    ) as HTMLElement | null;
+    if (!target) {
+      setCoords(null);
+      return;
+    }
+
+    target.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest',
+      behavior: 'smooth',
+    });
+
+    let cancelled = false;
+    const measure = () => {
+      if (cancelled) return;
+      const rect = target.getBoundingClientRect();
+      const width = Math.min(448, window.innerWidth - 16);
+      const height = cardRef.current?.offsetHeight ?? 200;
+      setCoords(
+        placeTourCard(rect, width, height, {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        }),
+      );
+    };
+
+    const frame = window.requestAnimationFrame(() => {
+      measure();
+      window.requestAnimationFrame(measure);
+    });
+    window.addEventListener('resize', measure);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', measure);
+    };
+  }, [walkthroughActive, walkthroughScreen, screen, currentStepId, stepIndex]);
 
   if (
     !walkthroughActive ||
@@ -254,11 +339,19 @@ export function WalkthroughOverlay({ screen }: { screen: TourScreen }) {
 
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-4"
+      className="pointer-events-none fixed inset-0 z-40 bg-black/40"
       role="dialog"
       aria-modal="true"
     >
-      <Card className="pointer-events-auto w-full max-w-md shadow-lg">
+      <Card
+        ref={cardRef}
+        className="pointer-events-auto absolute w-[min(100%-1rem,28rem)] max-w-md shadow-lg"
+        style={
+          coords
+            ? { top: coords.top, left: coords.left }
+            : { bottom: 16, left: '50%', transform: 'translateX(-50%)' }
+        }
+      >
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-normal text-muted-foreground">
             {stepLabel}

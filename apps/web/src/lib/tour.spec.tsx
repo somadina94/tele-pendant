@@ -6,6 +6,7 @@ import { renderWithProviders } from '../test/render';
 import {
   HelpTip,
   PageTourBar,
+  placeTourCard,
   readTourEnabled,
   useTour,
   writeTourEnabled,
@@ -121,7 +122,7 @@ describe('tour helpers', () => {
     expect(localStorage.getItem('tourEnabled')).toBe('0');
   });
 
-  it('finishes walkthrough on last next and supports PageTourBar start', () => {
+  it('finishes walkthrough on Done at last step and supports PageTourBar start', () => {
     localStorage.setItem('tourEnabled', '1');
     renderWithProviders(
       <>
@@ -140,10 +141,130 @@ describe('tour helpers', () => {
     expect(screen.getByTestId('index')).toHaveTextContent(
       String(steps.length - 1),
     );
-    // Last primary control is labeled Done but calls nextStep → finish
-    const actions = screen.getByRole('dialog').querySelectorAll('button');
-    fireEvent.click(actions[actions.length - 1]!);
+    expect(
+      screen.queryByRole('button', { name: 'Next' }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     expect(screen.getByTestId('active')).toHaveTextContent('false');
+  });
+
+  it('places tour card above lower-half targets (TP-24)', () => {
+    const viewport = { width: 1280, height: 772 };
+    const matrix = { top: 520, bottom: 700, left: 200, width: 400 };
+    const above = placeTourCard(matrix, 400, 180, viewport);
+    expect(above.top).toBeLessThan(matrix.top);
+    expect(above.top + 180).toBeLessThanOrEqual(matrix.top);
+
+    const header = { top: 40, bottom: 120, left: 100, width: 300 };
+    const below = placeTourCard(header, 400, 180, viewport);
+    expect(below.top).toBeGreaterThanOrEqual(header.bottom);
+  });
+
+  it('placeTourCard uses the default viewport when omitted', () => {
+    const placed = placeTourCard(
+      { top: 400, bottom: 480, left: 50, width: 200 },
+      320,
+      120,
+    );
+    expect(placed.top).toBe(268);
+  });
+
+  it('placeTourCard picks fallbacks when preferred side does not fit', () => {
+    const fitsBelowFallback = placeTourCard(
+      { top: 161, bottom: 201, left: 50, width: 200 },
+      320,
+      145,
+      { width: 400, height: 400 },
+    );
+    expect(fitsBelowFallback.top).toBeGreaterThanOrEqual(201);
+
+    const neitherSideFits = placeTourCard(
+      { top: 200, bottom: 240, left: 50, width: 200 },
+      320,
+      260,
+      { width: 400, height: 280 },
+    );
+    expect(neitherSideFits.top).toBe(8);
+  });
+
+  it('positions walkthrough card via layout measurement (rAF + resize)', () => {
+    localStorage.setItem('tourEnabled', '1');
+    const offsetSpy = vi
+      .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+      .mockReturnValue(undefined as unknown as number);
+    const rafSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((cb) => {
+        cb(0);
+        return 1;
+      });
+    const cancelSpy = vi
+      .spyOn(window, 'cancelAnimationFrame')
+      .mockImplementation(() => undefined);
+    const rect = {
+      top: 520,
+      bottom: 700,
+      left: 200,
+      width: 400,
+      height: 180,
+      right: 600,
+      x: 200,
+      y: 520,
+      toJSON: () => ({}),
+    };
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      rect as DOMRect,
+    );
+
+    const { unmount } = renderWithProviders(
+      <>
+        <PageTourBar screen="login" />
+        <HelpTip id="tour.login.language">
+          <span>lang</span>
+        </HelpTip>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Start tour' }));
+
+    const card = document.querySelector(
+      '[role="dialog"] .pointer-events-auto',
+    ) as HTMLElement | null;
+    expect(card).not.toBeNull();
+    expect(card!.style.top).not.toBe('');
+    expect(card!.style.left).not.toBe('');
+
+    fireEvent(window, new Event('resize'));
+    expect(card!.style.top).not.toBe('');
+
+    unmount();
+    expect(cancelSpy).toHaveBeenCalled();
+    offsetSpy.mockRestore();
+    rafSpy.mockRestore();
+    cancelSpy.mockRestore();
+  });
+
+  it('skips layout measure after walkthrough unmounts', () => {
+    localStorage.setItem('tourEnabled', '1');
+    let outerCb: FrameRequestCallback | null = null;
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      outerCb = cb;
+      return 42;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(
+      () => undefined,
+    );
+
+    const { unmount } = renderWithProviders(
+      <>
+        <PageTourBar screen="login" />
+        <HelpTip id="tour.login.language">
+          <span>lang</span>
+        </HelpTip>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Start tour' }));
+    unmount();
+    expect(() => outerCb?.(0)).not.toThrow();
   });
 
   it('toggles HelpTip popover when tour is on', () => {
