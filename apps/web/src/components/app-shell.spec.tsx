@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
 import { AppShell, screenFromPath } from '@/layouts/AppShell';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -56,7 +56,7 @@ describe('shell chrome', () => {
     expect(screen.getByLabelText('Wait')).toBeInTheDocument();
   });
 
-  it('toggles theme and sidebar including keyboard and logout', () => {
+  it('toggles theme and sidebar including keyboard and logout', async () => {
     const setTheme = vi.fn();
     vi.doMock('next-themes', () => ({
       useTheme: () => ({
@@ -79,9 +79,16 @@ describe('shell chrome', () => {
     fireEvent.click(screen.getByLabelText(/Switch to/i));
     fireEvent.click(screen.getByRole('button', { name: /Toggle Sidebar/i }));
     localStorage.setItem('accessToken', 'tok');
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
     fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
-    expect(localStorage.getItem('accessToken')).toBeNull();
-
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/v1/auth/logout',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(localStorage.getItem('accessToken')).toBeNull();
+    });
     fireEvent.keyDown(window, { key: 'b', metaKey: true });
   });
 

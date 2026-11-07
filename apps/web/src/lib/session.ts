@@ -9,6 +9,27 @@ export function clearSession(): void {
   resetRealtimeSocket();
 }
 
+/**
+ * TP-40: revoke server-side JWT (tokenVersion bump) then clear local state.
+ * Uses fetch directly to avoid a circular import with api.ts.
+ * Always clears locally even if the revoke call fails.
+ */
+export async function logoutSession(): Promise<void> {
+  const token = localStorage.getItem('accessToken');
+  if (token) {
+    try {
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'include',
+      });
+    } catch {
+      /* still clear local session */
+    }
+  }
+  clearSession();
+}
+
 /** True when this path should not force a login redirect on 401. */
 export function isPublicAuthPath(pathname = window.location.pathname): boolean {
   return PUBLIC_PATHS.has(pathname);

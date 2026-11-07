@@ -11,7 +11,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { canAccessAppRoute, type AppRoute } from '@tele-pendant/shared';
 import { useT } from '@/lib/i18n';
 import { getStoredUserRole } from '@/lib/user-session';
-import { clearSession } from '@/lib/session';
+import { logoutSession } from '@/lib/session';
 import {
   Sidebar,
   SidebarContent,
@@ -95,8 +95,7 @@ export function AppSidebar() {
             <SidebarMenuButton
               tooltip={t('logout')}
               onClick={() => {
-                clearSession();
-                navigate('/');
+                void logoutSession().then(() => navigate('/'));
               }}
             >
               <LogOut />

@@ -234,6 +234,14 @@ function Pendant() {
   }, [token]);
 
   const logout = async () => {
+    const current = token;
+    if (current) {
+      try {
+        await apiPost('/auth/logout', undefined, current);
+      } catch {
+        /* still clear local session */
+      }
+    }
     await AsyncStorage.removeItem('accessToken');
     await clearStoredUser();
     setToken(null);
