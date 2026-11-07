@@ -7,7 +7,7 @@
 | Web HMI | https://hmi.example.com |
 | API | https://api.example.com |
 | Health | https://api.example.com/api/v1/health |
-| Swagger | https://api.example.com/api |
+| Swagger | Not mounted when `NODE_ENV=production` (local Docker: http://localhost:3010/api) |
 | OTA | https://api.example.com/ota/manifest |
 
 ```env

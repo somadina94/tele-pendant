@@ -6,7 +6,7 @@
 | ------- | --- |
 | Web HMI | https://hmi.example.com |
 | API health | https://api.example.com/api/v1/health |
-| Swagger UI | https://api.example.com/api |
+| Swagger UI | Local only (`http://localhost:3010/api`). **Not mounted** on live production. |
 | OTA manifest | https://api.example.com/ota/manifest |
 | Phone API base | https://api.example.com/api/v1 |
 

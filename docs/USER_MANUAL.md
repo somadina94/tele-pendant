@@ -8,7 +8,7 @@ Use this on the **live** site or while the Docker **dev** stack is running. Ever
 | ------- | ---------------------------------------------------------- | -------------------- |
 | Web     | https://hmi.example.com                           | Tele-Pendant loads   |
 | API     | https://api.example.com/api/v1/health         | JSON `status` is `ok` |
-| Swagger | https://api.example.com/api                   | Swagger UI loads     |
+| Swagger | https://api.example.com/api                   | **Not mounted on live** (`NODE_ENV=production` → 404). Use local Docker for Swagger. |
 | OTA     | https://api.example.com/ota/manifest          | JSON `runtimeVersion` |
 | Phone   | API base `https://api.example.com/api/v1`     | Sign-in works        |
 
@@ -21,7 +21,7 @@ On live, open https://hmi.example.com/operator after sign-in. The click paths be
 | Check     | Where                               | Success                                                                            |
 | --------- | ----------------------------------- | ---------------------------------------------------------------------------------- |
 | API       | http://localhost:3010/api/v1/health | JSON `status` is `ok`                                                              |
-| Swagger   | http://localhost:3010/api           | Swagger UI loads                                                                   |
+| Swagger   | http://localhost:3010/api           | Swagger UI loads (**local / non-production only**)                                 |
 | Web       | http://localhost:8080               | Tele-Pendant page (port comes from `WEB_PORT` in `.env`; this stack uses **8080**) |
 | Simulator | host port **1502**                  | Container `tele-pendant-modbus-sim-dev` is up                                      |
 
@@ -190,6 +190,8 @@ From Operator, click **Config** (http://localhost:8080/admin). Sign in as the ad
 
 - Heading **HMI config**, link **Operator**.
 - Text says the fields are saved in SQLite and that **Use this PLC** plus **Save** connects.
+- Checking **Use this PLC** on a connection that is not already active opens a confirm dialog (**Use this PLC now?**). Cancel leaves the previous connection enabled.
+- Deleting a register, cell, label, alarm definition, or user asks for a confirm dialog before the row is removed.
 - **PLC connections** shows the **demo-simulator** row: host `modbus-sim`, port `1502`, marked **(simulator)**, **Use this PLC** checked.
 - **Register maps** includes at least these names, with the address field showing the demo number:
   - `coil.hoistUp` · coil · address `0`
@@ -214,7 +216,7 @@ From Operator, click **Config** (http://localhost:8080/admin). Sign in as the ad
 - **Add a cell** is an empty form. Pick a primary register, fill the label, and click **Add cell**.
 - **Live labels** lists **Height**, **Load**, **Trolley**, and **Motor** with **X**, **Y**, **Format**, and a register. Those feed the fixed **cluster readout** on Operator (they do not float on the graphic). **Add a label** posts a free-position overlay (use X/Y for placement).
 - **Background** has **Name**, a CSS background, and an image URL. If the image URL is filled, Operator uses that picture. If it is empty, Operator uses the CSS background.
-- **Users** (admin only): table of accounts with **Name**, **Email**, **Role**, **Status** (**Active** / **Suspended**), and **Edit** / **Suspend** or **Activate** / **Remove** on operator and supervisor rows. The seeded **admin** row shows **Protected**; you cannot suspend or remove yourself. Below the table, **Add user** creates an operator or supervisor (display name, email, password at least 8 characters, role). **Success:** toast **Added** with the name or email. Suspended users cannot sign in until an admin **Activate**s them. Removing a user deletes the account.
+- **Users** (admin only): table of accounts with **Name**, **Email**, **Role**, **Status** (**Active** / **Suspended**), and **Edit** / **Suspend** or **Activate** / **Remove** on operator and supervisor rows. The seeded **admin** row shows **Protected**; you cannot suspend or remove yourself. Below the table, **Add user** creates an operator or supervisor (display name, email, password at least 8 characters, role). **Success:** toast **Added** with the name or email. Suspended users cannot sign in until an admin **Activate**s them. **Remove** asks for confirm, then deletes the account.
 
 Admins can open **Users** from Config’s sidebar section, from the **Account menu** (**Manage users**, **Add operator**, **Add supervisor**: each jumps to Config with the **Users** section open), or directly at http://localhost:8080/admin?section=users.
 
@@ -238,7 +240,7 @@ linear-gradient(160deg, #1a2332 0%, #0f1419 45%, #1e2a1e 100%)
 
 From Operator, click **Audit** (http://localhost:8080/audit).
 
-**Success:** heading **Audit**, link **Operator**, and a list of rows. Each row shows email, action, resource, result, and time. After the Config saves above, you see a `register.update` or `cell.update` row. An operator account can open the page and sees the authorization error from the API.
+**Success:** heading **Audit**, link **Operator**, and a list of rows. Each row shows **Name** (display name; falls back to email), action, resource, result, and time. Filter/export can match name or email. After the Config saves above, you see a `register.update` or `cell.update` row. An operator account can open the page and sees the authorization error from the API.
 
 ## 9. Assistant
 
@@ -310,8 +312,8 @@ Do this only after the banner is **normal** again. One alarm cannot be both acke
 1. Click **STOP**.
 2. Open **Ops** while the alarm is still **active**. **Shelve** is beside **Ack**.
 3. Click **Shelve**. Do not click **Ack**.
-4. **Success:** the state text is **shelved**.
-5. Click **Unshelve** to bring it back, or reset e-stop. When the e-stop coil clears, a shelved alarm clears too (including after an API restart — open alarms are reloaded into the engine on boot).
+4. **Success:** the state text is **shelved**. It stays **shelved** until you **Unshelve** or the plant condition recovers.
+5. Click **Unshelve** to return it to **active** while the condition remains, or clear the condition (e.g. reset e-stop). When the condition recovers, a shelved alarm **auto-clears** — it does not stay shelved forever. After an API restart, active/acked/shelved rows are reloaded into the engine (TP-09), so that auto-clear still works once the condition is clear.
 
 ## 12. Account menu: change password
 
@@ -353,7 +355,7 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 7. Open **Face**. **Success:** the sentence **Convenience match only; not certified biometrics. Fail closed to password.**
 8. Open **Ops**. **Success:** diagnostics, alarms (**Ack** and **Shelve** when one is active), and the height trend.
 9. Open **Config**. Change a register address or a cell label and save, then set it back. **Success:** a saved line.
-10. Open **Audit**. **Success:** the same list as the web (email, action, resource, result, time).
+10. Open **Audit**. **Success:** the same list as the web (**Name**, action, resource, result, time).
 11. Last, press **STOP** once. **Success:** the banner shows **e_stop**. Type the reset PIN and tap **Reset e-stop** to return to **normal**.
 
 ## Tour help (web and phone)
@@ -366,7 +368,7 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 ## Languages, alarms, trends, safety roles, and OPC UA
 
 - The **Language** menu on the sign-in page follows the browser until you pick English, Español, Français, or Deutsch. That choice is saved on your user and then wins over the browser. The phone uses the device language the same way. To add a language: copy `packages/shared/i18n/en.json` to a new code, translate keys, register it in `packages/shared/src/i18n.ts`, and add it to the web/mobile pickers.
-- **Config** can create, edit, and delete alarm definitions (register, operator, threshold, severity). **Ops** acknowledges, shelves, and unshelves alarms. A shelved alarm clears when the condition recovers; after an API restart the engine reloads active/acked/shelved rows so that still works.
+- **Config** can create, edit, and delete alarm definitions (register, operator, threshold, severity); deletes use a confirm dialog. **Ops** acknowledges, shelves, and unshelves alarms. A shelved alarm stays shelved until **Unshelve** or the condition recovers (then it auto-clears). After an API restart the engine reloads active/acked/shelved rows so recovery auto-clear still works (TP-09).
 - Mark a register **Trend**. **Ops** draws an SVG line for each trended series. Height and load start trended.
 - **Safety roles** bind E-stop, deadman, heartbeat, and safe-state to registers. Losing the deadman, the link, or e-stop clears the primary coil of every motion cell.
 - **Protocol** is Modbus TCP by default (simulator port 1502). OPC UA is optional: `docker compose -f docker-compose.dev.yml --profile opcua up opcua-sim`, then set the connection to OPC UA and fill each register’s node id (`ns=1;s=HoistUp` and the matching names).

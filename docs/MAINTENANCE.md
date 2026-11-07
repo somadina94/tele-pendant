@@ -6,7 +6,7 @@
 | ----- | --- |
 | Web | https://hmi.example.com |
 | Health | https://api.example.com/api/v1/health |
-| Swagger | https://api.example.com/api |
+| Swagger | Off on live (`NODE_ENV=production`). Local: http://localhost:3010/api |
 | OTA | https://api.example.com/ota/manifest |
 
 `APP_URL=https://api.example.com` · `FRONTEND_URL=https://hmi.example.com`

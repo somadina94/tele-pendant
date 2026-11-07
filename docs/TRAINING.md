@@ -1,6 +1,6 @@
 # Tele-Pendant: Training outline
 
-Live demo hosts: web https://hmi.example.com · API/Swagger https://api.example.com/api · health https://api.example.com/api/v1/health.
+Live demo hosts: web https://hmi.example.com · API health https://api.example.com/api/v1/health. Swagger is local-only (not mounted on live production).
 
 ## Session 1 (30–45 min)
 

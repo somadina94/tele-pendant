@@ -53,7 +53,7 @@ Think of it as: **sign in → see a picture of the plant → press buttons → n
 | **JWT / session** | After login, the browser keeps a secure token so you stay signed in for a while. |
 | **SQLite** | A small database file on the server where layouts, users, and alarm rules are stored. |
 | **API** | The server program the web and phone talk to. |
-| **Swagger** | A technical web page listing all API endpoints; mainly for developers. |
+| **Swagger** | A technical web page listing API endpoints for developers. Available on **local / non-production** API only; **not** mounted on live production. |
 
 ---
 
@@ -181,7 +181,7 @@ Default demo layout (empty corners):
 | **Uptime** | How long the API process has been running (seconds). |
 | **Alarms** | List of active/acked/shelved events with severity. |
 | **Ack** | Mark alarm as acknowledged (seen). |
-| **Shelve** | Mark alarm as shelved (hidden from active attention). Use one or the other per alarm state rules. |
+| **Shelve** | Mark alarm as shelved (hidden from active attention). It stays shelved until **Unshelve** or the plant condition recovers (then it auto-clears). Survives API restart until that recovery (TP-09). Use **Ack** or **Shelve**, not both on the same event path. |
 | **Trends** | Simple history of registers marked **Trend** in Config (height, load by default). |
 
 Ops refreshes every couple of seconds automatically.
@@ -207,7 +207,7 @@ Ops refreshes every couple of seconds automatically.
 
 ## Audit screen
 
-Read-only list: user email, action name, resource, success/fail, time. Useful after Config changes (`register.update`, `cell.update`, etc.). Operators may see an authorization error; supervisors/admins see the full list.
+Read-only list: **Name** (display name; email if no name), action, resource, success/fail, time. Filter/export accepts name or email. Useful after Config changes (`register.update`, `cell.update`, etc.). Operators may see an authorization error; supervisors/admins see the full list.
 
 ---
 
@@ -226,7 +226,7 @@ Connects the app to real hardware or the simulator.
 | **Port** | Network port. Modbus often uses **502**; demo simulator uses **1502**. |
 | **Unit id** | Modbus slave number (usually **1**). |
 | **Protocol** | **Modbus TCP** (default) or **OPC UA** (needs node ids on registers). |
-| **Use this PLC** | Checkbox: only **one** connection should be enabled at a time. |
+| **Use this PLC** | Checkbox: only **one** connection should be enabled at a time. Checking it on another connection asks **Use this PLC now?** first. |
 | **Save / Add PLC** | Writes settings and tries to open the connection. Message **Saved and connecting.** or an error if the host is unreachable. |
 
 ### Register maps
@@ -258,7 +258,7 @@ Each button is a **cell** with grid position and up to three PLC links:
 | **Primary register** | Main coil/command sent to PLC. |
 | **Feedback register** (optional) | e.g. motor running. |
 | **Status register** (optional) | e.g. height value shown under the button. |
-| **Add cell / Delete** | Extend or remove buttons. |
+| **Add cell / Delete** | Extend or remove buttons. **Delete** asks for confirm before the cell is removed (STOP / safe-action cells cannot be deleted). |
 
 ### Live labels
 
@@ -292,7 +292,7 @@ Rules evaluated against live registers.
 | **Severity** | One of **info**, **warning**, or **critical** (dropdown when you define an alarm in Config; shown on Ops). |
 | **Enabled** | Turn rule on/off. |
 
-Ops handles **Ack** / **Shelve** on fired alarms; Config defines the rules.
+Ops handles **Ack** / **Shelve** on fired alarms; Config defines the rules. Deleting a definition asks for confirm first.
 
 ### Safety roles
 
@@ -315,7 +315,7 @@ If deadman is lost, communications fail, or e-stop asserts, the system **clears 
 | **Table** | All accounts: display name, email, role, **Active** / **Suspended**. |
 | **Edit** | Change name, email, role, suspension, or set a new password for that user. |
 | **Suspend** / **Activate** | Block or restore sign-in without deleting the row. |
-| **Remove** | Delete operator/supervisor accounts (admin row is protected). |
+| **Remove** | Delete operator/supervisor accounts after a confirm dialog (admin row is protected). |
 | **Add user** | Create operator or supervisor with email and password. |
 
 Display names appear on audit rows when set.
