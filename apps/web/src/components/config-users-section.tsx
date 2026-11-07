@@ -173,12 +173,21 @@ export function ConfigUsersSection() {
   const roleId = useId();
   const [editing, setEditing] = useState<PublicUser | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [wideLayout, setWideLayout] = useState(false);
 
   useEffect(() => {
     if (roleParam === 'supervisor' || roleParam === 'operator') {
       setRole(roleParam);
     }
   }, [roleParam]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setWideLayout(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
 
   const users = useQuery({
     queryKey: ['users'],
@@ -266,7 +275,7 @@ export function ConfigUsersSection() {
           </p>
         ) : null}
         {users.data && users.data.length > 0 ? (
-          <div className="overflow-x-auto">
+          wideLayout ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -318,9 +327,7 @@ export function ConfigUsersSection() {
                               onClick={() => void toggleSuspend(row)}
                             >
                               <UserX className="size-4" />
-                              <span className="hidden sm:inline">
-                                {row.suspended ? 'Activate' : 'Suspend'}
-                              </span>
+                              {row.suspended ? 'Activate' : 'Suspend'}
                             </Button>
                             <Button
                               type="button"
@@ -330,7 +337,7 @@ export function ConfigUsersSection() {
                               onClick={() => confirmRemove(row)}
                             >
                               <Trash2 className="size-4" />
-                              <span className="hidden sm:inline">Remove</span>
+                              Remove
                             </Button>
                           </div>
                         ) : (
@@ -344,7 +351,81 @@ export function ConfigUsersSection() {
                 })}
               </TableBody>
             </Table>
-          </div>
+          ) : (
+            <ul className="grid gap-3">
+              {users.data.map((row) => {
+                const managed = isManagedUser(row);
+                const isSelf = row.id === session?.id;
+                return (
+                  <li
+                    key={row.id}
+                    className="rounded-lg border bg-card p-3 shadow-sm"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">
+                          {row.displayName ?? '—'}
+                        </p>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {row.email}
+                        </p>
+                        <p className="mt-1 text-xs capitalize text-muted-foreground">
+                          {row.role}
+                        </p>
+                      </div>
+                      {row.suspended ? (
+                        <Badge variant="destructive">Suspended</Badge>
+                      ) : (
+                        <Badge variant="secondary">Active</Badge>
+                      )}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {managed && !isSelf ? (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            aria-label={`Edit ${row.email}`}
+                            onClick={() => openEdit(row)}
+                          >
+                            <Pencil className="size-4" />
+                            Edit
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            aria-label={
+                              row.suspended ? 'Reactivate user' : 'Suspend user'
+                            }
+                            onClick={() => void toggleSuspend(row)}
+                          >
+                            <UserX className="size-4" />
+                            {row.suspended ? 'Activate' : 'Suspend'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            aria-label={`Remove ${row.email}`}
+                            onClick={() => confirmRemove(row)}
+                          >
+                            <Trash2 className="size-4" />
+                            Remove
+                          </Button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {isSelf ? 'You' : 'Protected'}
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )
         ) : users.isSuccess ? (
           <p className="text-sm text-muted-foreground">No users yet.</p>
         ) : null}

@@ -86,6 +86,96 @@ describe('ConfigUsersSection', () => {
     );
   });
 
+  it('shows edit/suspend/remove on the compact users list (TP-33)', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue([operatorRow]);
+    renderWithProviders(<ConfigUsersSection />, { role: 'admin' });
+    expect(await screen.findByText('Operator One')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Edit op@example.com' }),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Suspend user' })).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Remove op@example.com' }),
+    ).toBeVisible();
+  });
+
+  it('renders the wide users table when the viewport is lg+ (TP-33)', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: query.includes('min-width: 1024px'),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    });
+    localStorage.setItem(
+      'user',
+      JSON.stringify({
+        id: 'self-1',
+        email: 'me@example.com',
+        displayName: 'Me',
+        role: 'admin',
+      }),
+    );
+    vi.spyOn(api, 'apiGet').mockResolvedValue([
+      { ...operatorRow, displayName: null },
+      { ...operatorRow, id: 'op-2', email: 'op2@example.com', suspended: true },
+      {
+        id: 'admin-1',
+        email: 'admin@example.com',
+        displayName: 'Administrator',
+        role: 'admin',
+        suspended: false,
+        locale: 'en',
+      },
+      {
+        id: 'self-1',
+        email: 'me@example.com',
+        displayName: 'Me',
+        role: 'supervisor',
+        suspended: false,
+        locale: 'en',
+      },
+    ]);
+    const patch = vi.spyOn(api, 'apiPatch').mockResolvedValue({ ok: true });
+    renderWithProviders(<ConfigUsersSection />);
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('Protected')).toBeInTheDocument();
+    expect(screen.getByText('You')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reactivate user' }));
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remove op2@example.com' }),
+    );
+    expect(await screen.findByText('Remove user?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Edit op@example.com' }),
+    );
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    });
+  });
+
   it('lists users and creates a new account', async () => {
     vi.spyOn(api, 'apiGet').mockResolvedValue([operatorRow]);
     const post = vi.spyOn(api, 'apiPost').mockResolvedValue({ ok: true });

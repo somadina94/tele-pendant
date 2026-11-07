@@ -16,6 +16,27 @@ describe('UsersService', () => {
     jest.clearAllMocks();
   });
 
+  it('repairs Opertaor typos in display names on boot (TP-33)', async () => {
+    usersRepository.find.mockResolvedValue([
+      { id: '1', displayName: 'Test Opertaor' },
+      { id: '2', displayName: 'Test Opertaor2' },
+      { id: '3', displayName: null },
+    ]);
+    usersRepository.save.mockImplementation(async (x) => x);
+    const service = new UsersService(
+      usersRepository as never,
+      auditService as never,
+    );
+    await service.onModuleInit();
+    expect(usersRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: 'Test Operator' }),
+    );
+    expect(usersRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: 'Test Operator2' }),
+    );
+    expect(usersRepository.save).toHaveBeenCalledTimes(2);
+  });
+
   it('creates an operator and writes audit', async () => {
     usersRepository.findOne.mockResolvedValue(null);
     usersRepository.save.mockResolvedValue({

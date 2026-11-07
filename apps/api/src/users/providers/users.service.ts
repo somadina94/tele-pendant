@@ -5,10 +5,11 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { Repository } from 'typeorm';
+import { Like, Repository } from 'typeorm';
 import { AuditService } from '../../audit/providers/audit.service';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
 import { CreateUserDto } from '../dtos/create-user.dto';
@@ -17,7 +18,7 @@ import { UserRole } from '../enums/user-role.enum';
 import { User } from '../entities/user.entity';
 
 @Injectable()
-export class UsersService {
+export class UsersService implements OnModuleInit {
   private readonly usersRepository: Repository<User>;
   private readonly auditService: AuditService;
 
@@ -27,6 +28,18 @@ export class UsersService {
   ) {
     this.usersRepository = usersRepository;
     this.auditService = auditService;
+  }
+
+  /** TP-33: repair seeded/demo display names that used “Opertaor”. */
+  async onModuleInit(): Promise<void> {
+    const rows = await this.usersRepository.find({
+      where: { displayName: Like('%Opertaor%') },
+    });
+    for (const row of rows) {
+      if (!row.displayName?.includes('Opertaor')) continue;
+      row.displayName = row.displayName.replaceAll('Opertaor', 'Operator');
+      await this.usersRepository.save(row);
+    }
   }
 
   toPublicUser(user: User) {
