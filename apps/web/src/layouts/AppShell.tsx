@@ -53,7 +53,14 @@ export function AppShell() {
             <ThemeToggle />
           </div>
         </header>
-        <div className="flex min-h-0 flex-1 flex-col overflow-auto p-2 md:p-4">
+        <div
+          className={
+            screen === 'operator'
+              ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-2 md:p-4'
+              : 'flex min-h-0 flex-1 flex-col overflow-auto p-2 md:p-4'
+          }
+          data-operator-fit={screen === 'operator' ? 'true' : undefined}
+        >
           <Outlet />
         </div>
       </SidebarInset>

@@ -633,6 +633,19 @@ describe('OperatorPage', () => {
     expect(hoist).toHaveTextContent('Hoist Up');
   });
 
+  it('docks STOP outside the matrix with ≥44px targets (FEAT-A3)', async () => {
+    const { container } = renderWithProviders(<OperatorPage />);
+    const stop = await screen.findByRole('button', { name: 'STOP' });
+    const dock = container.querySelector('[data-feat="a3-stop-dock"]');
+    expect(dock).toBeTruthy();
+    expect(dock?.contains(stop)).toBe(true);
+    expect(stop).toHaveAttribute('data-stop-dock', 'true');
+    expect(stop).toHaveAttribute('data-touch-min', '44');
+    const hoist = screen.getByRole('button', { name: 'Hoist Up' });
+    expect(hoist).toHaveAttribute('data-touch-min', '44');
+    expect(dock?.contains(hoist)).toBe(false);
+  });
+
   it('sends slow vs fast speed on motion activate (FEAT-A2)', async () => {
     renderWithProviders(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });

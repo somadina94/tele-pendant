@@ -311,277 +311,297 @@ export function OperatorScreen({ token }: { token: string }) {
     );
   }
 
-  return (
-    <ScrollView
-      className="flex-1 bg-background"
-      contentContainerClassName="gap-1.5 p-2 pb-6"
-      scrollEnabled={!holdingId}
-      keyboardShouldPersistTaps="handled"
-    >
-      <HelpTip id="tour.operator.banner">
-        <Banner>
-          {t('safety')}: {safetyMode}
-          {holdingId ? ` · ${t('deadmanHold')}` : ''}
-        </Banner>
-      </HelpTip>
-      <HelpTip id="tour.operator.graphic">
-        <View
-          className="relative h-[152px] overflow-hidden rounded-xl border border-white/10"
-          style={{ backgroundColor: solidBackground || '#07090c' }}
+  const stopCell =
+    layoutQuery.data?.cells.find(
+      (cell) =>
+        cell.style === 'estop' || cell.label.trim().toUpperCase() === 'STOP',
+    ) ?? null;
+
+  const renderMobileCell = (cell: Cell) => {
+    const isEstop = cell.style === 'estop';
+    const cellState = resolveMatrixCellUiState({
+      style: cell.style,
+      isMotion: cell.isMotion,
+      isHolding: holdingId === cell.id,
+      safety,
+      tags,
+      statusRegisterName: cell.statusRegister?.name,
+    });
+    const palette = isEstop
+      ? {
+          background: ESTOP.background,
+          border: ESTOP.border,
+          foreground: ESTOP.foreground,
+          chip: 'rgba(255,255,255,0.22)',
+        }
+      : statePalette[cellState];
+    const stateLabel = t(MATRIX_CELL_STATE_I18N[cellState]);
+    const metaColor = isEstop ? 'rgba(255,255,255,0.85)' : palette.foreground;
+    return (
+      <Pressable
+        key={cell.id}
+        accessibilityRole="button"
+        accessibilityLabel={cell.label}
+        accessibilityHint={`${MATRIX_CELL_STATE_CODE[cellState]}: ${stateLabel}`}
+        className="min-h-[44px] w-full flex-row flex-nowrap items-center justify-between gap-2 rounded-md border px-3 py-3.5"
+        style={{
+          minHeight: 44,
+          backgroundColor: palette.background,
+          borderColor: palette.border,
+          borderWidth: cellState === 'running' && !isEstop ? 2 : 1,
+        }}
+        onPressIn={() => {
+          void pressCell(cell);
+        }}
+        onPressOut={() => {
+          void releaseCell(cell);
+        }}
+      >
+        <Text
+          numberOfLines={1}
+          className="shrink-0 text-base font-semibold"
+          style={{ color: palette.foreground }}
         >
-          {imageUrl && photoOk ? (
-            <Image
-              source={{ uri: imageUrl }}
-              className="absolute inset-0 h-full w-full"
-              style={{ opacity: 0.32 }}
-              onError={() => setPhotoOk(false)}
-            />
-          ) : null}
+          {cell.label}
+        </Text>
+        <Text
+          numberOfLines={1}
+          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
+          style={{
+            color: palette.foreground,
+            backgroundColor: palette.chip,
+          }}
+        >
+          {MATRIX_CELL_STATE_CODE[cellState]} · {stateLabel}
+        </Text>
+        {cell.feedbackRegister || cell.statusRegister ? (
+          <Text
+            numberOfLines={1}
+            className="shrink-0 text-[10px] opacity-80"
+            style={{ color: metaColor }}
+          >
+            {cell.feedbackRegister
+              ? `F ${String(
+                  tagValueForRegister(tags, cell.feedbackRegister.name),
+                )}`
+              : ''}
+            {cell.feedbackRegister && cell.statusRegister ? ' · ' : ''}
+            {cell.statusRegister
+              ? `S ${String(
+                  tagValueForRegister(tags, cell.statusRegister.name),
+                )}`
+              : ''}
+          </Text>
+        ) : null}
+      </Pressable>
+    );
+  };
+
+  return (
+    <View className="flex-1 bg-background">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gap-1.5 p-2 pb-3"
+        scrollEnabled={!holdingId}
+        keyboardShouldPersistTaps="handled"
+      >
+        <HelpTip id="tour.operator.banner">
+          <Banner>
+            {t('safety')}: {safetyMode}
+            {holdingId ? ` · ${t('deadmanHold')}` : ''}
+          </Banner>
+        </HelpTip>
+        <HelpTip id="tour.operator.graphic">
           <View
-            className="absolute inset-0"
-            style={{
-              backgroundColor: 'rgba(0,0,0,0.35)',
-            }}
-          />
-          <View className="z-10 flex-row items-center justify-between px-3.5 pb-2 pt-3">
-            <Text
-              className="flex-1 text-[10px] font-medium uppercase text-white/70"
-              style={{ letterSpacing: 2.8 }}
-              numberOfLines={1}
-            >
-              {layoutQuery.data?.background?.name ?? t('plantGraphic')}
-            </Text>
-            <View className="ml-2 flex-row items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5">
-              <View
-                className="h-1.5 w-1.5 rounded-full"
-                style={{
-                  backgroundColor:
-                    tone === 'danger'
-                      ? '#fb7185'
-                      : tone === 'warn'
-                        ? '#fcd34d'
-                        : '#8fd0c0',
-                }}
+            className="relative h-[152px] overflow-hidden rounded-xl border border-white/10"
+            style={{ backgroundColor: solidBackground || '#07090c' }}
+          >
+            {imageUrl && photoOk ? (
+              <Image
+                source={{ uri: imageUrl }}
+                className="absolute inset-0 h-full w-full"
+                style={{ opacity: 0.32 }}
+                onError={() => setPhotoOk(false)}
               />
+            ) : null}
+            <View
+              className="absolute inset-0"
+              style={{
+                backgroundColor: 'rgba(0,0,0,0.35)',
+              }}
+            />
+            <View className="z-10 flex-row items-center justify-between px-3.5 pb-2 pt-3">
               <Text
-                className="text-[10px] font-medium uppercase text-white/85"
-                style={{ letterSpacing: 1.6 }}
+                className="flex-1 text-[10px] font-medium uppercase text-white/70"
+                style={{ letterSpacing: 2.8 }}
+                numberOfLines={1}
               >
-                {safetyMode}
+                {layoutQuery.data?.background?.name ?? t('plantGraphic')}
               </Text>
-            </View>
-          </View>
-          <View className="absolute inset-x-0 bottom-0 z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1">
-            {(
-              [
-                {
-                  label: 'Height',
-                  value: String(height ?? tags?.hoistHeightMm ?? '—'),
-                  unit: 'mm',
-                },
-                {
-                  label: 'Trolley',
-                  value: String(
-                    tags?.trolleyPositionMm ??
-                      tagValueForRegister(tags, 'holding.trolleyPosition'),
-                  ),
-                  unit: 'mm',
-                },
-                {
-                  label: 'Load',
-                  value: String(tags?.loadKg ?? '—'),
-                  unit: 'kg',
-                },
-                {
-                  label: 'Motor',
-                  value: tags?.motorRunning ? 'RUN' : 'IDLE',
-                  unit: 'status',
-                },
-              ] as const
-            ).map((metric, index) => (
-              <View
-                key={metric.label}
-                className={`flex-1 items-center gap-0.5 px-1 py-1 ${
-                  index > 0 ? 'border-l border-white/10' : ''
-                }`}
-              >
+              <View className="ml-2 flex-row items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5">
+                <View
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{
+                    backgroundColor:
+                      tone === 'danger'
+                        ? '#fb7185'
+                        : tone === 'warn'
+                          ? '#fcd34d'
+                          : '#8fd0c0',
+                  }}
+                />
                 <Text
-                  className="text-[9px] font-medium uppercase text-white/45"
-                  style={{ letterSpacing: 2 }}
+                  className="text-[10px] font-medium uppercase text-white/85"
+                  style={{ letterSpacing: 1.6 }}
                 >
-                  {metric.label}
-                </Text>
-                <Text className="font-mono text-base font-semibold text-white">
-                  {metric.value}
-                </Text>
-                <Text
-                  className="text-[10px] uppercase text-white/40"
-                  style={{ letterSpacing: 1.2 }}
-                >
-                  {metric.unit}
+                  {safetyMode}
                 </Text>
               </View>
-            ))}
-          </View>
-        </View>
-      </HelpTip>
-      <Card compact>
-        <HelpTip id="tour.operator.safePin">
-          <View className="gap-1">
-            <Text className="text-xs text-muted-foreground">
-              {t('safePin')}
-            </Text>
-            <View className="flex-row items-center gap-1">
-              <TextInput
-                className="h-12 min-h-12 flex-1 rounded-md border border-border bg-input px-3 text-sm text-foreground"
-                value={pin}
-                onChangeText={setPin}
-                secureTextEntry
-                autoCapitalize="none"
-                placeholder={t('safePin')}
-                placeholderTextColor="#5C6B7A"
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('resetEstop')}
-                className="h-12 min-h-12 shrink-0 items-center justify-center rounded-md border border-border px-2"
-                onPress={() => void resetEStop()}
-              >
-                <Text className="text-xs font-semibold text-foreground">
-                  {t('resetEstop')}
-                </Text>
-              </Pressable>
+            </View>
+            <View className="absolute inset-x-0 bottom-0 z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1">
+              {(
+                [
+                  {
+                    label: 'Height',
+                    value: String(height ?? tags?.hoistHeightMm ?? '—'),
+                    unit: 'mm',
+                  },
+                  {
+                    label: 'Trolley',
+                    value: String(
+                      tags?.trolleyPositionMm ??
+                        tagValueForRegister(tags, 'holding.trolleyPosition'),
+                    ),
+                    unit: 'mm',
+                  },
+                  {
+                    label: 'Load',
+                    value: String(tags?.loadKg ?? '—'),
+                    unit: 'kg',
+                  },
+                  {
+                    label: 'Motor',
+                    value: tags?.motorRunning ? 'RUN' : 'IDLE',
+                    unit: 'status',
+                  },
+                ] as const
+              ).map((metric, index) => (
+                <View
+                  key={metric.label}
+                  className={`flex-1 items-center gap-0.5 px-1 py-1 ${
+                    index > 0 ? 'border-l border-white/10' : ''
+                  }`}
+                >
+                  <Text
+                    className="text-[9px] font-medium uppercase text-white/45"
+                    style={{ letterSpacing: 2 }}
+                  >
+                    {metric.label}
+                  </Text>
+                  <Text className="font-mono text-base font-semibold text-white">
+                    {metric.value}
+                  </Text>
+                  <Text
+                    className="text-[10px] uppercase text-white/40"
+                    style={{ letterSpacing: 1.2 }}
+                  >
+                    {metric.unit}
+                  </Text>
+                </View>
+              ))}
             </View>
           </View>
         </HelpTip>
-        <View className="flex-row flex-wrap items-center gap-2">
-          <Text className="text-xs text-muted-foreground">{t('jogSpeed')}</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: jogSpeed === 'slow' }}
-            className="h-12 min-h-12 items-center justify-center rounded-md border px-3"
-            style={{
-              borderColor: jogSpeed === 'slow' ? '#3D9CFD' : '#5C6B7A',
-              backgroundColor:
-                jogSpeed === 'slow' ? 'rgba(61,156,253,0.2)' : 'transparent',
-            }}
-            onPress={() => setJogSpeed('slow')}
-          >
-            <Text className="text-xs font-semibold text-foreground">
-              {t('jogSlow')}
+        <Card compact>
+          <HelpTip id="tour.operator.safePin">
+            <View className="gap-1">
+              <Text className="text-xs text-muted-foreground">
+                {t('safePin')}
+              </Text>
+              <View className="flex-row items-center gap-1">
+                <TextInput
+                  className="h-12 min-h-12 flex-1 rounded-md border border-border bg-input px-3 text-sm text-foreground"
+                  value={pin}
+                  onChangeText={setPin}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  placeholder={t('safePin')}
+                  placeholderTextColor="#5C6B7A"
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('resetEstop')}
+                  className="h-12 min-h-12 shrink-0 items-center justify-center rounded-md border border-border px-2"
+                  onPress={() => void resetEStop()}
+                >
+                  <Text className="text-xs font-semibold text-foreground">
+                    {t('resetEstop')}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </HelpTip>
+          <View className="flex-row flex-wrap items-center gap-2">
+            <Text className="text-xs text-muted-foreground">
+              {t('jogSpeed')}
             </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: jogSpeed === 'fast' }}
-            className="h-12 min-h-12 items-center justify-center rounded-md border px-3"
-            style={{
-              borderColor: jogSpeed === 'fast' ? '#3D9CFD' : '#5C6B7A',
-              backgroundColor:
-                jogSpeed === 'fast' ? 'rgba(61,156,253,0.2)' : 'transparent',
-            }}
-            onPress={() => setJogSpeed('fast')}
-          >
-            <Text className="text-xs font-semibold text-foreground">
-              {t('jogFast')}
-            </Text>
-          </Pressable>
-        </View>
-        <HelpTip id="tour.operator.matrix">
-          <View className="mt-1 gap-[22px]">
-            {grid &&
-              grid.cells.map((cell) => {
-                if (!cell) return null;
-                const isEstop = cell.style === 'estop';
-                const cellState = resolveMatrixCellUiState({
-                  style: cell.style,
-                  isMotion: cell.isMotion,
-                  isHolding: holdingId === cell.id,
-                  safety,
-                  tags,
-                  statusRegisterName: cell.statusRegister?.name,
-                });
-                const palette = isEstop
-                  ? {
-                      background: ESTOP.background,
-                      border: ESTOP.border,
-                      foreground: ESTOP.foreground,
-                      chip: 'rgba(255,255,255,0.22)',
-                    }
-                  : statePalette[cellState];
-                const stateLabel = t(MATRIX_CELL_STATE_I18N[cellState]);
-                const metaColor = isEstop
-                  ? 'rgba(255,255,255,0.85)'
-                  : palette.foreground;
-                return (
-                  <Pressable
-                    key={cell.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={cell.label}
-                    accessibilityHint={`${MATRIX_CELL_STATE_CODE[cellState]}: ${stateLabel}`}
-                    className="min-h-16 w-full flex-row flex-nowrap items-center justify-between gap-2 rounded-md border px-3 py-3.5"
-                    style={{
-                      backgroundColor: palette.background,
-                      borderColor: palette.border,
-                      borderWidth: cellState === 'running' && !isEstop ? 2 : 1,
-                    }}
-                    onPressIn={() => {
-                      void pressCell(cell);
-                    }}
-                    onPressOut={() => {
-                      void releaseCell(cell);
-                    }}
-                  >
-                    <Text
-                      numberOfLines={1}
-                      className="shrink-0 text-base font-semibold"
-                      style={{ color: palette.foreground }}
-                    >
-                      {cell.label}
-                    </Text>
-                    <Text
-                      numberOfLines={1}
-                      className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
-                      style={{
-                        color: palette.foreground,
-                        backgroundColor: palette.chip,
-                      }}
-                    >
-                      {MATRIX_CELL_STATE_CODE[cellState]} · {stateLabel}
-                    </Text>
-                    {cell.feedbackRegister || cell.statusRegister ? (
-                      <Text
-                        numberOfLines={1}
-                        className="shrink-0 text-[10px] opacity-80"
-                        style={{ color: metaColor }}
-                      >
-                        {cell.feedbackRegister
-                          ? `F ${String(
-                              tagValueForRegister(
-                                tags,
-                                cell.feedbackRegister.name,
-                              ),
-                            )}`
-                          : ''}
-                        {cell.feedbackRegister && cell.statusRegister
-                          ? ' · '
-                          : ''}
-                        {cell.statusRegister
-                          ? `S ${String(
-                              tagValueForRegister(
-                                tags,
-                                cell.statusRegister.name,
-                              ),
-                            )}`
-                          : ''}
-                      </Text>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: jogSpeed === 'slow' }}
+              className="h-12 min-h-12 items-center justify-center rounded-md border px-3"
+              style={{
+                borderColor: jogSpeed === 'slow' ? '#3D9CFD' : '#5C6B7A',
+                backgroundColor:
+                  jogSpeed === 'slow' ? 'rgba(61,156,253,0.2)' : 'transparent',
+              }}
+              onPress={() => setJogSpeed('slow')}
+            >
+              <Text className="text-xs font-semibold text-foreground">
+                {t('jogSlow')}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: jogSpeed === 'fast' }}
+              className="h-12 min-h-12 items-center justify-center rounded-md border px-3"
+              style={{
+                borderColor: jogSpeed === 'fast' ? '#3D9CFD' : '#5C6B7A',
+                backgroundColor:
+                  jogSpeed === 'fast' ? 'rgba(61,156,253,0.2)' : 'transparent',
+              }}
+              onPress={() => setJogSpeed('fast')}
+            >
+              <Text className="text-xs font-semibold text-foreground">
+                {t('jogFast')}
+              </Text>
+            </Pressable>
           </View>
-        </HelpTip>
-      </Card>
-    </ScrollView>
+          <HelpTip id="tour.operator.matrix">
+            <View className="mt-1 gap-[22px]">
+              {grid &&
+                grid.cells.map((cell) => {
+                  if (!cell) return null;
+                  if (
+                    stopCell &&
+                    (cell.id === stopCell.id || cell.style === 'estop')
+                  ) {
+                    return null;
+                  }
+                  return renderMobileCell(cell);
+                })}
+            </View>
+          </HelpTip>
+        </Card>
+      </ScrollView>
+      {stopCell ? (
+        <View
+          className="border-t border-border bg-background px-2 pt-2"
+          style={{ paddingBottom: 12 }}
+          accessibilityLabel="Stop dock"
+        >
+          {renderMobileCell(stopCell)}
+        </View>
+      ) : null}
+    </View>
   );
 }

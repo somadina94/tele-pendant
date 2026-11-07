@@ -57,6 +57,31 @@ describe('shell chrome', () => {
     expect(screen.getByLabelText('Wait')).toBeInTheDocument();
   });
 
+  it('fits Operator without nested shell scroll (FEAT-A3)', () => {
+    const { container, unmount } = renderWithProviders(
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route path="/operator" element={<div>Op</div>} />
+        </Route>
+      </Routes>,
+      { route: '/operator' },
+    );
+    expect(container.querySelector('[data-operator-fit="true"]')).toBeTruthy();
+    unmount();
+
+    const other = renderWithProviders(
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route path="/ops" element={<div>Ops body</div>} />
+        </Route>
+      </Routes>,
+      { route: '/ops' },
+    );
+    expect(
+      other.container.querySelector('[data-operator-fit="true"]'),
+    ).toBeNull();
+  });
+
   it('toggles theme and sidebar including keyboard and logout', async () => {
     renderWithProviders(
       <Routes>

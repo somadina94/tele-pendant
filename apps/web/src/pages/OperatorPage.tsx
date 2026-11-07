@@ -311,296 +311,316 @@ export function OperatorPage() {
     return <PageSpinner label={t('operator')} />;
   }
 
-  return (
-    <div className="operator-shell mx-auto flex w-full max-w-5xl flex-col gap-1.5 md:h-full md:min-h-0 md:gap-3">
-      <HelpTip id="tour.operator.banner">
-        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-1.5">
-          <ShieldAlert className="size-4 text-muted-foreground" />
-          <span className="text-sm">
-            {t('safety')}: <strong>{mode}</strong>
+  const stopCell =
+    grid.cells.find(
+      (cell) =>
+        cell &&
+        (cell.style === 'estop' || cell.label.trim().toUpperCase() === 'STOP'),
+    ) ?? null;
+
+  function renderMatrixCell(cell: CellDto) {
+    const cellState = resolveMatrixCellUiState({
+      style: cell.style,
+      isMotion: cell.isMotion,
+      isHolding: holdingCellId === cell.id,
+      safety: safety ?? layout!.safety,
+      tags,
+      statusRegisterName: cell.statusRegister?.name,
+    });
+    const StateIcon = CELL_STATE_ICON[cellState];
+    const stateLabel = t(MATRIX_CELL_STATE_I18N[cellState]);
+    const isEstop = cell.style === 'estop';
+    return (
+      <Button
+        key={cell.id}
+        type="button"
+        variant={isEstop ? 'destructive' : 'secondary'}
+        data-cell-state={cellState}
+        data-touch-min="44"
+        data-stop-dock={isEstop ? 'true' : undefined}
+        className={cn(
+          'matrix-cell h-auto',
+          `state-${cellState}`,
+          isEstop && 'estop',
+        )}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          trySetPointerCapture(e.currentTarget, e.pointerId);
+          void pressCell(cell);
+        }}
+        onPointerMove={(e) => {
+          if (heldRef.current !== cell.id || !cell.isMotion) return;
+          if (pointerLeftElement(e.currentTarget, e.clientX, e.clientY)) {
+            finishCellPointer(cell, e.currentTarget, e.pointerId);
+          }
+        }}
+        onPointerUp={(e) =>
+          finishCellPointer(cell, e.currentTarget, e.pointerId)
+        }
+        onPointerLeave={(e) =>
+          finishCellPointer(cell, e.currentTarget, e.pointerId)
+        }
+        onPointerCancel={(e) =>
+          finishCellPointer(cell, e.currentTarget, e.pointerId)
+        }
+        onLostPointerCapture={() => {
+          if (heldRef.current === cell.id && cell.isMotion) {
+            void releaseCell(cell);
+          }
+        }}
+        aria-label={cell.label}
+        aria-description={`${MATRIX_CELL_STATE_CODE[cellState]}: ${stateLabel}`}
+        title={`${MATRIX_CELL_STATE_CODE[cellState]} · ${stateLabel}`}
+      >
+        <span className="matrix-cell-label">{cell.label}</span>
+        <span className="matrix-cell-state">
+          <StateIcon className="size-2.5" strokeWidth={2.5} />
+          {stateLabel}
+        </span>
+        {(cell.feedbackRegister || cell.statusRegister) && (
+          <span className="matrix-cell-meta">
+            {cell.feedbackRegister
+              ? `F ${String(
+                  tagValueForRegister(tags, cell.feedbackRegister.name),
+                )}`
+              : null}
+            {cell.feedbackRegister && cell.statusRegister ? ' · ' : null}
+            {cell.statusRegister
+              ? `S ${String(
+                  tagValueForRegister(tags, cell.statusRegister.name),
+                )}`
+              : null}
           </span>
-          {safety?.deadmanActive || holdingCellId ? (
-            <Badge variant="secondary">{t('deadmanHold')}</Badge>
-          ) : null}
-          {safety?.eStopActive ? (
-            <Badge variant="destructive" className="estop-mark">
-              {t('estop')}
-            </Badge>
-          ) : null}
-        </div>
-      </HelpTip>
+        )}
+      </Button>
+    );
+  }
 
-      {message ? (
-        <Alert variant="destructive">
-          <AlertDescription>{terror(message)}</AlertDescription>
-        </Alert>
-      ) : null}
+  return (
+    <div className="operator-shell mx-auto flex w-full max-w-5xl flex-col gap-1.5 md:gap-3">
+      <div className="operator-body">
+        <HelpTip id="tour.operator.banner">
+          <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-1.5">
+            <ShieldAlert className="size-4 text-muted-foreground" />
+            <span className="text-sm">
+              {t('safety')}: <strong>{mode}</strong>
+            </span>
+            {safety?.deadmanActive || holdingCellId ? (
+              <Badge variant="secondary">{t('deadmanHold')}</Badge>
+            ) : null}
+            {safety?.eStopActive ? (
+              <Badge variant="destructive" className="estop-mark">
+                {t('estop')}
+              </Badge>
+            ) : null}
+          </div>
+        </HelpTip>
 
-      <HelpTip id="tour.operator.graphic">
-        <div
-          className="plant-graphic"
-          style={cssBackground ? { background: cssBackground } : undefined}
-        >
-          {imageUrl && photoOk ? (
-            <img
-              alt="Plant background"
-              src={imageUrl}
-              onError={() => setPhotoOk(false)}
-            />
-          ) : null}
-          <div className="plant-cluster-chrome">
-            <h2 className="plant-cluster-title">
-              {layout.background?.name ?? t('plantGraphic')}
-            </h2>
-            <div
-              className={cn(
-                'plant-cluster-status',
-                safety?.eStopActive && 'estop-mark',
-              )}
-            >
-              <span
+        {message ? (
+          <Alert variant="destructive">
+            <AlertDescription>{terror(message)}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <HelpTip id="tour.operator.graphic">
+          <div
+            className="plant-graphic"
+            style={cssBackground ? { background: cssBackground } : undefined}
+          >
+            {imageUrl && photoOk ? (
+              <img
+                alt="Plant background"
+                src={imageUrl}
+                onError={() => setPhotoOk(false)}
+              />
+            ) : null}
+            <div className="plant-cluster-chrome">
+              <h2 className="plant-cluster-title">
+                {layout.background?.name ?? t('plantGraphic')}
+              </h2>
+              <div
                 className={cn(
-                  'plant-cluster-status-dot',
-                  (safety?.eStopActive || mode === 'safe_state') && 'danger',
-                  !safety?.eStopActive &&
-                    mode !== 'normal' &&
-                    mode !== 'safe_state' &&
-                    'warn',
+                  'plant-cluster-status',
+                  safety?.eStopActive && 'estop-mark',
                 )}
-              />
-              {mode}
-            </div>
-          </div>
-          <div className="plant-overlay-stage">
-            {(layout.overlays ?? [])
-              .filter((o) => !isClusterMetricRegister(o.register?.name))
-              .map((o) => (
-                <div
-                  key={o.id}
-                  className="plant-overlay"
-                  style={{ left: `${o.xPct}%`, top: `${o.yPct}%` }}
-                >
-                  <span className="plant-overlay-label">{o.label}</span>
-                  <strong className="plant-overlay-value">
-                    {formatOverlay(
-                      o.format,
-                      tagValueForRegister(tags, o.register?.name),
-                    )}
-                  </strong>
-                </div>
-              ))}
-          </div>
-          <div className="plant-readout">
-            <div className="plant-metric">
-              <span className="plant-metric-label">Height</span>
-              <span className="plant-metric-value">
-                {tags?.hoistHeightMm ?? '—'}
-              </span>
-              <span className="plant-metric-unit">mm</span>
-            </div>
-            <div className="plant-metric">
-              <span className="plant-metric-label">Trolley</span>
-              <span className="plant-metric-value">
-                {tags?.trolleyPositionMm ??
-                  tagValueForRegister(tags, 'holding.trolleyPosition')}
-              </span>
-              <span className="plant-metric-unit">mm</span>
-            </div>
-            <div className="plant-metric">
-              <span className="plant-metric-label">Load</span>
-              <span className="plant-metric-value">{tags?.loadKg ?? '—'}</span>
-              <span className="plant-metric-unit">kg</span>
-            </div>
-            <div className="plant-metric">
-              <span className="plant-metric-label">Motor</span>
-              <span className="plant-metric-value">
-                {tags?.motorRunning ? 'RUN' : 'IDLE'}
-              </span>
-              <span className="plant-metric-unit">status</span>
-            </div>
-          </div>
-        </div>
-      </HelpTip>
-
-      <Card className="min-h-0 shrink overflow-visible md:flex-1 md:overflow-visible">
-        <CardHeader className="hidden space-y-0 px-4 py-1.5 md:block md:space-y-0 md:py-2">
-          <CardTitle className="text-sm">{t('controlMatrix')}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1 px-2 pb-2 pt-2 md:space-y-1.5 md:px-3 md:pb-3 md:pt-0">
-          <HelpTip id="tour.operator.safePin">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <Label
-                htmlFor="safe-pin"
-                className="shrink-0 whitespace-nowrap text-xs md:text-sm"
               >
-                {t('safePin')}
-              </Label>
-              <Input
-                id="safe-pin"
-                className="h-9 min-h-9 min-w-[5rem] max-w-[11rem] flex-1 basis-28 md:max-w-[9rem]"
-                value={safePin}
-                onChange={(e) => setSafePin(e.target.value)}
-                type="password"
-                placeholder={t('safePin')}
-                autoComplete="off"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 min-h-9 shrink-0 px-2 text-xs md:h-9 md:min-h-9 md:px-3 md:text-sm"
-                onClick={() => void resetEStop()}
-              >
-                {t('resetEstop')}
-              </Button>
+                <span
+                  className={cn(
+                    'plant-cluster-status-dot',
+                    (safety?.eStopActive || mode === 'safe_state') && 'danger',
+                    !safety?.eStopActive &&
+                      mode !== 'normal' &&
+                      mode !== 'safe_state' &&
+                      'warn',
+                  )}
+                />
+                {mode}
+              </div>
             </div>
-          </HelpTip>
-          {showJogSpeed ? (
-            <div
-              className="flex flex-wrap items-center gap-2"
-              role="group"
-              aria-label={t('jogSpeed')}
-            >
-              <span className="text-xs text-muted-foreground md:text-sm">
-                {t('jogSpeed')}
-              </span>
-              <Button
-                type="button"
-                size="sm"
-                variant={jogSpeed === 'slow' ? 'default' : 'outline'}
-                className="h-9 min-h-9"
-                aria-pressed={jogSpeed === 'slow'}
-                onClick={() => setJogSpeed('slow')}
-              >
-                {t('jogSlow')}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={jogSpeed === 'fast' ? 'default' : 'outline'}
-                className="h-9 min-h-9"
-                aria-pressed={jogSpeed === 'fast'}
-                onClick={() => setJogSpeed('fast')}
-              >
-                {t('jogFast')}
-              </Button>
-            </div>
-          ) : null}
-          <HelpTip id="tour.operator.matrix">
-            <div
-              className="matrix-grid"
-              style={{
-                gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
-              }}
-            >
-              {grid.cells.map((cell, idx) => {
-                if (!cell) {
-                  return (
-                    <div
-                      key={`empty-${idx}`}
-                      className="matrix-grid-hole"
-                      aria-hidden
-                    />
-                  );
-                }
-                const cellState = resolveMatrixCellUiState({
-                  style: cell.style,
-                  isMotion: cell.isMotion,
-                  isHolding: holdingCellId === cell.id,
-                  safety: safety ?? layout.safety,
-                  tags,
-                  statusRegisterName: cell.statusRegister?.name,
-                });
-                const StateIcon = CELL_STATE_ICON[cellState];
-                const stateLabel = t(MATRIX_CELL_STATE_I18N[cellState]);
-                return (
-                  <Button
-                    key={cell.id}
-                    type="button"
-                    variant={
-                      cell.style === 'estop' ? 'destructive' : 'secondary'
-                    }
-                    data-cell-state={cellState}
-                    className={cn(
-                      'matrix-cell h-auto',
-                      `state-${cellState}`,
-                      cell.style === 'estop' && 'estop',
-                    )}
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      trySetPointerCapture(e.currentTarget, e.pointerId);
-                      void pressCell(cell);
-                    }}
-                    onPointerMove={(e) => {
-                      if (heldRef.current !== cell.id || !cell.isMotion) return;
-                      if (
-                        pointerLeftElement(
-                          e.currentTarget,
-                          e.clientX,
-                          e.clientY,
-                        )
-                      ) {
-                        finishCellPointer(cell, e.currentTarget, e.pointerId);
-                      }
-                    }}
-                    onPointerUp={(e) =>
-                      finishCellPointer(cell, e.currentTarget, e.pointerId)
-                    }
-                    onPointerLeave={(e) =>
-                      finishCellPointer(cell, e.currentTarget, e.pointerId)
-                    }
-                    onPointerCancel={(e) =>
-                      finishCellPointer(cell, e.currentTarget, e.pointerId)
-                    }
-                    onLostPointerCapture={() => {
-                      if (heldRef.current === cell.id && cell.isMotion) {
-                        void releaseCell(cell);
-                      }
-                    }}
-                    aria-label={cell.label}
-                    aria-description={`${MATRIX_CELL_STATE_CODE[cellState]}: ${stateLabel}`}
-                    title={`${MATRIX_CELL_STATE_CODE[cellState]} · ${stateLabel}`}
+            <div className="plant-overlay-stage">
+              {(layout.overlays ?? [])
+                .filter((o) => !isClusterMetricRegister(o.register?.name))
+                .map((o) => (
+                  <div
+                    key={o.id}
+                    className="plant-overlay"
+                    style={{ left: `${o.xPct}%`, top: `${o.yPct}%` }}
                   >
-                    <span className="matrix-cell-label">{cell.label}</span>
-                    <span className="matrix-cell-state">
-                      <StateIcon className="size-2.5" strokeWidth={2.5} />
-                      {stateLabel}
-                    </span>
-                    {(cell.feedbackRegister || cell.statusRegister) && (
-                      <span className="matrix-cell-meta">
-                        {cell.feedbackRegister
-                          ? `F ${String(
-                              tagValueForRegister(
-                                tags,
-                                cell.feedbackRegister.name,
-                              ),
-                            )}`
-                          : null}
-                        {cell.feedbackRegister && cell.statusRegister
-                          ? ' · '
-                          : null}
-                        {cell.statusRegister
-                          ? `S ${String(
-                              tagValueForRegister(
-                                tags,
-                                cell.statusRegister.name,
-                              ),
-                            )}`
-                          : null}
-                      </span>
-                    )}
-                  </Button>
-                );
-              })}
+                    <span className="plant-overlay-label">{o.label}</span>
+                    <strong className="plant-overlay-value">
+                      {formatOverlay(
+                        o.format,
+                        tagValueForRegister(tags, o.register?.name),
+                      )}
+                    </strong>
+                  </div>
+                ))}
             </div>
-          </HelpTip>
-          <HelpTip id="tour.operator.holdHint">
-            <p className="hidden text-xs text-muted-foreground md:block">
-              {t('holdHint')}
-            </p>
-          </HelpTip>
-        </CardContent>
-      </Card>
+            <div className="plant-readout">
+              <div className="plant-metric">
+                <span className="plant-metric-label">Height</span>
+                <span className="plant-metric-value">
+                  {tags?.hoistHeightMm ?? '—'}
+                </span>
+                <span className="plant-metric-unit">mm</span>
+              </div>
+              <div className="plant-metric">
+                <span className="plant-metric-label">Trolley</span>
+                <span className="plant-metric-value">
+                  {tags?.trolleyPositionMm ??
+                    tagValueForRegister(tags, 'holding.trolleyPosition')}
+                </span>
+                <span className="plant-metric-unit">mm</span>
+              </div>
+              <div className="plant-metric">
+                <span className="plant-metric-label">Load</span>
+                <span className="plant-metric-value">
+                  {tags?.loadKg ?? '—'}
+                </span>
+                <span className="plant-metric-unit">kg</span>
+              </div>
+              <div className="plant-metric">
+                <span className="plant-metric-label">Motor</span>
+                <span className="plant-metric-value">
+                  {tags?.motorRunning ? 'RUN' : 'IDLE'}
+                </span>
+                <span className="plant-metric-unit">status</span>
+              </div>
+            </div>
+          </div>
+        </HelpTip>
+
+        <Card className="operator-matrix-card overflow-visible">
+          <CardHeader className="hidden space-y-0 px-4 py-1.5 md:block md:space-y-0 md:py-2">
+            <CardTitle className="text-sm">{t('controlMatrix')}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 px-2 pb-2 pt-2 md:space-y-1.5 md:px-3 md:pb-3 md:pt-0">
+            <HelpTip id="tour.operator.safePin">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <Label
+                  htmlFor="safe-pin"
+                  className="shrink-0 whitespace-nowrap text-xs md:text-sm"
+                >
+                  {t('safePin')}
+                </Label>
+                <Input
+                  id="safe-pin"
+                  className="h-11 min-h-11 min-w-[5rem] max-w-[11rem] flex-1 basis-28 md:max-w-[9rem]"
+                  value={safePin}
+                  onChange={(e) => setSafePin(e.target.value)}
+                  type="password"
+                  placeholder={t('safePin')}
+                  autoComplete="off"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-11 min-h-11 shrink-0 px-2 text-xs md:px-3 md:text-sm"
+                  onClick={() => void resetEStop()}
+                >
+                  {t('resetEstop')}
+                </Button>
+              </div>
+            </HelpTip>
+            {showJogSpeed ? (
+              <div
+                className="flex flex-wrap items-center gap-2"
+                role="group"
+                aria-label={t('jogSpeed')}
+              >
+                <span className="text-xs text-muted-foreground md:text-sm">
+                  {t('jogSpeed')}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={jogSpeed === 'slow' ? 'default' : 'outline'}
+                  className="h-11 min-h-11"
+                  aria-pressed={jogSpeed === 'slow'}
+                  onClick={() => setJogSpeed('slow')}
+                >
+                  {t('jogSlow')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={jogSpeed === 'fast' ? 'default' : 'outline'}
+                  className="h-11 min-h-11"
+                  aria-pressed={jogSpeed === 'fast'}
+                  onClick={() => setJogSpeed('fast')}
+                >
+                  {t('jogFast')}
+                </Button>
+              </div>
+            ) : null}
+            <HelpTip id="tour.operator.matrix">
+              <div
+                className="matrix-grid"
+                style={{
+                  gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
+                }}
+              >
+                {grid.cells.map((cell, idx) => {
+                  if (!cell) {
+                    return (
+                      <div
+                        key={`empty-${idx}`}
+                        className="matrix-grid-hole"
+                        aria-hidden
+                      />
+                    );
+                  }
+                  // FEAT-A3: STOP lives in the fixed dock, not the scrolling matrix.
+                  if (
+                    stopCell &&
+                    (cell.id === stopCell.id || cell.style === 'estop')
+                  ) {
+                    return (
+                      <div
+                        key={`stop-slot-${cell.id}`}
+                        className="matrix-grid-hole"
+                        aria-hidden
+                      />
+                    );
+                  }
+                  return renderMatrixCell(cell);
+                })}
+              </div>
+            </HelpTip>
+            <HelpTip id="tour.operator.holdHint">
+              <p className="hidden text-xs text-muted-foreground md:block">
+                {t('holdHint')}
+              </p>
+            </HelpTip>
+          </CardContent>
+        </Card>
+      </div>
+      {stopCell ? (
+        <div className="matrix-stop-dock" data-feat="a3-stop-dock">
+          {renderMatrixCell(stopCell)}
+        </div>
+      ) : null}
     </div>
   );
 }
