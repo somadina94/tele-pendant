@@ -1,6 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import {
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+  useSearchParams,
+} from 'react-router-dom';
 import { AdminPage } from './pages/AdminPage';
 import { AuditPage } from './pages/AuditPage';
 import { AssistantPage } from './pages/AssistantPage';
@@ -61,6 +67,13 @@ function FaceEntry() {
   );
 }
 
+/** TP-30: docs/bookmarks used /config; Config UI lives at /admin. */
+function ConfigAliasRedirect() {
+  const [params] = useSearchParams();
+  const qs = params.toString();
+  return <Navigate to={qs ? `/admin?${qs}` : '/admin'} replace />;
+}
+
 export function App() {
   return (
     <Routes>
@@ -87,6 +100,7 @@ export function App() {
             </RequireRole>
           }
         />
+        <Route path="/config/*" element={<ConfigAliasRedirect />} />
         <Route path="/ops" element={<OpsPage />} />
         <Route path="/media" element={<MediaPage />} />
         <Route

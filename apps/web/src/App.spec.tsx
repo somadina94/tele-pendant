@@ -124,4 +124,20 @@ describe('App', () => {
       unmount();
     }
   });
+
+  it('redirects /config to /admin (TP-30)', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    const withSection = renderWithProviders(<App />, {
+      route: '/config?section=plc',
+    });
+    expect(
+      await screen.findByRole('heading', { name: 'Add a PLC' }),
+    ).toBeInTheDocument();
+    withSection.unmount();
+
+    renderWithProviders(<App />, { route: '/config' });
+    expect(
+      await screen.findByRole('heading', { name: 'Add a PLC' }),
+    ).toBeInTheDocument();
+  });
 });
