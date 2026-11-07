@@ -257,7 +257,7 @@ export class SafetyStateService {
   async tick(): Promise<SafetySnapshot> {
     const driver = this.plcService.getDriver();
     if (!driver.isConnected()) {
-      this.eStopActive = false;
+      // TP-39: never clear the software e-stop latch on comms loss.
       await this.enterMode('comms_lost', 'PLC disconnected');
       return this.snapshot();
     }
@@ -272,12 +272,17 @@ export class SafetyStateService {
       );
       const coils = await driver.readCoils(eStopAddress, 1);
       const coilHigh = Boolean(coils[0]);
-      this.eStopActive = coilHigh || this.mode === 'e_stop';
+      // Latch sticks until resetEStop (PIN); coil high also asserts it.
+      this.eStopActive = this.eStopActive || coilHigh;
       if (coilHigh) {
         await this.enterMode('e_stop', 'E-stop coil asserted');
         return this.snapshot();
       }
-      if (this.mode === 'e_stop') {
+      if (this.eStopActive) {
+        // Re-assert e_stop after reconnect / coil drop until PIN reset (TP-39).
+        if (this.mode !== 'e_stop') {
+          await this.enterMode('e_stop', 'Software e-stop still latched');
+        }
         return this.snapshot();
       }
 

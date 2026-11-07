@@ -220,6 +220,29 @@ describe('SafetyStateService', () => {
     expect(snap.mode).toBe('comms_lost');
   });
 
+  it('keeps software e-stop across PLC disconnect and reconnect until PIN (TP-39)', async () => {
+    process.env.SAFE_ACTION_PIN = '1234';
+    await service.latchOperatorEStop('Operator STOP');
+    expect(service.snapshot().eStopActive).toBe(true);
+
+    driver.isConnected.mockReturnValue(false);
+    const lost = await service.tick();
+    expect(lost.mode).toBe('comms_lost');
+    expect(lost.eStopActive).toBe(true);
+
+    driver.isConnected.mockReturnValue(true);
+    driver.readCoils.mockResolvedValue([false]);
+    const back = await service.tick();
+    expect(back.mode).toBe('e_stop');
+    expect(back.eStopActive).toBe(true);
+    expect(service.canIssueMotion('u1')).toBe(false);
+
+    const reset = await service.resetEStop('1234');
+    expect(reset.eStopActive).toBe(false);
+    expect(reset.mode).toBe('normal');
+    delete process.env.SAFE_ACTION_PIN;
+  });
+
   it('restores normal after non-normal mode when healthy', async () => {
     driver.isConnected.mockReturnValue(false);
     await service.tick();
