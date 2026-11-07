@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Dimensions, StyleSheet, View } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Camera, ScanFace, UserPlus } from 'lucide-react-native';
 import { apiPost } from '../api';
 import { useLocale } from '../locale';
+import { setAccessToken } from '../token-storage';
 import { HelpTip } from '../tour';
 import { Btn, BtnText, Field, Hint, OkText, Section } from '../ui';
 
@@ -167,7 +167,7 @@ export function FaceChallenge({
         resetChallenge();
         return;
       }
-      await AsyncStorage.setItem('accessToken', res.accessToken);
+      await setAccessToken(res.accessToken);
       const ok = t('faceSignedIn');
       setMsg(ok);
       resetChallenge();

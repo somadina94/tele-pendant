@@ -21,7 +21,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#07090c"
       },
-      "package": "com.telependant.app"
+      "package": "com.telependant.app",
+      "allowBackup": false
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -30,7 +31,8 @@
     },
     "plugins": [
       "expo-camera",
-      "expo-speech-recognition"
+      "expo-speech-recognition",
+      "expo-secure-store"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

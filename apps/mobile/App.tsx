@@ -8,7 +8,6 @@ import {
   DefaultTheme,
 } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LogIn, ScanFace } from 'lucide-react-native';
 import type { Locale, UserRole } from '@tele-pendant/shared';
 import { isUserRole } from '@tele-pendant/shared';
@@ -26,6 +25,11 @@ import type { Layout } from './src/types';
 import { FaceChallenge } from './src/screens/FaceChallenge';
 import { onUnauthorized } from './src/session';
 import { BootSplash } from './src/splash';
+import {
+  clearAccessToken,
+  getAccessToken,
+  setAccessToken,
+} from './src/token-storage';
 import { HelpTip, TourBar, TourProvider } from './src/tour';
 import { ThemeProvider, ThemeToggle, useTheme } from './src/theme';
 import {
@@ -61,7 +65,7 @@ function LoginScreen({
           password,
         },
       );
-      await AsyncStorage.setItem('accessToken', data.accessToken);
+      await setAccessToken(data.accessToken);
       await persistUser(data.user);
       onLoggedIn(
         data.accessToken,
@@ -191,7 +195,7 @@ function Pendant() {
     const started = Date.now();
     void (async () => {
       try {
-        const saved = await AsyncStorage.getItem('accessToken');
+        const saved = await getAccessToken();
         if (!saved) return;
         try {
           const me = await apiGet<StoredUser>('/auth/me', saved);
@@ -201,7 +205,7 @@ function Pendant() {
             setUserRole(isUserRole(me.role) ? me.role : null);
           }
         } catch {
-          await AsyncStorage.removeItem('accessToken');
+          await clearAccessToken();
           await clearStoredUser();
           if (!cancelled) {
             setToken(null);
@@ -242,7 +246,7 @@ function Pendant() {
         /* still clear local session */
       }
     }
-    await AsyncStorage.removeItem('accessToken');
+    await clearAccessToken();
     await clearStoredUser();
     setToken(null);
     setUserRole(null);

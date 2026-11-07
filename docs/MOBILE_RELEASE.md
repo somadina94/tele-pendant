@@ -8,6 +8,8 @@ Signed **Android** (APK / AAB) and **iOS** (IPA) installables are **not stored i
 
 Until you install a native build, operators can use the **web HMI** on iPhone/Android browsers (https://hmi.example.com).
 
+**TP-49 (session security):** release builds store the JWT in **expo-secure-store** (not plaintext AsyncStorage) and set Android **`allowBackup: false`** in `app.json` so app data is not auto-backed up to Google Drive. Rebuild the native binary after pulling that change.
+
 ## Build scripts (repo)
 
 From the repository root:

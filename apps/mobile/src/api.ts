@@ -1,6 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { notifyUnauthorized } from './session';
+import { clearAccessToken } from './token-storage';
 
 const LIVE_API = 'https://api.tele-pendant.jahbyte.com/api/v1';
 
@@ -36,7 +36,7 @@ async function apiSend<T>(
   });
   if (!res.ok) {
     if (res.status === 401 && !isAuthBootstrapPath(path)) {
-      await AsyncStorage.removeItem('accessToken');
+      await clearAccessToken();
       notifyUnauthorized();
     }
     const text = await res.text();
