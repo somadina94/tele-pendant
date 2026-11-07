@@ -211,11 +211,11 @@ export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
               type="button"
               variant="secondary"
               size="icon"
-              className="absolute -right-1 -top-1 z-10 size-8 min-h-8 min-w-8 rounded-full md:-right-2 md:-top-2 md:size-6 md:min-h-0 md:min-w-0"
+              className="absolute -right-1 -top-1 z-10 size-5 min-h-5 min-w-5 rounded-full md:-right-1.5 md:-top-1.5"
               aria-label={`Help: ${id}`}
               onClick={() => setOpen((v) => !v)}
             >
-              <CircleHelp className="size-3.5" />
+              <CircleHelp className="size-3" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-xs">

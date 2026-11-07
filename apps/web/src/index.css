@@ -133,7 +133,7 @@
 
 /* HMI plant graphic — digital instrument cluster */
 .plant-graphic {
-  @apply relative isolate h-[9.5rem] max-h-[9.5rem] min-h-0 w-full overflow-hidden rounded-xl border border-white/10 md:h-[36svh] md:max-h-[340px] md:min-h-[160px] md:rounded-2xl;
+  @apply relative isolate h-[8.25rem] max-h-[8.25rem] min-h-0 w-full overflow-hidden rounded-xl border border-white/10 md:h-[min(28svh,14rem)] md:max-h-[240px] md:min-h-[7.5rem] md:rounded-2xl;
   background:
     radial-gradient(120% 80% at 50% 110%, rgba(120, 160, 190, 0.18), transparent 55%),
     radial-gradient(90% 70% at 50% -10%, rgba(255, 255, 255, 0.08), transparent 50%),
@@ -203,25 +203,25 @@
   @apply font-mono text-sm font-semibold tabular-nums tracking-wide text-white md:text-base;
 }
 .plant-readout {
-  @apply absolute inset-x-0 bottom-0 z-20 grid grid-cols-3 gap-px border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1 md:px-2 md:pb-3 md:pt-2.5;
+  @apply absolute inset-x-0 bottom-0 z-20 grid grid-cols-4 gap-px border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1 md:px-2 md:pb-2 md:pt-1.5;
 }
 .plant-metric {
-  @apply flex flex-col items-center justify-center gap-0 px-0.5 py-0.5 md:gap-0.5 md:px-1 md:py-1;
+  @apply flex flex-col items-center justify-center gap-0 px-0.5 py-0.5 md:gap-0.5 md:px-1 md:py-0.5;
 }
 .plant-metric + .plant-metric {
   border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 .plant-metric-label {
-  @apply text-[9px] font-medium uppercase tracking-[0.24em] text-white/45 md:text-[10px];
+  @apply text-[8px] font-medium uppercase tracking-[0.2em] text-white/45 md:text-[9px];
 }
 .plant-metric-value {
-  @apply font-mono text-base font-semibold tabular-nums tracking-tight text-white md:text-2xl;
+  @apply font-mono text-sm font-semibold tabular-nums tracking-tight text-white md:text-lg;
 }
 .plant-metric-unit {
-  @apply text-[10px] uppercase tracking-[0.16em] text-white/40;
+  @apply text-[9px] uppercase tracking-[0.14em] text-white/40;
 }
 .matrix-grid {
-  @apply grid gap-[22px] md:gap-2;
+  @apply grid gap-1.5 md:gap-1.5;
 }
 @media (max-width: 767px) {
   .matrix-grid {
@@ -229,10 +229,10 @@
   }
 }
 .matrix-grid-hole {
-  @apply max-md:hidden;
+  @apply max-md:hidden min-h-11 md:min-h-12;
 }
 .matrix-cell {
-  @apply flex min-h-16 w-full touch-none select-none flex-row flex-nowrap items-center justify-between gap-2 px-3 py-3.5 text-base md:min-h-[4.5rem] md:w-auto md:justify-center md:gap-2 md:px-3 md:py-3 md:text-base lg:px-4;
+  @apply flex min-h-11 w-full touch-none select-none flex-row flex-nowrap items-center justify-between gap-1.5 px-2.5 py-2 text-sm md:min-h-12 md:w-auto md:justify-center md:gap-1.5 md:px-2.5 md:py-2 md:text-sm lg:px-3;
 }
 .matrix-cell-label {
   @apply shrink-0 whitespace-nowrap text-left font-semibold leading-none md:text-left;
@@ -242,6 +242,49 @@
 }
 .matrix-cell.holding {
   @apply ring-2 ring-emerald-500;
+}
+.matrix-cell.estop {
+  @apply md:sticky md:top-0 md:z-[5];
+}
+/* TP-25: short desktop viewports — shrink plant + cells before nested scroll. */
+@media (min-width: 768px) and (max-height: 720px) {
+  .plant-graphic {
+    height: min(22svh, 7.25rem);
+    max-height: 7.25rem;
+    min-height: 0;
+  }
+  .plant-cluster-chrome {
+    padding-top: 0.5rem;
+    padding-bottom: 0.25rem;
+  }
+  .plant-overlay-stage {
+    top: 2.25rem;
+    bottom: 3.75rem;
+  }
+  .plant-metric-value {
+    font-size: 0.875rem;
+  }
+  .matrix-grid {
+    gap: 0.35rem;
+  }
+  .matrix-cell {
+    min-height: 2.5rem;
+    padding-block: 0.35rem;
+    padding-inline: 0.5rem;
+    font-size: 0.8125rem;
+  }
+  .matrix-grid-hole {
+    min-height: 2.5rem;
+  }
+  .operator-shell {
+    gap: 0.35rem;
+  }
+}
+@media (max-height: 700px) {
+  .plant-graphic {
+    height: 7rem;
+    max-height: 7rem;
+  }
 }
 .matrix-cell.estop,
 .dark .matrix-cell.estop,

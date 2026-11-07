@@ -372,11 +372,11 @@ export function OperatorPage() {
         </div>
       </HelpTip>
 
-      <Card className="min-h-0 shrink overflow-visible md:flex-1 md:overflow-auto">
-        <CardHeader className="hidden space-y-0 px-4 py-2 md:block md:space-y-1 md:py-3">
-          <CardTitle className="text-base">{t('controlMatrix')}</CardTitle>
+      <Card className="min-h-0 shrink overflow-visible md:flex-1 md:overflow-visible">
+        <CardHeader className="hidden space-y-0 px-4 py-1.5 md:block md:space-y-0 md:py-2">
+          <CardTitle className="text-sm">{t('controlMatrix')}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1 px-2 pb-2 pt-2 md:space-y-2 md:px-4 md:pb-4 md:pt-0">
+        <CardContent className="space-y-1 px-2 pb-2 pt-2 md:space-y-1.5 md:px-3 md:pb-3 md:pt-0">
           <HelpTip id="tour.operator.safePin">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <Label
@@ -387,7 +387,7 @@ export function OperatorPage() {
               </Label>
               <Input
                 id="safe-pin"
-                className="h-12 min-h-12 min-w-[5rem] max-w-[11rem] flex-1 basis-28 md:h-10 md:min-h-10 md:max-w-[9rem]"
+                className="h-9 min-h-9 min-w-[5rem] max-w-[11rem] flex-1 basis-28 md:max-w-[9rem]"
                 value={safePin}
                 onChange={(e) => setSafePin(e.target.value)}
                 type="password"
@@ -398,7 +398,7 @@ export function OperatorPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-12 min-h-12 shrink-0 px-2 text-xs md:h-10 md:min-h-10 md:px-4 md:text-sm"
+                className="h-9 min-h-9 shrink-0 px-2 text-xs md:h-9 md:min-h-9 md:px-3 md:text-sm"
                 onClick={() => void resetEStop()}
               >
                 {t('resetEstop')}
@@ -490,7 +490,7 @@ export function OperatorPage() {
                 ) : (
                   <div
                     key={`empty-${idx}`}
-                    className="matrix-grid-hole min-h-11 md:min-h-16"
+                    className="matrix-grid-hole"
                     aria-hidden
                   />
                 ),

@@ -425,7 +425,9 @@ describe('OperatorPage', () => {
     expect(await screen.findByText('Plant graphic')).toBeInTheDocument();
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
     await waitFor(() =>
-      expect(container.querySelectorAll('.min-h-11').length).toBeGreaterThan(0),
+      expect(
+        container.querySelectorAll('.matrix-grid-hole').length,
+      ).toBeGreaterThan(0),
     );
   });
 
