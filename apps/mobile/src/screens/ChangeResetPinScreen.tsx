@@ -26,11 +26,19 @@ export function ChangeResetPinScreen({
       setError('Reset PIN must be at least 4 characters');
       return;
     }
+    if (!currentPin.trim()) {
+      setError(
+        'Plant or current reset PIN is required to set or change your PIN',
+      );
+      return;
+    }
     setBusy(true);
     try {
-      const body: { newPin: string; currentPin?: string } = { newPin };
-      if (currentPin.trim()) body.currentPin = currentPin.trim();
-      await apiPatch('/auth/safe-action-pin', body, token);
+      await apiPatch(
+        '/auth/safe-action-pin',
+        { newPin, currentPin: currentPin.trim() },
+        token,
+      );
       setDone(true);
       setCurrentPin('');
       setNewPin('');
@@ -50,9 +58,8 @@ export function ChangeResetPinScreen({
         Reset PIN
       </Text>
       <Text className="mb-4 text-sm text-muted-foreground">
-        Used only to clear e-stop after STOP. Each person sets their own PIN (4+
-        characters). If you still use the plant default, enter it under Current
-        when changing.
+        Used only to clear e-stop after STOP. First setup needs the plant reset
+        PIN; later changes need your current personal PIN (4+ characters).
       </Text>
       {done ? (
         <Text className="mb-4 text-sm text-green-600 dark:text-green-400">
@@ -63,7 +70,7 @@ export function ChangeResetPinScreen({
         <Text className="mb-3 text-sm text-destructive">{error}</Text>
       ) : null}
       <Text className="mb-1 text-xs text-muted-foreground">
-        Current reset PIN (if any)
+        Plant or current reset PIN
       </Text>
       <TextInput
         className="mb-3 rounded-lg border border-border bg-card px-3 py-2.5 text-foreground"

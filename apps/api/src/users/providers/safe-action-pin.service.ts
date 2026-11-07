@@ -39,6 +39,10 @@ export class SafeActionPinService {
     return Boolean(expected && provided === expected);
   }
 
+  /**
+   * TP-38: first personal PIN requires the plant PIN (or later the current
+   * personal PIN). Empty currentPin must never grant e-stop reset rights.
+   */
   async changePin(
     userId: string,
     currentPin: string | undefined,
@@ -49,23 +53,29 @@ export class SafeActionPinService {
       throw new BadRequestException('Reset PIN must be at least 4 characters');
     }
     const user = await this.users.findOneByOrFail({ id: userId });
-    const hasPersonalPin = Boolean(user.safeActionPinHash);
-    if (hasPersonalPin) {
-      const current = (currentPin ?? '').trim();
-      if (!current) {
-        throw new BadRequestException('Current reset PIN is required');
-      }
-      const ok = await bcrypt.compare(current, user.safeActionPinHash!);
+    const current = (currentPin ?? '').trim();
+    if (!current) {
+      throw new BadRequestException(
+        user.safeActionPinHash
+          ? 'Current reset PIN is required'
+          : 'Plant reset PIN is required to set your first personal PIN',
+      );
+    }
+
+    if (user.safeActionPinHash) {
+      const ok = await bcrypt.compare(current, user.safeActionPinHash);
       if (!ok) {
         throw new UnauthorizedException('Current reset PIN is incorrect');
       }
     } else {
-      const current = (currentPin ?? '').trim();
-      if (current) {
-        const ok = this.matchesPlantPin(current);
-        if (!ok) {
-          throw new UnauthorizedException('Current reset PIN is incorrect');
-        }
+      const plant = this.plantPinFallback();
+      if (!plant) {
+        throw new BadRequestException(
+          'Plant reset PIN is not configured — ask an administrator',
+        );
+      }
+      if (!this.matchesPlantPin(current)) {
+        throw new UnauthorizedException('Current reset PIN is incorrect');
       }
     }
     user.safeActionPinHash = await bcrypt.hash(next, 12);

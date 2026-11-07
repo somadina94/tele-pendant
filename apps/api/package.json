@@ -107,6 +107,7 @@
       "app.controller.ts",
       "common/interceptors/data-response/data-response.interceptor.ts",
       "auth/providers/auth.service.ts",
+      "users/providers/safe-action-pin.service.ts",
       "audit/providers/audit.service.ts",
       "safety/providers/safety-state.service.ts",
       "hmi/providers/hmi.service.ts",

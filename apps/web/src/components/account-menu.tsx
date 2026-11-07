@@ -67,12 +67,19 @@ export function AccountMenu() {
       toastErr('New reset PINs do not match');
       return;
     }
+    if (!currentResetPin.trim()) {
+      toastErr(
+        user?.hasSafeActionPin
+          ? 'Current reset PIN is required'
+          : 'Plant reset PIN is required to set your first personal PIN',
+      );
+      return;
+    }
     try {
-      const body: { newPin: string; currentPin?: string } = {
+      await apiPatch('/auth/safe-action-pin', {
         newPin: newResetPin,
-      };
-      if (currentResetPin.trim()) body.currentPin = currentResetPin.trim();
-      await apiPatch('/auth/safe-action-pin', body);
+        currentPin: currentResetPin.trim(),
+      });
       toastOk('Reset PIN updated.');
       patchStoredUser({ hasSafeActionPin: true });
       setCurrentResetPin('');
@@ -168,9 +175,8 @@ export function AccountMenu() {
             </SheetTitle>
             <SheetDescription>
               Used only to clear e-stop after STOP (not your login password).
-              Each operator, supervisor, and admin sets their own PIN (at least
-              4 characters). If you still use the plant default from install,
-              enter it as Current when changing.
+              First-time setup requires the plant reset PIN from install; later
+              changes require your current personal PIN (at least 4 characters).
             </SheetDescription>
           </SheetHeader>
           <form
@@ -179,7 +185,9 @@ export function AccountMenu() {
           >
             <div className="grid gap-2">
               <Label htmlFor="account-current-reset-pin">
-                Current reset PIN (if any)
+                {user.hasSafeActionPin
+                  ? 'Current reset PIN'
+                  : 'Plant reset PIN'}
               </Label>
               <Input
                 id="account-current-reset-pin"

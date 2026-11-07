@@ -156,7 +156,7 @@ describe('AccountMenu', () => {
     renderWithProviders(<AccountMenu />, { role: 'operator' });
     await user.click(screen.getByRole('button', { name: 'Account menu' }));
     await user.click(screen.getByText('Set reset PIN'));
-    fireEvent.change(screen.getByLabelText('Current reset PIN (if any)'), {
+    fireEvent.change(screen.getByLabelText('Plant reset PIN'), {
       target: { value: '  plant  ' },
     });
     fireEvent.change(screen.getByLabelText('New reset PIN'), {
@@ -179,9 +179,63 @@ describe('AccountMenu', () => {
     );
   });
 
-  it('changes reset PIN without sending blank current PIN', async () => {
+  it('requires plant PIN before first personal PIN (TP-38)', async () => {
+    const user = userEvent.setup();
+    const patch = vi.spyOn(api, 'apiPatch');
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('New reset PIN'), {
+      target: { value: '1234' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm new reset PIN'), {
+      target: { value: '1234' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Save reset PIN' }));
+    const { toastErr } = await import('@/lib/toast');
+    expect(toastErr).toHaveBeenCalledWith(
+      'Plant reset PIN is required to set your first personal PIN',
+    );
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('changes reset PIN with the current personal PIN', async () => {
     const user = userEvent.setup();
     const patch = vi.spyOn(api, 'apiPatch').mockResolvedValue({ ok: true });
+    localStorage.setItem(
+      'user',
+      JSON.stringify({
+        id: 'u1',
+        email: 'op@plant.local',
+        displayName: 'Op',
+        role: 'operator',
+        hasSafeActionPin: true,
+      }),
+    );
+    renderWithProviders(<AccountMenu />);
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Change reset PIN'));
+    fireEvent.change(screen.getByLabelText('Current reset PIN'), {
+      target: { value: '1234' },
+    });
+    fireEvent.change(screen.getByLabelText('New reset PIN'), {
+      target: { value: '5678' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm new reset PIN'), {
+      target: { value: '5678' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Save reset PIN' }));
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('/auth/safe-action-pin', {
+        newPin: '5678',
+        currentPin: '1234',
+      }),
+    );
+  });
+
+  it('requires current personal PIN when changing an existing one', async () => {
+    const user = userEvent.setup();
+    const patch = vi.spyOn(api, 'apiPatch');
     localStorage.setItem(
       'user',
       JSON.stringify({
@@ -202,11 +256,9 @@ describe('AccountMenu', () => {
       target: { value: '5678' },
     });
     await user.click(screen.getByRole('button', { name: 'Save reset PIN' }));
-    await waitFor(() =>
-      expect(patch).toHaveBeenCalledWith('/auth/safe-action-pin', {
-        newPin: '5678',
-      }),
-    );
+    const { toastErr } = await import('@/lib/toast');
+    expect(toastErr).toHaveBeenCalledWith('Current reset PIN is required');
+    expect(patch).not.toHaveBeenCalled();
   });
 
   it('shows reset PIN mismatch without calling API', async () => {
@@ -233,6 +285,9 @@ describe('AccountMenu', () => {
     renderWithProviders(<AccountMenu />, { role: 'operator' });
     await user.click(screen.getByRole('button', { name: 'Account menu' }));
     await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('Plant reset PIN'), {
+      target: { value: 'plant' },
+    });
     fireEvent.change(screen.getByLabelText('New reset PIN'), {
       target: { value: '1234' },
     });
@@ -250,6 +305,9 @@ describe('AccountMenu', () => {
     renderWithProviders(<AccountMenu />, { role: 'operator' });
     await user.click(screen.getByRole('button', { name: 'Account menu' }));
     await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('Plant reset PIN'), {
+      target: { value: 'plant' },
+    });
     fireEvent.change(screen.getByLabelText('New reset PIN'), {
       target: { value: '1234' },
     });
@@ -269,6 +327,9 @@ describe('AccountMenu', () => {
     renderWithProviders(<AccountMenu />, { role: 'operator' });
     await user.click(screen.getByRole('button', { name: 'Account menu' }));
     await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('Plant reset PIN'), {
+      target: { value: 'plant' },
+    });
     fireEvent.change(screen.getByLabelText('New reset PIN'), {
       target: { value: '1234' },
     });
@@ -289,6 +350,9 @@ describe('AccountMenu', () => {
     renderWithProviders(<AccountMenu />, { role: 'operator' });
     await user.click(screen.getByRole('button', { name: 'Account menu' }));
     await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('Plant reset PIN'), {
+      target: { value: 'plant' },
+    });
     fireEvent.change(screen.getByLabelText('New reset PIN'), {
       target: { value: '4321' },
     });
