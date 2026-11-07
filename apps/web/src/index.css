@@ -132,35 +132,17 @@
 }
 
 /*
- * FEAT-HMI: keep graphic above matrix (full width). Side-by-side only on
- * very wide shells so the 3-col control matrix never collapses/overlaps STOP.
+ * FEAT-HMI: always stack graphic above matrix (full width).
+ * Side-by-side crushed the 3-col pendant grid on desktop/iPad.
+ * Split fills leftover height so STOP docks to the real bottom.
  */
 .operator-hmi-split {
-  @apply flex min-h-0 w-full flex-col gap-1.5 md:gap-3;
-}
-@media (min-width: 1400px) {
-  .operator-hmi-split {
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(22rem, 1fr);
-    align-items: start;
-    gap: 0.75rem;
-  }
-  .operator-hmi-split .plant-graphic {
-    height: min(40svh, 18rem);
-    max-height: 18rem;
-    min-height: 12rem;
-  }
-  .operator-hmi-split .operator-matrix-card {
-    min-width: 0;
-  }
-  .operator-hmi-split .matrix-grid {
-    grid-auto-rows: minmax(2.75rem, auto);
-  }
+  @apply flex min-h-0 w-full flex-1 flex-col gap-2 md:gap-3;
 }
 
-/* HMI plant graphic — digital instrument cluster + crane mimic */
+/* HMI plant graphic — keep modest so the matrix stays above the fold. */
 .plant-graphic {
-  @apply relative isolate h-[11rem] max-h-[11rem] min-h-0 w-full overflow-hidden rounded-xl border border-white/10 md:h-[min(36svh,18rem)] md:max-h-[300px] md:min-h-[12rem] md:rounded-2xl;
+  @apply relative isolate h-[9.5rem] max-h-[9.5rem] min-h-0 w-full shrink-0 overflow-hidden rounded-xl border border-white/10 md:h-[12rem] md:max-h-[12rem] md:min-h-[12rem] md:rounded-2xl;
   background:
     radial-gradient(120% 80% at 50% 110%, rgba(120, 160, 190, 0.18), transparent 55%),
     radial-gradient(90% 70% at 50% -10%, rgba(255, 255, 255, 0.08), transparent 50%),
@@ -266,8 +248,8 @@
   @apply text-[9px] uppercase tracking-[0.14em] text-white/40;
 }
 .matrix-grid {
-  @apply relative z-0 grid w-full gap-1.5 md:gap-1.5;
-  grid-auto-rows: minmax(2.75rem, auto);
+  @apply relative z-0 grid w-full gap-2 md:gap-2;
+  grid-auto-rows: minmax(3rem, auto);
 }
 .matrix-grid > .matrix-cell,
 .matrix-grid > .matrix-grid-hole {
@@ -280,11 +262,13 @@
 }
 .matrix-grid-hole {
   /* FEAT-A3: keep ≥44px touch budget even for empty slots on md+. */
-  @apply max-md:hidden min-h-11 md:min-h-11;
+  @apply max-md:hidden min-h-12 md:min-h-12;
 }
 .matrix-cell {
-  /* FEAT-A3: WCAG / pendant ≥44px targets (min-h-11 = 2.75rem). */
-  @apply flex min-h-11 w-full touch-none select-none flex-row flex-nowrap items-center justify-between gap-1.5 px-2.5 py-2 text-sm md:min-h-11 md:w-auto md:justify-center md:gap-1.5 md:px-2.5 md:py-2 md:text-sm lg:px-3;
+  /* FEAT-A3: ≥44px targets; stacked label/state/meta so iPad never overflows.
+   * Layout utilities also live on the Button className so twMerge beats
+   * buttonVariants (inline-flex / whitespace-nowrap / gap-2 / h-9). */
+  @apply min-h-12 w-full touch-none select-none overflow-hidden px-2.5 py-2 text-sm md:min-h-12 md:px-3 md:py-2.5 md:text-sm;
   /* FEAT-A1 colour tokens — always paired with .matrix-cell-state text. */
   --matrix-state-idle-bg: hsl(210 40% 96%);
   --matrix-state-idle-fg: hsl(215 25% 27%);
@@ -313,14 +297,17 @@
   --matrix-state-fault-fg: hsl(271 80% 78%);
   --matrix-state-fault-bd: hsl(271 55% 52%);
 }
+.matrix-cell-row {
+  @apply flex min-w-0 w-full items-center justify-between gap-1.5;
+}
 .matrix-cell-label {
-  @apply shrink-0 whitespace-nowrap text-left font-semibold leading-none md:text-left;
+  @apply min-w-0 truncate text-left font-semibold leading-tight;
 }
 .matrix-cell-meta {
-  @apply shrink-0 whitespace-nowrap text-right text-[10px] font-normal leading-none opacity-80 md:text-left md:text-[10px];
+  @apply min-w-0 truncate text-left text-[10px] font-normal leading-tight opacity-80;
 }
 .matrix-cell-state {
-  @apply inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide;
+  @apply inline-flex max-w-[45%] shrink-0 items-center gap-0.5 truncate rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide;
 }
 .matrix-cell.state-idle:not(.estop) {
   background-color: var(--matrix-state-idle-bg) !important;
@@ -372,25 +359,25 @@
 }
 /* FEAT-A3: STOP docked outside the scroll region — always visible. */
 .matrix-stop-dock {
-  @apply sticky bottom-0 z-20 shrink-0 border-t bg-background/95 pt-1.5 backdrop-blur supports-[padding:max(0px)]:pb-[max(0.35rem,env(safe-area-inset-bottom))];
+  @apply z-20 shrink-0 border-t bg-background/95 pt-1.5 supports-[padding:max(0px)]:pb-[max(0.35rem,env(safe-area-inset-bottom))];
 }
 .matrix-stop-dock .matrix-cell.estop {
   @apply min-h-11 w-full;
 }
 .operator-shell {
-  @apply h-full min-h-0;
+  @apply flex min-h-0 w-full flex-1 flex-col;
 }
 .operator-body {
-  @apply flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto md:gap-3;
+  @apply flex min-h-0 flex-1 flex-col gap-2 overflow-hidden md:gap-3;
 }
 .operator-matrix-card {
-  @apply shrink-0;
+  @apply flex min-h-0 w-full flex-1 flex-col overflow-hidden;
 }
 /* TP-25 + FEAT-A3: short viewports shrink plant; never drop cells below 44px. */
 @media (min-width: 768px) and (max-height: 720px) {
   .plant-graphic {
-    height: min(28svh, 11rem);
-    max-height: 11rem;
+    height: 9rem;
+    max-height: 9rem;
     min-height: 9rem;
   }
   .plant-cluster-chrome {
@@ -405,16 +392,16 @@
     font-size: 0.875rem;
   }
   .matrix-grid {
-    gap: 0.35rem;
+    gap: 0.5rem;
   }
   .matrix-cell {
-    min-height: 2.75rem;
-    padding-block: 0.35rem;
-    padding-inline: 0.5rem;
+    min-height: 3rem;
+    padding-block: 0.4rem;
+    padding-inline: 0.6rem;
     font-size: 0.8125rem;
   }
   .matrix-grid-hole {
-    min-height: 2.75rem;
+    min-height: 3rem;
   }
   .operator-shell {
     gap: 0.35rem;
@@ -422,14 +409,16 @@
 }
 @media (max-height: 700px) {
   .plant-graphic {
-    height: 10rem;
-    max-height: 10rem;
+    height: 8.5rem;
+    max-height: 8.5rem;
+    min-height: 8.5rem;
   }
 }
 @media (max-width: 767px) {
   .plant-graphic {
-    height: 9.5rem;
-    max-height: 9.5rem;
+    height: 9rem;
+    max-height: 9rem;
+    min-height: 9rem;
   }
 }
 .matrix-cell.estop,

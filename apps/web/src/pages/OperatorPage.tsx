@@ -486,7 +486,7 @@ export function OperatorPage() {
         data-touch-min="44"
         data-stop-dock={isEstop ? 'true' : undefined}
         className={cn(
-          'matrix-cell h-auto',
+          'matrix-cell flex h-auto min-h-12 flex-col items-stretch justify-center gap-0.5 whitespace-normal',
           `state-${cellState}`,
           isEstop && 'estop',
         )}
@@ -524,10 +524,12 @@ export function OperatorPage() {
         aria-description={`${MATRIX_CELL_STATE_CODE[cellState]}: ${stateLabel}`}
         title={`${MATRIX_CELL_STATE_CODE[cellState]} · ${stateLabel}`}
       >
-        <span className="matrix-cell-label">{cell.label}</span>
-        <span className="matrix-cell-state">
-          <StateIcon className="size-2.5" strokeWidth={2.5} />
-          {stateLabel}
+        <span className="matrix-cell-row">
+          <span className="matrix-cell-label">{cell.label}</span>
+          <span className="matrix-cell-state">
+            <StateIcon className="size-2.5 shrink-0" strokeWidth={2.5} />
+            {stateLabel}
+          </span>
         </span>
         {(cell.feedbackRegister || cell.statusRegister) && (
           <span className="matrix-cell-meta">
@@ -550,7 +552,7 @@ export function OperatorPage() {
 
   return (
     <div
-      className="operator-shell mx-auto flex w-full max-w-6xl flex-col gap-1.5 md:gap-3"
+      className="operator-shell mx-auto max-w-5xl gap-2 md:gap-3"
       data-feat="hmi-shell"
     >
       <div className="operator-body">
@@ -712,11 +714,11 @@ export function OperatorPage() {
             </div>
           </HelpTip>
 
-          <Card className="operator-matrix-card overflow-hidden">
-            <CardHeader className="hidden space-y-0 px-4 py-1.5 md:block md:space-y-0 md:py-2">
+          <Card className="operator-matrix-card">
+            <CardHeader className="hidden shrink-0 space-y-0 px-4 py-1.5 md:block md:space-y-0 md:py-2">
               <CardTitle className="text-sm">{t('controlMatrix')}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 px-2 pb-3 pt-2 md:space-y-2 md:px-3 md:pb-3 md:pt-0">
+            <CardContent className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-3 pt-2 md:space-y-2 md:px-3 md:pb-3 md:pt-0">
               <HelpTip id="tour.operator.safePin">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <Label
