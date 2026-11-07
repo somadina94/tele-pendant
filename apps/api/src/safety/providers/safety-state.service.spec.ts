@@ -67,8 +67,16 @@ describe('SafetyStateService', () => {
   it('stores the timed-motion flag and reads it back', async () => {
     process.env.SAFE_ACTION_PIN = '1234';
     roles.find.mockResolvedValueOnce([]);
+    registers.findOneBy.mockImplementation(async ({ id }: { id: string }) => {
+      if (id === 'reg-estop') return { id, name: 'coil.eStop' };
+      return null;
+    });
     await service.saveRoles(
-      { allowTimedMediaMotion: true, pin: '1234' },
+      {
+        allowTimedMediaMotion: true,
+        eStopRegisterId: 'reg-estop',
+        pin: '1234',
+      },
       { userEmail: 'admin@x' },
     );
     expect(service.snapshot().allowTimedMediaMotion).toBe(true);
@@ -76,6 +84,7 @@ describe('SafetyStateService', () => {
       expect.objectContaining({
         action: 'safety.roles_update',
         result: 'success',
+        details: expect.stringContaining('eStop=coil.eStop'),
       }),
     );
     roles.find.mockResolvedValueOnce([

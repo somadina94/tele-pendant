@@ -91,8 +91,8 @@ export class AlarmsController {
   @Post(':id/ack')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Acknowledge alarm' })
-  ack(@Param('id') id: string) {
-    return this.alarms.ack(id);
+  ack(@Param('id') id: string, @Req() req: Request & { user: JwtPayload }) {
+    return this.alarms.ack(id, auditActorFromRequest(req.user, req.ip));
   }
 
   @Post(':id/shelve')

@@ -108,16 +108,22 @@ export class SafetyStateService {
       this.allowTimedMedia = input.allowTimedMediaMotion;
     }
     const saved = await this.roles.save(row);
+    const label = async (id: string | null | undefined) => {
+      if (!id) return '';
+      const reg = await this.registers.findOneBy({ id });
+      return reg?.name ?? id;
+    };
+    // TP-10: audit details use register names, not raw UUIDs.
     await this.auditService.write({
       ...auditWriteFields(actor),
       action: 'safety.roles_update',
       resource: 'safety_roles',
       details: [
         `allowTimedMediaMotion=${Boolean(saved.allowTimedMediaMotion)}`,
-        `eStop=${saved.eStopRegisterId ?? ''}`,
-        `deadman=${saved.deadmanRegisterId ?? ''}`,
-        `heartbeat=${saved.heartbeatRegisterId ?? ''}`,
-        `safeState=${saved.safeStateRegisterId ?? ''}`,
+        `eStop=${await label(saved.eStopRegisterId)}`,
+        `deadman=${await label(saved.deadmanRegisterId)}`,
+        `heartbeat=${await label(saved.heartbeatRegisterId)}`,
+        `safeState=${await label(saved.safeStateRegisterId)}`,
       ].join(';'),
       result: 'success',
     });

@@ -126,11 +126,24 @@ export class AlarmEngineService implements OnModuleInit {
     });
   }
 
-  async ack(id: string) {
+  /** TP-10: Audit Resource must be the definition name, not the event UUID. */
+  private alarmAuditResource(event: AlarmEvent): string {
+    const name = event.definition?.name?.trim();
+    return name && name.length > 0 ? name : event.id;
+  }
+
+  async ack(id: string, actor?: AuditActor) {
     const event = await this.events.findOneByOrFail({ id });
     event.state = 'acked';
     event.ackedAt = new Date();
-    return this.events.save(event);
+    const saved = await this.events.save(event);
+    await this.auditService.write({
+      ...auditWriteFields(actor),
+      action: 'alarm.ack',
+      resource: this.alarmAuditResource(event),
+      result: 'success',
+    });
+    return saved;
   }
 
   async shelve(id: string, actor?: AuditActor) {
@@ -140,7 +153,7 @@ export class AlarmEngineService implements OnModuleInit {
     await this.auditService.write({
       ...auditWriteFields(actor),
       action: 'alarm.shelve',
-      resource: id,
+      resource: this.alarmAuditResource(event),
       result: 'success',
     });
     return saved;
@@ -157,7 +170,7 @@ export class AlarmEngineService implements OnModuleInit {
     await this.auditService.write({
       ...auditWriteFields(actor),
       action: 'alarm.unshelve',
-      resource: id,
+      resource: this.alarmAuditResource(event),
       result: 'success',
     });
     return saved;

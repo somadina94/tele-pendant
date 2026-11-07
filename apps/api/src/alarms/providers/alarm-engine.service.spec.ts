@@ -47,6 +47,7 @@ describe('AlarmEngineService', () => {
   };
   const plcService = { getDriver: () => driver };
   const gateway = { broadcast: jest.fn() };
+  const auditService = { write: jest.fn().mockResolvedValue({}) };
 
   let service: AlarmEngineService;
 
@@ -74,7 +75,7 @@ describe('AlarmEngineService', () => {
       registers as never,
       plcService as never,
       gateway as never,
-      { write: jest.fn().mockResolvedValue({}) } as never,
+      auditService as never,
     );
   });
 
@@ -156,19 +157,39 @@ describe('AlarmEngineService', () => {
     events.findOneByOrFail.mockResolvedValue({
       id: 'e1',
       state: 'active',
+      definition: { id: 'd1', name: 'E-Stop asserted' },
     });
     await service.listActive();
     expect(events.find).toHaveBeenCalled();
 
-    await service.ack('e1');
+    await service.ack('e1', { userEmail: 'ops@example.com' });
     expect(events.save).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'acked' }),
     );
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'alarm.ack',
+        resource: 'E-Stop asserted',
+        userEmail: 'ops@example.com',
+        result: 'success',
+      }),
+    );
 
-    events.findOneByOrFail.mockResolvedValue({ id: 'e1', state: 'active' });
-    await service.shelve('e1');
+    events.findOneByOrFail.mockResolvedValue({
+      id: 'e1',
+      state: 'active',
+      definition: { id: 'd1', name: 'E-Stop asserted' },
+    });
+    await service.shelve('e1', { userEmail: 'ops@example.com' });
     expect(events.save).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'shelved' }),
+    );
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'alarm.shelve',
+        resource: 'E-Stop asserted',
+        result: 'success',
+      }),
     );
   });
 
@@ -198,7 +219,7 @@ describe('AlarmEngineService', () => {
     events.findOneByOrFail.mockResolvedValueOnce({
       id: 'e1',
       state: 'active',
-      definition: { id: 'd1' },
+      definition: { id: 'd1', name: 'E-Stop asserted' },
     });
     await expect(service.unshelve('e1')).rejects.toBeInstanceOf(
       BadRequestException,
@@ -206,17 +227,31 @@ describe('AlarmEngineService', () => {
     events.findOneByOrFail.mockResolvedValueOnce({
       id: 'e1',
       state: 'shelved',
-      definition: { id: 'd1' },
+      definition: { id: 'd1', name: 'E-Stop asserted' },
     });
     await expect(
       service.unshelve('e1', { userEmail: 'a@b.c' }),
     ).resolves.toEqual(expect.objectContaining({ state: 'active' }));
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'alarm.unshelve',
+        resource: 'E-Stop asserted',
+        userEmail: 'a@b.c',
+        result: 'success',
+      }),
+    );
     events.findOneByOrFail.mockResolvedValueOnce({
       id: 'e2',
       state: 'shelved',
     });
     await service.unshelve('e2');
     expect(events.save).toHaveBeenCalled();
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'alarm.unshelve',
+        resource: 'e2',
+      }),
+    );
   });
 
   it('clears shelved alarms when the condition recovers', async () => {

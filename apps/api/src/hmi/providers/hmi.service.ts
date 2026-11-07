@@ -115,7 +115,7 @@ export class HmiService {
         await this.auditService.write({
           ...this.actorFields(actor),
           action: 'register.update_denied',
-          resource: row.id,
+          resource: row.name,
           details: `${row.name} address change blocked (safety register)`,
           result: 'failure',
         });
@@ -137,7 +137,7 @@ export class HmiService {
     await this.auditService.write({
       ...this.actorFields(actor),
       action: 'register.update',
-      resource: saved.id,
+      resource: saved.name,
       details: `${saved.name}=${address}`,
       result: 'success',
     });
