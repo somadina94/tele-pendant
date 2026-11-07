@@ -16,6 +16,7 @@ const socket = {
 
 vi.mock('../lib/realtime', () => ({
   getRealtimeSocket: () => socket,
+  resetRealtimeSocket: vi.fn(),
 }));
 
 const layout = {

@@ -9,6 +9,7 @@ vi.mock('./lib/realtime', () => ({
     off: vi.fn(),
     emit: vi.fn(),
   }),
+  resetRealtimeSocket: vi.fn(),
 }));
 
 vi.mock('./lib/api', async () => {
