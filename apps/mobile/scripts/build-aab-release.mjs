@@ -17,12 +17,6 @@ import {
 } from './android-release-common.mjs';
 
 const { hasReleaseKeystore } = signingGradleArgs();
-if (!hasReleaseKeystore) {
-  console.warn(
-    'Warning: TELE_PENDANT_ANDROID_* not set. bundleRelease may produce an unsigned or debug-signed AAB unsuitable for Play upload.',
-  );
-}
-
 const { restore } = patchAppJsonForBuild();
 
 try {

@@ -36,9 +36,10 @@ Use **`apps/mobile/signing/`** on the build machine:
 | ---- | ------- |
 | `signing/android/*.keystore` or `*.jks` | Android release keystore |
 | `signing/ios/*.p12`, `*.mobileprovision` | iOS cert and profile |
+| `signing/ota/private-key.pem` | Expo Updates OTA code-signing private key (TP-43) |
 | `signing/credentials.env` | Passwords, alias, `APPLE_TEAM_ID` (copy from `credentials.example.env`) |
 
-Only `README.md`, `credentials.example.env`, and empty `android/` / `ios/` placeholders are tracked in git. **Secrets and keystores are never committed.**
+Only `README.md`, `credentials.example.env`, `signing/ota/README.md`, and empty `android/` / `ios/` / `ota/` placeholders are tracked in git. **Secrets and keystores are never committed.** The public OTA certificate is tracked at `apps/mobile/certs/certificate.pem`.
 
 Zip for secure transfer:
 
@@ -64,7 +65,7 @@ Keep keystore files **outside git**. Default location: `apps/mobile/signing/` as
 | `TELE_PENDANT_ANDROID_KEY_ALIAS` | Key alias |
 | `TELE_PENDANT_ANDROID_KEY_PASSWORD` | Key password |
 
-If unset, `apk:release` can still run with the **debug** keystore (side-load testing only). **AAB for Play should use the release keystore.**
+**TP-43:** `apk:release` / `aab:release` **require** these vars (handover release keystore). Client must uninstall any debug-signed Dropbox APK before installing the release build (`apksigner` / Play signing CN will differ). Lab-only escape hatch: `ALLOW_DEBUG_SIGNING=1` (never for client handover).
 
 ### iOS
 
@@ -101,13 +102,18 @@ EXPO_PUBLIC_API_URL=https://api.example.com/api/v1 \
 
 Optional: `PREBUILD_CLEAN=1` for a clean native project.
 
+## OTA code signing (TP-43)
+
+Release binaries embed `apps/mobile/certs/certificate.pem` so Expo Updates rejects unsigned / wrong-key manifests. On the API host, place the matching private key at `apps/api/ota/private-key.pem` (or set `OTA_CODE_SIGNING_PRIVATE_KEY` / `OTA_CODE_SIGNING_PRIVATE_KEY_PATH`). `ota:export` copies/signs when the private key is present. Details: [OTA.md](./OTA.md).
+
 ## What ships in git vs securely
 
 | Item | In repo? |
 | ---- | -------- |
 | Source, Expo config, build scripts | Yes |
+| Public OTA code-signing certificate (`certs/certificate.pem`) | Yes |
 | Signed `.apk`, `.aab`, `.ipa` | **No** (gitignored under `apps/mobile/dist/`) |
-| Keystores, `.p12`, provisioning profiles | **No** |
+| Keystores, `.p12`, provisioning profiles, OTA private key | **No** |
 | Vendor-provided signed installables at handover | **No** (secure transfer) |
 
 JavaScript-only updates still use [OTA.md](./OTA.md). Camera, speech, or other native changes require a **new native build** using the scripts above.

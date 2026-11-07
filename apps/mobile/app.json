@@ -39,10 +39,18 @@
       "url": "http://localhost:3010/ota/manifest",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "codeSigningCertificate": "./certs/certificate.pem",
+      "codeSigningMetadata": {
+        "keyid": "main",
+        "alg": "rsa-v1_5-sha256"
+      },
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
     },
     "extra": {
-      "otaNote": "Production updates.url: https://api.tele-pendant.jahbyte.com/ota/manifest. Local lab: http://<lan-host>:3010/ota/manifest. The API serves apps/api/ota with no login. Native modules (camera, speech) still need a binary rebuild; JS-only changes are what that folder ships."
+      "otaNote": "Production updates.url: https://api.tele-pendant.jahbyte.com/ota/manifest. Local lab: http://<lan-host>:3010/ota/manifest. Manifests are code-signed (TP-43); native modules (camera, speech) still need a binary rebuild."
     }
   }
 }

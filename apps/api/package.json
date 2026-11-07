@@ -116,6 +116,7 @@
       "media/providers/voice-match.ts",
       "auth/providers/face.util.ts",
       "assistant/providers/assistant.service.ts",
+      "ota/ota-code-signing.ts",
       "!**/*.module.ts",
       "!**/*.spec.ts",
       "!**/dtos/**"

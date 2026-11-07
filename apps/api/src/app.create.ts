@@ -1,10 +1,15 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
+import {
+  clientExpectsExpoSignature,
+  loadOtaPrivateKeyPem,
+  signExpoManifestBody,
+} from './ota/ota-code-signing';
 
 function otaDirectory(): string {
   const candidates = [
@@ -40,11 +45,31 @@ function serveOta(req: Request, res: Response, next: NextFunction): void {
       });
       return;
     }
+    const body = readFileSync(file);
+    const expectsSignature = clientExpectsExpoSignature(
+      req.headers['expo-expect-signature'],
+    );
+    const privateKey = loadOtaPrivateKeyPem();
+    if (expectsSignature && !privateKey) {
+      res.status(400).type('application/json').json({
+        message:
+          'OTA code signing private key is not configured (TP-43). Set OTA_CODE_SIGNING_PRIVATE_KEY or place ota/private-key.pem.',
+      });
+      return;
+    }
     otaHeaders(res);
+    if (privateKey) {
+      try {
+        res.setHeader('expo-signature', signExpoManifestBody(body, privateKey));
+      } catch {
+        res.status(500).type('application/json').json({
+          message: 'Failed to sign OTA manifest',
+        });
+        return;
+      }
+    }
     res.type('application/json');
-    res.sendFile(file, (err) => {
-      if (err) next(err);
-    });
+    res.send(body);
     return;
   }
   const asset = /^\/ota\/assets\/([^/]+)$/.exec(req.path);

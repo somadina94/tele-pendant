@@ -14,9 +14,12 @@ signing/
   ios/
     distribution.p12
     TelePendant.mobileprovision     (or similar)
+  ota/
+    README.md               (tracked)
+    private-key.pem         (Expo Updates code signing; gitignored)
 ```
 
-Copy `credentials.example.env` to `credentials.env` and fill in passwords and team ID. Paths in `credentials.env` are relative to this `signing/` folder unless absolute.
+Copy `credentials.example.env` to `credentials.env` and fill in passwords and team ID. Paths in `credentials.env` are relative to this `signing/` folder unless absolute. OTA public cert stays in `apps/mobile/certs/certificate.pem` (see [docs/OTA.md](../../../docs/OTA.md)).
 
 Build scripts load `credentials.env` automatically when present (`load-mobile-signing.mjs`).
 

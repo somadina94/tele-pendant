@@ -90,7 +90,7 @@ pnpm handover:mobile:ios          # macOS + Xcode only
 
 Outputs under `apps/mobile/dist/` (gitignored): `tele-pendant-release.apk`, `tele-pendant-release.aab`, `tele-pendant-release.ipa`.
 
-Android needs JDK 17+, Android SDK, and `ANDROID_HOME`. iOS needs macOS, Xcode, and `APPLE_TEAM_ID` (and cert/profile from handover). Set `TELE_PENDANT_ANDROID_*` env vars for release APK signing when the vendor shared a keystore.
+Android needs JDK 17+, Android SDK, and `ANDROID_HOME`. iOS needs macOS, Xcode, and `APPLE_TEAM_ID` (and cert/profile from handover). Set `TELE_PENDANT_ANDROID_*` env vars for release APK/AAB signing when the vendor shared a keystore (required for handover builds; `ALLOW_DEBUG_SIGNING=1` is lab-only).
 
 A full native release needs several GB free. If Gradle fails mid-C++ with a vague ninja error, check `df -h`; a full disk is a common cause.
 

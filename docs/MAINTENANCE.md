@@ -36,7 +36,7 @@ pnpm --filter @tele-pendant/modbus-core test:integration
 ## OTA
 
 - **Web:** redeploy container / static assets (`docker compose ... up -d`). Live site: https://hmi.example.com
-- **Mobile:** `OTA_PUBLIC_URL=https://api.example.com pnpm --filter @tele-pendant/mobile ota:export` writes the manifest into `apps/api/ota`. Live check: https://api.example.com/ota/manifest. Rebuild the binary when camera or speech changes.
+- **Mobile:** `OTA_PUBLIC_URL=https://api.example.com pnpm --filter @tele-pendant/mobile ota:export` writes the manifest into `apps/api/ota`. Ensure `ota/private-key.pem` (or `OTA_CODE_SIGNING_PRIVATE_KEY*`) is on the API host so manifests are code-signed (TP-43). Live check: https://api.example.com/ota/manifest. Rebuild the binary when camera or speech changes; handover APKs use the release keystore only ([MOBILE_RELEASE.md](./MOBILE_RELEASE.md)).
 
 ## Modbus map changes
 

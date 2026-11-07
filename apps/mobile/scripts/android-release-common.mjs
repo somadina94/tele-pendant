@@ -48,8 +48,16 @@ export function signingGradleArgs() {
   const ksPass = process.env.TELE_PENDANT_ANDROID_KEYSTORE_PASSWORD;
   const keyAlias = process.env.TELE_PENDANT_ANDROID_KEY_ALIAS?.trim();
   const keyPass = process.env.TELE_PENDANT_ANDROID_KEY_PASSWORD ?? ksPass;
+  const hasReleaseKeystore = Boolean(ks && keyAlias && ksPass);
+  const allowDebug = process.env.ALLOW_DEBUG_SIGNING === '1';
+  // TP-43: release APK/AAB must use the handover keystore unless explicitly opted out.
+  if (!hasReleaseKeystore && !allowDebug) {
+    throw new Error(
+      'TELE_PENDANT_ANDROID_KEYSTORE / KEYSTORE_PASSWORD / KEY_ALIAS are required for release builds (TP-43). Set ALLOW_DEBUG_SIGNING=1 only for local side-load experiments. See docs/MOBILE_RELEASE.md.',
+    );
+  }
   const signingProps = [];
-  if (ks && keyAlias && ksPass) {
+  if (hasReleaseKeystore) {
     signingProps.push(
       `-PMYAPP_UPLOAD_STORE_FILE=${ks}`,
       `-PMYAPP_UPLOAD_STORE_PASSWORD=${ksPass}`,
@@ -57,8 +65,12 @@ export function signingGradleArgs() {
       `-PMYAPP_UPLOAD_KEY_PASSWORD=${keyPass}`,
     );
     console.log('Using release keystore from TELE_PENDANT_ANDROID_* env vars.');
+  } else {
+    console.warn(
+      'ALLOW_DEBUG_SIGNING=1: building with the Android debug keystore (not for client handover).',
+    );
   }
-  return { signingProps, hasReleaseKeystore: Boolean(ks && keyAlias && ksPass) };
+  return { signingProps, hasReleaseKeystore };
 }
 
 export function patchAppJsonForBuild() {
@@ -77,6 +89,18 @@ export function patchAppJsonForBuild() {
     ...(appJson.expo.updates ?? {}),
     url: updatesUrl,
     enabled: true,
+    codeSigningCertificate:
+      appJson.expo.updates?.codeSigningCertificate ??
+      './certs/certificate.pem',
+    codeSigningMetadata: appJson.expo.updates?.codeSigningMetadata ?? {
+      keyid: 'main',
+      alg: 'rsa-v1_5-sha256',
+    },
+    requestHeaders: {
+      ...(appJson.expo.updates?.requestHeaders ?? {}),
+      'expo-channel-name':
+        process.env.EXPO_UPDATE_CHANNEL?.trim() || 'production',
+    },
   };
   writeFileSync(appJsonPath, `${JSON.stringify(appJson, null, 2)}\n`);
   console.log(`updates.url for this build: ${updatesUrl}`);

@@ -20,10 +20,18 @@ apps/mobile/signing/**
 !apps/mobile/signing/credentials.example.env
 !apps/mobile/signing/android/
 !apps/mobile/signing/ios/
+!apps/mobile/signing/ota/
 apps/mobile/signing/android/**
 !apps/mobile/signing/android/.gitkeep
 apps/mobile/signing/ios/**
 !apps/mobile/signing/ios/.gitkeep
+apps/mobile/signing/ota/**
+!apps/mobile/signing/ota/.gitkeep
+!apps/mobile/signing/ota/README.md
+# Expo Updates OTA private key (public cert is apps/mobile/certs/certificate.pem)
+apps/api/ota/private-key.pem
+apps/api/ota/manifest.signature
+**/private-key.pem
 apps/web/dist
 *.apk
 *.docx

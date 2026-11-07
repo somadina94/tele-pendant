@@ -66,6 +66,18 @@ module.exports = {
           ? `${process.env.OTA_PUBLIC_URL.replace(/\/$/, '')}/ota/manifest`
           : (appJson.expo.updates?.url ??
             'https://api.tele-pendant.jahbyte.com/ota/manifest'),
+      codeSigningCertificate:
+        appJson.expo.updates?.codeSigningCertificate ??
+        './certs/certificate.pem',
+      codeSigningMetadata: appJson.expo.updates?.codeSigningMetadata ?? {
+        keyid: 'main',
+        alg: 'rsa-v1_5-sha256',
+      },
+      requestHeaders: {
+        ...(appJson.expo.updates?.requestHeaders ?? {}),
+        'expo-channel-name':
+          process.env.EXPO_UPDATE_CHANNEL?.trim() || 'production',
+      },
     },
     extra: {
       ...(appJson.expo.extra ?? {}),
