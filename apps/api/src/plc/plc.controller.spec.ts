@@ -7,6 +7,8 @@ describe('PlcController', () => {
   const plcService = {
     writeCoil: jest.fn().mockResolvedValue(undefined),
     writeHolding: jest.fn().mockResolvedValue(undefined),
+    saveConnection: jest.fn(),
+    connect: jest.fn(),
   };
   const auditService = {
     write: jest.fn().mockResolvedValue({ id: 'a1' }),
@@ -73,5 +75,78 @@ describe('PlcController', () => {
       details: 'value=42',
       result: 'success',
     });
+  });
+
+  it('audits PLC connection create, update, and connect by label', async () => {
+    const saved = {
+      id: 'c1',
+      label: 'Plant PLC',
+      host: '192.168.1.10',
+      port: 502,
+      unitId: 1,
+      enabled: true,
+      protocol: 'modbus-tcp',
+    };
+    plcService.saveConnection.mockResolvedValue(saved);
+    plcService.connect.mockResolvedValue({
+      connected: true,
+      connectionId: 'c1',
+      label: 'Plant PLC',
+      host: '192.168.1.10',
+      port: 502,
+      lastError: null,
+    });
+
+    await expect(
+      controller.create(
+        {
+          label: 'Plant PLC',
+          host: '192.168.1.10',
+          port: 502,
+          unitId: 1,
+          enabled: true,
+        },
+        adminReq as never,
+      ),
+    ).resolves.toEqual(saved);
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'plc.connection.create',
+        resource: 'Plant PLC',
+        details: expect.stringContaining('host=192.168.1.10'),
+        result: 'success',
+      }),
+    );
+
+    await expect(
+      controller.update(
+        'c1',
+        {
+          label: 'Plant PLC',
+          host: '192.168.1.10',
+          port: 502,
+          unitId: 1,
+          enabled: false,
+        },
+        adminReq as never,
+      ),
+    ).resolves.toEqual(saved);
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'plc.connection.update',
+        resource: 'Plant PLC',
+      }),
+    );
+
+    await expect(controller.connect('c1', adminReq as never)).resolves.toEqual(
+      expect.objectContaining({ connected: true }),
+    );
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'plc.connection.connect',
+        resource: 'Plant PLC',
+        result: 'success',
+      }),
+    );
   });
 });

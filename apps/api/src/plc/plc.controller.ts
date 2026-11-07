@@ -51,8 +51,19 @@ export class PlcController {
   @Post('connections')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Add a PLC connection' })
-  create(@Body() dto: SavePlcConnectionDto) {
-    return this.plcService.saveConnection(dto);
+  async create(
+    @Body() dto: SavePlcConnectionDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    const saved = await this.plcService.saveConnection(dto);
+    await this.auditService.write({
+      ...auditWriteFields(auditActorFromRequest(req.user, req.ip)),
+      action: 'plc.connection.create',
+      resource: saved.label,
+      details: this.connectionAuditDetails(saved),
+      result: 'success',
+    });
+    return saved;
   }
 
   @Patch('connections/:id')
@@ -60,15 +71,58 @@ export class PlcController {
   @ApiOperation({
     summary: 'Update a PLC connection and connect when it is the one in use',
   })
-  update(@Param('id') id: string, @Body() dto: SavePlcConnectionDto) {
-    return this.plcService.saveConnection({ ...dto, id });
+  async update(
+    @Param('id') id: string,
+    @Body() dto: SavePlcConnectionDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    const saved = await this.plcService.saveConnection({ ...dto, id });
+    await this.auditService.write({
+      ...auditWriteFields(auditActorFromRequest(req.user, req.ip)),
+      action: 'plc.connection.update',
+      resource: saved.label,
+      details: this.connectionAuditDetails(saved),
+      result: 'success',
+    });
+    return saved;
   }
 
   @Post('connections/:id/connect')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Connect to a configured PLC (or simulator)' })
-  connect(@Param('id') id: string) {
-    return this.plcService.connect(id);
+  async connect(
+    @Param('id') id: string,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    const health = await this.plcService.connect(id);
+    await this.auditService.write({
+      ...auditWriteFields(auditActorFromRequest(req.user, req.ip)),
+      action: 'plc.connection.connect',
+      resource: health.label ?? id,
+      details: [
+        `host=${health.host ?? ''}`,
+        `port=${health.port ?? ''}`,
+        `connected=${health.connected}`,
+      ].join(';'),
+      result: health.connected ? 'success' : 'failure',
+    });
+    return health;
+  }
+
+  private connectionAuditDetails(saved: {
+    host: string;
+    port: number;
+    unitId: number;
+    enabled: boolean;
+    protocol: string;
+  }): string {
+    return [
+      `host=${saved.host}`,
+      `port=${saved.port}`,
+      `unitId=${saved.unitId}`,
+      `protocol=${saved.protocol}`,
+      `enabled=${saved.enabled}`,
+    ].join(';');
   }
 
   @Get('holding/:address')
