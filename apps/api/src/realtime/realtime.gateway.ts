@@ -31,9 +31,8 @@ export class RealtimeGateway {
   }
 
   @SubscribeMessage('deadman.release')
-  handleDeadmanRelease() {
-    this.safetyState.releaseDeadman();
-    return this.safetyState.snapshot();
+  async handleDeadmanRelease() {
+    return this.safetyState.releaseDeadman();
   }
 
   @SubscribeMessage('safety.get')

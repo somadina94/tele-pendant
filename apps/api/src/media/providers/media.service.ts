@@ -254,9 +254,9 @@ export class MediaService implements OnModuleInit {
     try {
       await this.hmiService.activateCell(cellId, false, {});
     } catch {
-      // Deadman expiry also clears motion coils.
+      // releaseDeadman still clears PLC deadman + all motion coils.
     }
-    this.safetyState.releaseDeadman();
+    await this.safetyState.releaseDeadman();
   }
 
   cameraConfig() {

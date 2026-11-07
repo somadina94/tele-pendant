@@ -34,6 +34,8 @@ export class SafetyStateService {
   private watchdogOk = true;
   private lastHeartbeatAt: Date | null = null;
   private lastClientPulseAt: Date | null = null;
+  /** After release/timeout: keep retrying PLC drop until deadman+motion coils are cleared. */
+  private needsMotionDrop = false;
   private readonly watchdogTimeoutMs = 2000;
   private readonly deadmanTimeoutMs = 1500;
   private allowTimedMedia = false;
@@ -162,11 +164,41 @@ export class SafetyStateService {
   pulseDeadman(): void {
     this.lastClientPulseAt = new Date();
     this.deadmanActive = true;
+    this.needsMotionDrop = false;
   }
 
-  releaseDeadman(): void {
+  /**
+   * End deadman hold. Clears in-memory flags and drops PLC deadman + motion coils
+   * on the server so a lost client coil-off cannot leave the hoist running (TP-35).
+   */
+  async releaseDeadman(): Promise<SafetySnapshot> {
     this.deadmanActive = false;
     this.lastClientPulseAt = null;
+    this.needsMotionDrop = true;
+    await this.dropMotionAndDeadmanCoil();
+    return this.snapshot();
+  }
+
+  /**
+   * Write deadman coil false and clear all motion coils. Retried from tick()
+   * while needsMotionDrop remains set.
+   */
+  private async dropMotionAndDeadmanCoil(): Promise<void> {
+    const driver = this.plcService.getDriver();
+    if (!driver.isConnected()) return;
+    try {
+      const deadman = await this.roleAddress(
+        'deadmanRegisterId',
+        'coil.deadman',
+        DEMO_CRANE_MAP.coils.deadman,
+      );
+      await driver.writeCoil(deadman, false);
+      await this.clearMotionCoils();
+      this.needsMotionDrop = false;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Deadman/motion drop failed (will retry): ${message}`);
+    }
   }
 
   canIssueMotion(): boolean {
@@ -223,19 +255,17 @@ export class SafetyStateService {
       this.lastHeartbeatAt = new Date();
       this.watchdogOk = true;
 
-      // Deadman expiry
+      // Deadman expiry (lost pulses) or pending drop after explicit release
       if (
         this.lastClientPulseAt &&
         Date.now() - this.lastClientPulseAt.getTime() > this.deadmanTimeoutMs
       ) {
         this.deadmanActive = false;
-        const deadman = await this.roleAddress(
-          'deadmanRegisterId',
-          'coil.deadman',
-          DEMO_CRANE_MAP.coils.deadman,
-        );
-        await driver.writeCoil(deadman, false);
-        await this.clearMotionCoils();
+        this.lastClientPulseAt = null;
+        this.needsMotionDrop = true;
+      }
+      if (this.needsMotionDrop) {
+        await this.dropMotionAndDeadmanCoil();
       } else if (this.deadmanActive) {
         const deadman = await this.roleAddress(
           'deadmanRegisterId',

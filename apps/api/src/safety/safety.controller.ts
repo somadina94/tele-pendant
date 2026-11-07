@@ -80,9 +80,10 @@ export class SafetyController {
 
   @Post('deadman/release')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Release deadman' })
+  @ApiOperation({
+    summary: 'Release deadman (also clears PLC deadman and motion coils)',
+  })
   release() {
-    this.safetyState.releaseDeadman();
-    return this.safetyState.snapshot();
+    return this.safetyState.releaseDeadman();
   }
 }

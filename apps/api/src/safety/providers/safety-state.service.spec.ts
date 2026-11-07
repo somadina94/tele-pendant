@@ -105,13 +105,46 @@ describe('SafetyStateService', () => {
     delete process.env.SAFE_ACTION_PIN;
   });
 
-  it('blocks motion until deadman pulse and releases', () => {
+  it('blocks motion until deadman pulse and releases', async () => {
     expect(service.canIssueMotion()).toBe(false);
     service.pulseDeadman();
     expect(service.canIssueMotion()).toBe(true);
-    service.releaseDeadman();
+    await service.releaseDeadman();
     expect(service.canIssueMotion()).toBe(false);
     expect(service.snapshot().lastClientPulseAt).toBeNull();
+  });
+
+  it('on release writes deadman coil off and clears motion coils (TP-35)', async () => {
+    cells.find.mockResolvedValue([
+      { primaryRegister: { kind: 'coil', address: 7 } },
+      { primaryRegister: { kind: 'holding', address: 8 } },
+    ]);
+    service.pulseDeadman();
+    await service.tick();
+    driver.writeCoil.mockClear();
+    await service.releaseDeadman();
+    expect(service.canIssueMotion()).toBe(false);
+    expect(service.snapshot().lastClientPulseAt).toBeNull();
+    // DEMO_CRANE_MAP.coils.deadman is 10
+    expect(driver.writeCoil).toHaveBeenCalledWith(10, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(7, false);
+    expect(driver.writeCoil).not.toHaveBeenCalledWith(8, false);
+  });
+
+  it('retries PLC drop on next tick if release write failed', async () => {
+    cells.find.mockResolvedValue([
+      { primaryRegister: { kind: 'coil', address: 7 } },
+    ]);
+    service.pulseDeadman();
+    driver.writeCoil
+      .mockRejectedValueOnce(new Error('link down'))
+      .mockResolvedValue(undefined);
+    await service.releaseDeadman();
+    expect(service.canIssueMotion()).toBe(false);
+    driver.writeCoil.mockClear();
+    await service.tick();
+    expect(driver.writeCoil).toHaveBeenCalledWith(10, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(7, false);
   });
 
   it('enters e_stop when coil is high and is idempotent', async () => {
