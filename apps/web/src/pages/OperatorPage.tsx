@@ -30,7 +30,7 @@ import { PageSpinner } from '@/components/page-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -500,7 +500,7 @@ export function OperatorPage() {
         data-touch-min="44"
         data-stop-dock={isEstop ? 'true' : undefined}
         className={cn(
-          'matrix-cell flex h-auto min-h-12 flex-col items-stretch justify-center gap-0.5 whitespace-normal',
+          'matrix-cell flex h-auto min-h-11 flex-col items-stretch justify-center gap-0 whitespace-normal',
           `state-${cellState}`,
           isEstop && 'estop',
         )}
@@ -753,74 +753,73 @@ export function OperatorPage() {
           </HelpTip>
 
           <Card className="operator-matrix-card">
-            <CardHeader className="hidden shrink-0 space-y-0 px-4 py-1.5 md:block md:space-y-0 md:py-2">
-              <CardTitle className="text-sm">{t('controlMatrix')}</CardTitle>
-            </CardHeader>
-            <CardContent className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-3 pt-2 md:space-y-2 md:px-3 md:pb-3 md:pt-0">
-              <HelpTip id="tour.operator.safePin">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <Label
-                    htmlFor="safe-pin"
-                    className="shrink-0 whitespace-nowrap text-xs md:text-sm"
+            <CardContent className="operator-matrix-toolbar-wrap min-h-0 px-2 pb-1.5 pt-1.5 md:px-3">
+              <div className="operator-matrix-toolbar">
+                <HelpTip id="tour.operator.safePin">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <Label
+                      htmlFor="safe-pin"
+                      className="shrink-0 whitespace-nowrap text-[11px]"
+                    >
+                      {t('safePin')}
+                    </Label>
+                    <Input
+                      id="safe-pin"
+                      className="h-8 min-h-8 w-[6.5rem] max-w-[8rem] shrink-0 px-2 text-xs"
+                      value={safePin}
+                      onChange={(e) => setSafePin(e.target.value)}
+                      type="password"
+                      placeholder={t('safePin')}
+                      autoComplete="off"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 min-h-8 shrink-0 px-2 text-[11px]"
+                      onClick={() => void resetEStop()}
+                    >
+                      {t('resetEstop')}
+                    </Button>
+                    {controlHeldByOther ? (
+                      <span className="basis-full text-[11px] text-muted-foreground">
+                        {t('stealControlHint')}
+                      </span>
+                    ) : null}
+                  </div>
+                </HelpTip>
+                {showJogSpeed ? (
+                  <div
+                    className="flex shrink-0 flex-wrap items-center gap-1"
+                    role="group"
+                    aria-label={t('jogSpeed')}
                   >
-                    {t('safePin')}
-                  </Label>
-                  <Input
-                    id="safe-pin"
-                    className="h-11 min-h-11 min-w-[5rem] max-w-[11rem] flex-1 basis-28 md:max-w-[9rem]"
-                    value={safePin}
-                    onChange={(e) => setSafePin(e.target.value)}
-                    type="password"
-                    placeholder={t('safePin')}
-                    autoComplete="off"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-11 min-h-11 shrink-0 px-2 text-xs md:px-3 md:text-sm"
-                    onClick={() => void resetEStop()}
-                  >
-                    {t('resetEstop')}
-                  </Button>
-                  {controlHeldByOther ? (
-                    <span className="basis-full text-xs text-muted-foreground">
-                      {t('stealControlHint')}
+                    <span className="text-[11px] text-muted-foreground">
+                      {t('jogSpeed')}
                     </span>
-                  ) : null}
-                </div>
-              </HelpTip>
-              {showJogSpeed ? (
-                <div
-                  className="flex flex-wrap items-center gap-2"
-                  role="group"
-                  aria-label={t('jogSpeed')}
-                >
-                  <span className="text-xs text-muted-foreground md:text-sm">
-                    {t('jogSpeed')}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={jogSpeed === 'slow' ? 'default' : 'outline'}
-                    className="h-11 min-h-11"
-                    aria-pressed={jogSpeed === 'slow'}
-                    onClick={() => setJogSpeed('slow')}
-                  >
-                    {t('jogSlow')}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={jogSpeed === 'fast' ? 'default' : 'outline'}
-                    className="h-11 min-h-11"
-                    aria-pressed={jogSpeed === 'fast'}
-                    onClick={() => setJogSpeed('fast')}
-                  >
-                    {t('jogFast')}
-                  </Button>
-                </div>
-              ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={jogSpeed === 'slow' ? 'default' : 'outline'}
+                      className="h-8 min-h-8 px-2 text-[11px]"
+                      aria-pressed={jogSpeed === 'slow'}
+                      onClick={() => setJogSpeed('slow')}
+                    >
+                      {t('jogSlow')}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={jogSpeed === 'fast' ? 'default' : 'outline'}
+                      className="h-8 min-h-8 px-2 text-[11px]"
+                      aria-pressed={jogSpeed === 'fast'}
+                      onClick={() => setJogSpeed('fast')}
+                    >
+                      {t('jogFast')}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
               <HelpTip id="tour.operator.matrix">
                 <div
                   className="matrix-grid"
@@ -856,9 +855,7 @@ export function OperatorPage() {
                 </div>
               </HelpTip>
               <HelpTip id="tour.operator.holdHint">
-                <p className="hidden text-xs text-muted-foreground md:block">
-                  {t('holdHint')}
-                </p>
+                <p className="sr-only">{t('holdHint')}</p>
               </HelpTip>
             </CardContent>
           </Card>
