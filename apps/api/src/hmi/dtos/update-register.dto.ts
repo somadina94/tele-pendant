@@ -26,4 +26,13 @@ export class UpdateRegisterDto {
   @IsOptional()
   @IsString()
   nodeId?: string;
+
+  /** TP-48: required when changing address of e-stop/deadman/heartbeat/safe-state. */
+  @ApiPropertyOptional({
+    description:
+      'Reset PIN required when changing a safety-role register address',
+  })
+  @IsOptional()
+  @IsString()
+  pin?: string;
 }

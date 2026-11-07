@@ -58,6 +58,17 @@ describe('HmiService', () => {
     canIssueMotion: jest.fn().mockReturnValue(false),
     snapshot: jest.fn().mockReturnValue({ mode: 'normal' }),
     latchOperatorEStop: jest.fn().mockResolvedValue({ mode: 'e_stop' }),
+    getRoles: jest.fn().mockResolvedValue({
+      eStopRegisterId: 'estop-id',
+      deadmanRegisterId: 'dead-id',
+      heartbeatRegisterId: 'beat-id',
+      safeStateRegisterId: 'safe-id',
+    }),
+  };
+  const safeActionPin = {
+    verify: jest.fn(async (_userId: string | undefined, pin: string) => {
+      return pin.trim() === '1234';
+    }),
   };
   const auditService = { write: jest.fn().mockResolvedValue({}) };
 
@@ -73,6 +84,15 @@ describe('HmiService', () => {
     cells.findOne.mockResolvedValue(motionCell);
     backgrounds.findOne.mockResolvedValue({ id: 'bg1', active: true });
     safetyState.canIssueMotion.mockReturnValue(false);
+    safetyState.getRoles.mockResolvedValue({
+      eStopRegisterId: 'estop-id',
+      deadmanRegisterId: 'dead-id',
+      heartbeatRegisterId: 'beat-id',
+      safeStateRegisterId: 'safe-id',
+    });
+    safeActionPin.verify.mockImplementation(
+      async (_userId: string | undefined, pin: string) => pin.trim() === '1234',
+    );
     service = new HmiService(
       cells as never,
       registers as never,
@@ -81,6 +101,7 @@ describe('HmiService', () => {
       plcService as never,
       safetyState as never,
       auditService as never,
+      safeActionPin as never,
     );
   });
 
@@ -200,8 +221,8 @@ describe('HmiService', () => {
   it('updates a register address and drops the address cache', async () => {
     registers.findOneBy.mockResolvedValue({
       id: 'r1',
-      name: 'coil.eStop',
-      address: 11,
+      name: 'coil.hoistUp',
+      address: 0,
     });
     const saved = await service.updateRegister('r1', 20);
     expect(saved.address).toBe(20);
@@ -209,16 +230,16 @@ describe('HmiService', () => {
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'register.update',
-        details: 'coil.eStop=20',
+        details: 'coil.hoistUp=20',
       }),
     );
     const tagged = await service.updateRegister(
       'r1',
       21,
       { userEmail: 'admin@example.com' },
-      { nodeId: ' ns=1;s=EStop ', trended: true },
+      { nodeId: ' ns=1;s=Hoist ', trended: true },
     );
-    expect(tagged.nodeId).toBe('ns=1;s=EStop');
+    expect(tagged.nodeId).toBe('ns=1;s=Hoist');
     expect(tagged.trended).toBe(true);
     const cleared = await service.updateRegister(
       'r1',
@@ -235,6 +256,78 @@ describe('HmiService', () => {
       trended: true,
     });
     expect(trendOnly.address).toBe(23);
+  });
+
+  it('requires PIN to change a safety register address (TP-48)', async () => {
+    registers.findOneBy.mockResolvedValue({
+      id: 'estop-id',
+      name: 'coil.eStop',
+      address: 11,
+    });
+    await expect(
+      service.updateRegister(
+        'estop-id',
+        99,
+        { userId: 'u1', userEmail: 'sup@x' },
+        { pin: 'wrong' },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'register.update_denied',
+        result: 'failure',
+      }),
+    );
+
+    registers.findOneBy.mockResolvedValue({
+      id: 'estop-id',
+      name: 'coil.eStop',
+      address: 11,
+    });
+    const saved = await service.updateRegister(
+      'estop-id',
+      99,
+      { userId: 'u1' },
+      { pin: '1234' },
+    );
+    expect(saved.address).toBe(99);
+
+    registers.findOneBy.mockResolvedValue({
+      id: 'custom-bound',
+      name: 'coil.other',
+      address: 5,
+    });
+    for (const key of [
+      'eStopRegisterId',
+      'deadmanRegisterId',
+      'heartbeatRegisterId',
+      'safeStateRegisterId',
+    ] as const) {
+      safetyState.getRoles.mockResolvedValue({
+        eStopRegisterId: null,
+        deadmanRegisterId: null,
+        heartbeatRegisterId: null,
+        safeStateRegisterId: null,
+        [key]: 'custom-bound',
+      });
+      await expect(
+        service.updateRegister('custom-bound', 6, { userId: 'u1' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    }
+
+    registers.findOneBy.mockResolvedValue({
+      id: 'estop-id',
+      name: 'coil.eStop',
+      address: 11,
+    });
+    safeActionPin.verify.mockClear();
+    await service.updateRegister(
+      'estop-id',
+      11,
+      { userId: 'u1' },
+      { trended: true },
+    );
+    expect(safeActionPin.verify).not.toHaveBeenCalled();
   });
 
   it('rejects a missing register and an address outside 0..65535', async () => {

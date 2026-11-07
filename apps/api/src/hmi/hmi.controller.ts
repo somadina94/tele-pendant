@@ -53,7 +53,10 @@ export class HmiController {
 
   @Patch('registers/:id')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
-  @ApiOperation({ summary: 'Set the Modbus address for a named register' })
+  @ApiOperation({
+    summary:
+      'Set the Modbus address for a named register (PIN required for safety roles — TP-48)',
+  })
   updateRegister(
     @Param('id') id: string,
     @Body() dto: UpdateRegisterDto,
@@ -62,6 +65,7 @@ export class HmiController {
     return this.hmiService.updateRegister(id, dto.address, this.actor(req), {
       nodeId: dto.nodeId,
       trended: dto.trended,
+      pin: dto.pin,
     });
   }
 

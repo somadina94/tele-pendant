@@ -28,6 +28,17 @@ import {
   showErrorFrom,
 } from '../ui';
 
+const SAFETY_REGISTER_NAMES = new Set([
+  'coil.eStop',
+  'coil.deadman',
+  'holding.heartbeat',
+  'holding.safeState',
+]);
+
+function isSafetyRegisterName(name: string): boolean {
+  return SAFETY_REGISTER_NAMES.has(name);
+}
+
 function registerOptions(registers: RegisterRef[]) {
   return registers.map((row) => ({ value: row.id, label: row.name }));
 }
@@ -152,6 +163,7 @@ export function ConfigScreen({ token }: { token: string }) {
             <RegisterForm
               key={row.id}
               row={row}
+              safetyCritical={isSafetyRegisterName(row.name)}
               note={notes[row.id]}
               onSave={async (value) => {
                 try {
@@ -407,25 +419,37 @@ function PlcForm({
 
 function RegisterForm({
   row,
+  safetyCritical,
   note,
   onSave,
 }: {
   row: RegisterRef;
+  safetyCritical: boolean;
   note?: string;
   onSave: (value: {
     address: number;
     trended: boolean;
     nodeId?: string;
+    pin?: string;
   }) => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [address, setAddress] = useState(String(row.address));
   const [trended, setTrended] = useState(Boolean(row.trended));
   const [nodeId, setNodeId] = useState(row.nodeId ?? '');
+  const [pin, setPin] = useState('');
+  const addressChanged = Number(address) !== row.address;
   return (
     <>
       <Text className="mb-1 mt-2 text-muted-foreground">
-        {row.name} ({row.kind})
+        {row.name} ({row.kind}){safetyCritical ? ' — Safety' : ''}
       </Text>
+      {safetyCritical ? (
+        <Text className="mb-2 text-xs text-muted-foreground">
+          Changing this address retargets e-stop/deadman/heartbeat/safe-state.
+          Reset PIN required when the address changes.
+        </Text>
+      ) : null}
       <Field label="Address" value={address} onChangeText={setAddress} />
       <Field label="OPC UA node id" value={nodeId} onChangeText={setNodeId} />
       <SelectField
@@ -437,15 +461,40 @@ function RegisterForm({
         ]}
         onChange={(v) => setTrended(v === 'yes')}
       />
+      {safetyCritical && addressChanged ? (
+        <>
+          <Text className="mt-2 mb-1 text-xs text-muted-foreground">
+            {t('safePin')}
+          </Text>
+          <TextInput
+            className="mb-2 rounded-lg border border-border bg-card px-3 py-2.5 text-foreground"
+            secureTextEntry
+            autoCapitalize="none"
+            value={pin}
+            onChangeText={setPin}
+            placeholder={t('safePin')}
+          />
+        </>
+      ) : null}
       <Pressable
         className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-        onPress={() =>
+        onPress={() => {
+          if (safetyCritical && addressChanged && !pin.trim()) {
+            showErrorFrom(
+              new Error(
+                'Reset PIN is required to change a safety register address',
+              ),
+              'Save failed',
+            );
+            return;
+          }
           void onSave({
             address: Number(address),
             trended,
             ...(nodeId ? { nodeId } : {}),
-          })
-        }
+            ...(safetyCritical && addressChanged ? { pin: pin.trim() } : {}),
+          }).then(() => setPin(''));
+        }}
       >
         <Text className="font-bold text-primary-foreground">
           Save {row.name}

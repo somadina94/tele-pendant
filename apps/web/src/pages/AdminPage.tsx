@@ -94,6 +94,27 @@ interface SafetyRoleRow {
   allowTimedMediaMotion?: boolean;
 }
 
+const SAFETY_REGISTER_NAMES = new Set([
+  'coil.eStop',
+  'coil.deadman',
+  'holding.heartbeat',
+  'holding.safeState',
+]);
+
+function isSafetyRegister(
+  row: { id: string; name: string },
+  roles: SafetyRoleRow | null | undefined,
+): boolean {
+  if (SAFETY_REGISTER_NAMES.has(row.name)) return true;
+  if (!roles) return false;
+  return (
+    roles.eStopRegisterId === row.id ||
+    roles.deadmanRegisterId === row.id ||
+    roles.heartbeatRegisterId === row.id ||
+    roles.safeStateRegisterId === row.id
+  );
+}
+
 interface Note {
   ok: boolean;
   text: string;
@@ -257,7 +278,12 @@ export function AdminPage() {
 
   async function saveRegister(
     id: string,
-    value: { address: number; trended: boolean; nodeId?: string },
+    value: {
+      address: number;
+      trended: boolean;
+      nodeId?: string;
+      pin?: string;
+    },
   ) {
     await apiPatch(`/hmi/registers/${id}`, value);
     await queryClient.invalidateQueries({ queryKey: ['hmi-layout'] });
@@ -380,6 +406,7 @@ export function AdminPage() {
                   address={row.address}
                   trended={Boolean(row.trended)}
                   nodeId={row.nodeId ?? ''}
+                  safetyCritical={isSafetyRegister(row, safetyRoles.data)}
                   showNode={plcRows.some((item) => item.protocol === 'opcua')}
                   note={notes[row.id]}
                   onNote={(note) => remember(row.id, note)}
@@ -1100,6 +1127,7 @@ function RegisterEditor({
   address,
   trended,
   nodeId,
+  safetyCritical,
   showNode,
   note,
   onNote,
@@ -1110,6 +1138,7 @@ function RegisterEditor({
   address: number;
   trended: boolean;
   nodeId: string;
+  safetyCritical: boolean;
   showNode: boolean;
   note?: Note;
   onNote: (note: Note) => void;
@@ -1117,22 +1146,36 @@ function RegisterEditor({
     address: number;
     trended: boolean;
     nodeId?: string;
+    pin?: string;
   }) => Promise<void>;
 }) {
   const { t } = useT();
   const [value, setValue] = useState(String(address));
   const [trend, setTrend] = useState(trended);
   const [node, setNode] = useState(nodeId);
+  const [pin, setPin] = useState('');
   const trendId = useId();
+  const addressChanged = Number(value) !== address;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (safetyCritical && addressChanged && !pin.trim()) {
+      const failure = {
+        ok: false as const,
+        text: 'Reset PIN is required to change a safety register address',
+      };
+      onNote(failure);
+      toastErr(failure.text);
+      return;
+    }
     try {
       await onSubmit({
         address: Number(value),
         trended: trend,
         ...(showNode ? { nodeId: node } : {}),
+        ...(safetyCritical && addressChanged ? { pin: pin.trim() } : {}),
       });
+      setPin('');
       const success = { ok: true as const, text: `Saved ${name}.` };
       onNote(success);
       toastOk(success.text);
@@ -1151,7 +1194,14 @@ function RegisterEditor({
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{name}</span>
         <Badge variant="outline">{kind}</Badge>
+        {safetyCritical ? <Badge variant="destructive">Safety</Badge> : null}
       </div>
+      {safetyCritical ? (
+        <p className="text-xs text-muted-foreground">
+          Changing this address retargets e-stop, deadman, heartbeat, or
+          safe-state. A reset PIN is required when the address changes.
+        </p>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor={`${name}-address`}>Address</Label>
@@ -1175,6 +1225,20 @@ function RegisterEditor({
           </div>
         ) : null}
       </div>
+      {safetyCritical && addressChanged ? (
+        <div className="grid gap-2">
+          <Label htmlFor={`${name}-pin`}>{t('safePin')}</Label>
+          <Input
+            id={`${name}-pin`}
+            type="password"
+            autoComplete="off"
+            aria-label={`${name} reset pin`}
+            value={pin}
+            onChange={(event) => setPin(event.target.value)}
+            placeholder={t('safePin')}
+          />
+        </div>
+      ) : null}
       <div className="flex items-center gap-2">
         <Checkbox
           id={trendId}

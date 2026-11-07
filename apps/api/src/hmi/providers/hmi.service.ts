@@ -15,9 +15,18 @@ import { PlcService } from '../../plc/providers/plc.service';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { SafetyStateService } from '../../safety/providers/safety-state.service';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
+import { SafeActionPinService } from '../../users/providers/safe-action-pin.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 
 type Actor = AuditActor;
+
+/** Demo / plant names that drive software e-stop, deadman, heartbeat, safe-state. */
+const SAFETY_REGISTER_NAMES = new Set([
+  'coil.eStop',
+  'coil.deadman',
+  'holding.heartbeat',
+  'holding.safeState',
+]);
 
 @Injectable()
 export class HmiService {
@@ -28,6 +37,7 @@ export class HmiService {
   private readonly plcService: PlcService;
   private readonly safetyState: SafetyStateService;
   private readonly auditService: AuditService;
+  private readonly safeActionPin: SafeActionPinService;
 
   constructor(
     @InjectRepository(Cell)
@@ -41,6 +51,7 @@ export class HmiService {
     @Inject(PlcService) plcService: PlcService,
     @Inject(SafetyStateService) safetyState: SafetyStateService,
     @Inject(AuditService) auditService: AuditService,
+    @Inject(SafeActionPinService) safeActionPin: SafeActionPinService,
   ) {
     this.cells = cells;
     this.registers = registers;
@@ -48,6 +59,7 @@ export class HmiService {
     this.overlays = overlays;
     this.plcService = plcService;
     this.safetyState = safetyState;
+    this.safeActionPin = safeActionPin;
     this.auditService = auditService;
   }
 
@@ -83,7 +95,7 @@ export class HmiService {
     id: string,
     address: number,
     actor?: Actor,
-    extra?: { nodeId?: string | null; trended?: boolean },
+    extra?: { nodeId?: string | null; trended?: boolean; pin?: string },
   ): Promise<RegisterMap> {
     if (!Number.isInteger(address) || address < 0 || address > 65535) {
       throw new BadRequestException(
@@ -92,6 +104,27 @@ export class HmiService {
     }
     const row = await this.registers.findOneBy({ id });
     if (!row) throw new NotFoundException('Register not found');
+
+    const addressChanging = row.address !== address;
+    if (addressChanging && (await this.isSafetyRegister(row.id, row.name))) {
+      const ok = await this.safeActionPin.verify(
+        actor?.userId,
+        extra?.pin ?? '',
+      );
+      if (!ok) {
+        await this.auditService.write({
+          ...this.actorFields(actor),
+          action: 'register.update_denied',
+          resource: row.id,
+          details: `${row.name} address change blocked (safety register)`,
+          result: 'failure',
+        });
+        throw new ForbiddenException(
+          'PIN does not match — required to change a safety register address',
+        );
+      }
+    }
+
     row.address = address;
     if (extra && extra.nodeId !== undefined) {
       row.nodeId = extra.nodeId?.trim() ? extra.nodeId.trim() : null;
@@ -109,6 +142,20 @@ export class HmiService {
       result: 'success',
     });
     return saved;
+  }
+
+  /**
+   * TP-48: e-stop / deadman / heartbeat / safe-state maps (by name or Safety roles binding).
+   */
+  private async isSafetyRegister(id: string, name: string): Promise<boolean> {
+    if (SAFETY_REGISTER_NAMES.has(name)) return true;
+    const roles = await this.safetyState.getRoles();
+    return (
+      roles.eStopRegisterId === id ||
+      roles.deadmanRegisterId === id ||
+      roles.heartbeatRegisterId === id ||
+      roles.safeStateRegisterId === id
+    );
   }
 
   private actorFields(actor?: Actor) {

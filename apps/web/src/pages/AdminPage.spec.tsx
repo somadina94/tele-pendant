@@ -692,6 +692,89 @@ describe('AdminPage', () => {
     await waitFor(() => expect(del).toHaveBeenCalledWith('/hmi/overlays/o9'));
   });
 
+  it('requires reset PIN to change a safety register address (TP-48)', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') return [];
+      if (path === '/safety/roles') {
+        return {
+          eStopRegisterId: 'r1',
+          deadmanRegisterId: 'r2',
+          heartbeatRegisterId: 'r3',
+          safeStateRegisterId: 'r-bound',
+        };
+      }
+      return {
+        ...layout,
+        registers: [
+          ...layout.registers,
+          {
+            id: 'estop',
+            name: 'coil.eStop',
+            address: 11,
+            kind: 'coil',
+            trended: false,
+          },
+          {
+            id: 'r-bound',
+            name: 'coil.customSafe',
+            address: 7,
+            kind: 'coil',
+          },
+        ],
+      };
+    });
+    const patch = vi.spyOn(api, 'apiPatch').mockResolvedValue({});
+    await goConfigSection('Register maps');
+    expect(screen.getAllByText('Safety').length).toBeGreaterThanOrEqual(5);
+    expect(
+      screen.getAllByText(/Changing this address retargets/).length,
+    ).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save coil.eStop' }));
+    await screen.findByText('Saved coil.eStop.');
+    expect(patch).toHaveBeenCalledWith('/hmi/registers/estop', {
+      address: 11,
+      trended: false,
+    });
+    patch.mockClear();
+
+    fireEvent.change(screen.getByLabelText('coil.eStop address'), {
+      target: { value: '99' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save coil.eStop' }));
+    expect(
+      await screen.findByText(
+        'Reset PIN is required to change a safety register address',
+      ),
+    ).toBeInTheDocument();
+    expect(patch).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('coil.eStop reset pin'), {
+      target: { value: '1234' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save coil.eStop' }));
+    await screen.findByText('Saved coil.eStop.');
+    expect(patch).toHaveBeenCalledWith('/hmi/registers/estop', {
+      address: 99,
+      trended: false,
+      pin: '1234',
+    });
+
+    fireEvent.change(screen.getByLabelText('coil.up address'), {
+      target: { value: '42' },
+    });
+    fireEvent.change(screen.getByLabelText('coil.up reset pin'), {
+      target: { value: '1234' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save coil.up' }));
+    await screen.findByText('Saved coil.up.');
+    expect(patch).toHaveBeenCalledWith(
+      '/hmi/registers/r1',
+      expect.objectContaining({ address: 42, pin: '1234' }),
+    );
+  });
+
   it('saves opc ua, a trend, an alarm, and safety roles', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
       if (path === '/plc/health') return plcHealthMock;
