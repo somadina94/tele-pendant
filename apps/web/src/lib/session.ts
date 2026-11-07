@@ -1,9 +1,12 @@
+import { resetRealtimeSocket } from './realtime';
+
 const PUBLIC_PATHS = new Set(['/', '/face']);
 
 /** Drop local session state (token + cached user). */
 export function clearSession(): void {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('user');
+  resetRealtimeSocket();
 }
 
 /** True when this path should not force a login redirect on 401. */

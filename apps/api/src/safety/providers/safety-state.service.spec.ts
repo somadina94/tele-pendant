@@ -106,12 +106,29 @@ describe('SafetyStateService', () => {
   });
 
   it('blocks motion until deadman pulse and releases', async () => {
-    expect(service.canIssueMotion()).toBe(false);
-    service.pulseDeadman();
-    expect(service.canIssueMotion()).toBe(true);
-    await service.releaseDeadman();
-    expect(service.canIssueMotion()).toBe(false);
+    expect(service.canIssueMotion('u1')).toBe(false);
+    service.pulseDeadman({ userId: 'u1' });
+    expect(service.canIssueMotion('u1')).toBe(true);
+    expect(service.canIssueMotion('u2')).toBe(false);
+    await service.releaseDeadman({ userId: 'u1' });
+    expect(service.canIssueMotion('u1')).toBe(false);
     expect(service.snapshot().lastClientPulseAt).toBeNull();
+  });
+
+  it('ignores empty pulse and non-holder release (TP-37)', async () => {
+    service.pulseDeadman({ userId: '  ' });
+    expect(service.snapshot().deadmanActive).toBe(false);
+    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    expect(service.canIssueMotion('u1')).toBe(true);
+    await service.releaseDeadman({ userId: 'u2' });
+    expect(service.snapshot().deadmanActive).toBe(true);
+    await service.releaseDeadman({ socketId: 'sock-other' });
+    expect(service.snapshot().deadmanActive).toBe(true);
+    await service.releaseDeadman({ socketId: 'sock-a' });
+    expect(service.snapshot().deadmanActive).toBe(false);
+    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    await service.releaseDeadman({ force: true });
+    expect(service.snapshot().deadmanActive).toBe(false);
   });
 
   it('on release writes deadman coil off and clears motion coils (TP-35)', async () => {
@@ -119,11 +136,11 @@ describe('SafetyStateService', () => {
       { primaryRegister: { kind: 'coil', address: 7 } },
       { primaryRegister: { kind: 'holding', address: 8 } },
     ]);
-    service.pulseDeadman();
+    service.pulseDeadman({ userId: 'u1' });
     await service.tick();
     driver.writeCoil.mockClear();
-    await service.releaseDeadman();
-    expect(service.canIssueMotion()).toBe(false);
+    await service.releaseDeadman({ userId: 'u1' });
+    expect(service.canIssueMotion('u1')).toBe(false);
     expect(service.snapshot().lastClientPulseAt).toBeNull();
     // DEMO_CRANE_MAP.coils.deadman is 10
     expect(driver.writeCoil).toHaveBeenCalledWith(10, false);
@@ -135,12 +152,12 @@ describe('SafetyStateService', () => {
     cells.find.mockResolvedValue([
       { primaryRegister: { kind: 'coil', address: 7 } },
     ]);
-    service.pulseDeadman();
+    service.pulseDeadman({ userId: 'u1' });
     driver.writeCoil
       .mockRejectedValueOnce(new Error('link down'))
       .mockResolvedValue(undefined);
-    await service.releaseDeadman();
-    expect(service.canIssueMotion()).toBe(false);
+    await service.releaseDeadman({ userId: 'u1' });
+    expect(service.canIssueMotion('u1')).toBe(false);
     driver.writeCoil.mockClear();
     await service.tick();
     expect(driver.writeCoil).toHaveBeenCalledWith(10, false);
@@ -149,10 +166,10 @@ describe('SafetyStateService', () => {
 
   it('release returns early when PLC is disconnected', async () => {
     driver.isConnected.mockReturnValue(false);
-    service.pulseDeadman();
+    service.pulseDeadman({ userId: 'u1' });
     driver.writeCoil.mockClear();
-    await service.releaseDeadman();
-    expect(service.canIssueMotion()).toBe(false);
+    await service.releaseDeadman({ userId: 'u1' });
+    expect(service.canIssueMotion('u1')).toBe(false);
     expect(driver.writeCoil).not.toHaveBeenCalled();
   });
 
@@ -160,10 +177,10 @@ describe('SafetyStateService', () => {
     cells.find.mockResolvedValue([
       { primaryRegister: { kind: 'coil', address: 7 } },
     ]);
-    service.pulseDeadman();
+    service.pulseDeadman({ userId: 'u1' });
     driver.writeCoil.mockRejectedValueOnce('boom');
-    await service.releaseDeadman();
-    expect(service.canIssueMotion()).toBe(false);
+    await service.releaseDeadman({ userId: 'u1' });
+    expect(service.canIssueMotion('u1')).toBe(false);
     driver.writeCoil.mockReset();
     driver.writeCoil.mockResolvedValue(undefined);
     await service.tick();
@@ -214,7 +231,7 @@ describe('SafetyStateService', () => {
   });
 
   it('writes heartbeat and deadman coil while active', async () => {
-    service.pulseDeadman();
+    service.pulseDeadman({ userId: 'u1' });
     const snap = await service.tick();
     expect(snap.mode).toBe('normal');
     expect(driver.writeRegister).toHaveBeenCalled();
@@ -226,7 +243,7 @@ describe('SafetyStateService', () => {
     jest.useFakeTimers();
     const now = Date.now();
     jest.setSystemTime(now);
-    service.pulseDeadman();
+    service.pulseDeadman({ userId: 'u1' });
     jest.setSystemTime(now + 5000);
     await service.tick();
     expect(service.snapshot().deadmanActive).toBe(false);
@@ -293,11 +310,11 @@ describe('SafetyStateService', () => {
       { primaryRegister: { kind: 'holding', address: 8 } },
       { primaryRegister: null },
     ]);
-    service.pulseDeadman();
+    service.pulseDeadman({ userId: 'u1' });
     jest.useFakeTimers();
     const now = Date.now();
     jest.setSystemTime(now);
-    service.pulseDeadman();
+    service.pulseDeadman({ userId: 'u1' });
     jest.setSystemTime(now + 5000);
     await service.tick();
     expect(driver.writeCoil).toHaveBeenCalledWith(7, false);

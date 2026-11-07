@@ -59,8 +59,8 @@ export class SafetyController {
   @Post('deadman/pulse')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Pulse deadman hold (also available over WS)' })
-  pulse() {
-    this.safetyState.pulseDeadman();
+  pulse(@Req() req: Request & { user: JwtPayload }) {
+    this.safetyState.pulseDeadman({ userId: req.user.sub });
     return this.safetyState.snapshot();
   }
 
@@ -83,7 +83,7 @@ export class SafetyController {
   @ApiOperation({
     summary: 'Release deadman (also clears PLC deadman and motion coils)',
   })
-  release() {
-    return this.safetyState.releaseDeadman();
+  release(@Req() req: Request & { user: JwtPayload }) {
+    return this.safetyState.releaseDeadman({ userId: req.user.sub });
   }
 }

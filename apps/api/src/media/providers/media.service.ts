@@ -169,7 +169,7 @@ export class MediaService implements OnModuleInit {
             'Timed motion is off. Hold the button on Operator, or turn on Allow timed media motion in Config.',
         };
       }
-      this.beginMotionJog(cell.id);
+      this.beginMotionJog(cell.id, opts.userId ?? 'media');
       const otherLabel =
         label === 'Hoist Up'
           ? 'Hoist Down'
@@ -227,16 +227,17 @@ export class MediaService implements OnModuleInit {
   }
 
   /** Hold deadman for a short jog, then drop the motion coil. */
-  private beginMotionJog(cellId: string): void {
+  private beginMotionJog(cellId: string, userId: string): void {
     this.endMotionJog(null);
     const started = Date.now();
-    this.safetyState.pulseDeadman();
+    const holder = { userId, socketId: `media:${userId}` };
+    this.safetyState.pulseDeadman(holder);
     this.motionJog = setInterval(() => {
       if (Date.now() - started >= VOICE_JOG_MS) {
         this.endMotionJog(cellId);
         return;
       }
-      this.safetyState.pulseDeadman();
+      this.safetyState.pulseDeadman(holder);
     }, VOICE_JOG_PULSE_MS);
     this.motionJog.unref();
   }
@@ -256,7 +257,7 @@ export class MediaService implements OnModuleInit {
     } catch {
       // releaseDeadman still clears PLC deadman + all motion coils.
     }
-    await this.safetyState.releaseDeadman();
+    await this.safetyState.releaseDeadman({ force: true });
   }
 
   cameraConfig() {

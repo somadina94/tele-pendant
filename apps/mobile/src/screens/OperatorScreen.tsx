@@ -64,6 +64,7 @@ export function OperatorScreen({ token }: { token: string }) {
       path: '/socket.io',
       reconnection: true,
       reconnectionAttempts: Infinity,
+      auth: token ? { token } : {},
     });
     socketRef.current = socket;
     socket.on('safety.state', (s: { mode: string }) => setSafetyMode(s.mode));
@@ -78,7 +79,7 @@ export function OperatorScreen({ token }: { token: string }) {
       socket?.disconnect();
       socketRef.current = null;
     };
-  }, []);
+  }, [token]);
 
   const layoutQuery = useQuery({
     queryKey: ['layout', token],

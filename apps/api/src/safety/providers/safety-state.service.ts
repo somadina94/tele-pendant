@@ -34,6 +34,9 @@ export class SafetyStateService {
   private watchdogOk = true;
   private lastHeartbeatAt: Date | null = null;
   private lastClientPulseAt: Date | null = null;
+  /** Authenticated holder of the software deadman (TP-37). */
+  private deadmanHolderUserId: string | null = null;
+  private deadmanHolderSocketId: string | null = null;
   /** After release/timeout: keep retrying PLC drop until deadman+motion coils are cleared. */
   private needsMotionDrop = false;
   private readonly watchdogTimeoutMs = 2000;
@@ -160,23 +163,55 @@ export class SafetyStateService {
     };
   }
 
-  /** Client must call while holding deadman. */
-  pulseDeadman(): void {
+  /**
+   * Client must call while holding deadman. Holder is the signed-in user
+   * (and optional socket) so another session cannot ride the pulse (TP-37).
+   */
+  pulseDeadman(holder: { userId: string; socketId?: string | null }): void {
+    const userId = holder.userId?.trim();
+    if (!userId) return;
     this.lastClientPulseAt = new Date();
     this.deadmanActive = true;
+    this.deadmanHolderUserId = userId;
+    this.deadmanHolderSocketId = holder.socketId?.trim() || null;
     this.needsMotionDrop = false;
   }
 
   /**
    * End deadman hold. Clears in-memory flags and drops PLC deadman + motion coils
    * on the server so a lost client coil-off cannot leave the hoist running (TP-35).
+   * Only the holder (or force) can release so one client disconnect does not
+   * clear another operator's hold (TP-37).
    */
-  async releaseDeadman(): Promise<SafetySnapshot> {
-    this.deadmanActive = false;
-    this.lastClientPulseAt = null;
+  async releaseDeadman(opts?: {
+    userId?: string | null;
+    socketId?: string | null;
+    force?: boolean;
+  }): Promise<SafetySnapshot> {
+    if (!opts?.force && this.deadmanActive) {
+      const bySocket =
+        opts?.socketId &&
+        this.deadmanHolderSocketId &&
+        opts.socketId === this.deadmanHolderSocketId;
+      const byUser =
+        opts?.userId &&
+        this.deadmanHolderUserId &&
+        opts.userId === this.deadmanHolderUserId;
+      if (!bySocket && !byUser) {
+        return this.snapshot();
+      }
+    }
+    this.clearDeadmanHolder();
     this.needsMotionDrop = true;
     await this.dropMotionAndDeadmanCoil();
     return this.snapshot();
+  }
+
+  private clearDeadmanHolder(): void {
+    this.deadmanActive = false;
+    this.lastClientPulseAt = null;
+    this.deadmanHolderUserId = null;
+    this.deadmanHolderSocketId = null;
   }
 
   /**
@@ -201,7 +236,9 @@ export class SafetyStateService {
     }
   }
 
-  canIssueMotion(): boolean {
+  /** Motion only for the user who currently holds deadman (TP-37). */
+  canIssueMotion(userId?: string | null): boolean {
+    if (!userId || userId !== this.deadmanHolderUserId) return false;
     return (
       this.mode === 'normal' &&
       this.deadmanActive &&
@@ -260,8 +297,7 @@ export class SafetyStateService {
         this.lastClientPulseAt &&
         Date.now() - this.lastClientPulseAt.getTime() > this.deadmanTimeoutMs
       ) {
-        this.deadmanActive = false;
-        this.lastClientPulseAt = null;
+        this.clearDeadmanHolder();
         this.needsMotionDrop = true;
       }
       if (this.needsMotionDrop) {

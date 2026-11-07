@@ -117,8 +117,10 @@ describe('HmiService', () => {
     safetyState.canIssueMotion.mockReturnValue(true);
     const result = await service.activateCell('c1', true, {
       role: UserRole.OPERATOR,
+      userId: 'u1',
       userEmail: 'op@example.com',
     });
+    expect(safetyState.canIssueMotion).toHaveBeenCalledWith('u1');
     expect(plcService.writeCoil).toHaveBeenCalledWith(0, true);
     expect(result.ok).toBe(true);
   });

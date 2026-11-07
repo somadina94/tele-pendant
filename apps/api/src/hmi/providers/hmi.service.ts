@@ -132,7 +132,11 @@ export class HmiService {
       throw new NotFoundException('Cell or primary register not found');
     }
 
-    if (cell.isMotion && value && !this.safetyState.canIssueMotion()) {
+    if (
+      cell.isMotion &&
+      value &&
+      !this.safetyState.canIssueMotion(opts.userId)
+    ) {
       throw new ForbiddenException(
         'Motion blocked: hold deadman and ensure normal safety mode',
       );
