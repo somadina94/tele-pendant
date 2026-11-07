@@ -147,6 +147,30 @@ describe('SafetyStateService', () => {
     expect(driver.writeCoil).toHaveBeenCalledWith(7, false);
   });
 
+  it('release returns early when PLC is disconnected', async () => {
+    driver.isConnected.mockReturnValue(false);
+    service.pulseDeadman();
+    driver.writeCoil.mockClear();
+    await service.releaseDeadman();
+    expect(service.canIssueMotion()).toBe(false);
+    expect(driver.writeCoil).not.toHaveBeenCalled();
+  });
+
+  it('keeps needsMotionDrop when drop fails with a non-Error', async () => {
+    cells.find.mockResolvedValue([
+      { primaryRegister: { kind: 'coil', address: 7 } },
+    ]);
+    service.pulseDeadman();
+    driver.writeCoil.mockRejectedValueOnce('boom');
+    await service.releaseDeadman();
+    expect(service.canIssueMotion()).toBe(false);
+    driver.writeCoil.mockReset();
+    driver.writeCoil.mockResolvedValue(undefined);
+    await service.tick();
+    expect(driver.writeCoil).toHaveBeenCalledWith(10, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(7, false);
+  });
+
   it('enters e_stop when coil is high and is idempotent', async () => {
     driver.readCoils.mockResolvedValue([true]);
     const snap = await service.tick();

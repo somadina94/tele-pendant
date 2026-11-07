@@ -149,4 +149,157 @@ describe('AccountMenu', () => {
     expect(toastErr).toHaveBeenCalledWith('New passwords do not match');
     expect(patch).not.toHaveBeenCalled();
   });
+
+  it('sets a reset PIN and marks the session as having one', async () => {
+    const user = userEvent.setup();
+    const patch = vi.spyOn(api, 'apiPatch').mockResolvedValue({ ok: true });
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('Current reset PIN (if any)'), {
+      target: { value: '  plant  ' },
+    });
+    fireEvent.change(screen.getByLabelText('New reset PIN'), {
+      target: { value: '1234' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm new reset PIN'), {
+      target: { value: '1234' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Save reset PIN' }));
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('/auth/safe-action-pin', {
+        newPin: '1234',
+        currentPin: 'plant',
+      }),
+    );
+    const { toastOk } = await import('@/lib/toast');
+    expect(toastOk).toHaveBeenCalledWith('Reset PIN updated.');
+    expect(JSON.parse(localStorage.getItem('user')!).hasSafeActionPin).toBe(
+      true,
+    );
+  });
+
+  it('changes reset PIN without sending blank current PIN', async () => {
+    const user = userEvent.setup();
+    const patch = vi.spyOn(api, 'apiPatch').mockResolvedValue({ ok: true });
+    localStorage.setItem(
+      'user',
+      JSON.stringify({
+        id: 'u1',
+        email: 'op@plant.local',
+        displayName: 'Op',
+        role: 'operator',
+        hasSafeActionPin: true,
+      }),
+    );
+    renderWithProviders(<AccountMenu />);
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Change reset PIN'));
+    fireEvent.change(screen.getByLabelText('New reset PIN'), {
+      target: { value: '5678' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm new reset PIN'), {
+      target: { value: '5678' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Save reset PIN' }));
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('/auth/safe-action-pin', {
+        newPin: '5678',
+      }),
+    );
+  });
+
+  it('shows reset PIN mismatch without calling API', async () => {
+    const user = userEvent.setup();
+    const patch = vi.spyOn(api, 'apiPatch');
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('New reset PIN'), {
+      target: { value: '1234' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm new reset PIN'), {
+      target: { value: '9999' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Save reset PIN' }));
+    const { toastErr } = await import('@/lib/toast');
+    expect(toastErr).toHaveBeenCalledWith('New reset PINs do not match');
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('surfaces reset PIN API errors', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, 'apiPatch').mockRejectedValue(new Error('pin locked'));
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('New reset PIN'), {
+      target: { value: '1234' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm new reset PIN'), {
+      target: { value: '1234' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Save reset PIN' }));
+    const { toastErr } = await import('@/lib/toast');
+    await waitFor(() => expect(toastErr).toHaveBeenCalledWith('pin locked'));
+  });
+
+  it('handles non-Error reset PIN failures', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, 'apiPatch').mockRejectedValue('nope');
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('New reset PIN'), {
+      target: { value: '1234' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm new reset PIN'), {
+      target: { value: '1234' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Save reset PIN' }));
+    const { toastErr } = await import('@/lib/toast');
+    await waitFor(() =>
+      expect(toastErr).toHaveBeenCalledWith('Could not update reset PIN'),
+    );
+  });
+
+  it('still saves reset PIN when session storage was cleared', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, 'apiPatch').mockResolvedValue({ ok: true });
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('New reset PIN'), {
+      target: { value: '1234' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm new reset PIN'), {
+      target: { value: '1234' },
+    });
+    localStorage.removeItem('user');
+    await user.click(screen.getByRole('button', { name: 'Save reset PIN' }));
+    const { toastOk } = await import('@/lib/toast');
+    await waitFor(() =>
+      expect(toastOk).toHaveBeenCalledWith('Reset PIN updated.'),
+    );
+  });
+
+  it('still saves reset PIN when session storage is corrupt', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, 'apiPatch').mockResolvedValue({ ok: true });
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Set reset PIN'));
+    fireEvent.change(screen.getByLabelText('New reset PIN'), {
+      target: { value: '4321' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm new reset PIN'), {
+      target: { value: '4321' },
+    });
+    localStorage.setItem('user', '{not-json');
+    await user.click(screen.getByRole('button', { name: 'Save reset PIN' }));
+    const { toastOk } = await import('@/lib/toast');
+    await waitFor(() =>
+      expect(toastOk).toHaveBeenCalledWith('Reset PIN updated.'),
+    );
+  });
 });

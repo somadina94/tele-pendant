@@ -64,7 +64,7 @@ describe('AuthService', () => {
   };
   const safeActionPin = {
     plantPinFallback: jest.fn(() => ''),
-    changePin: jest.fn(),
+    changePin: jest.fn().mockResolvedValue(undefined),
   };
 
   let service: AuthService;
@@ -101,6 +101,23 @@ describe('AuthService', () => {
       expect.objectContaining({
         email: 'admin@example.com',
         role: UserRole.ADMIN,
+        safeActionPinHash: null,
+      }),
+    );
+  });
+
+  it('bootstraps admin with plant reset PIN hash when SAFE_ACTION_PIN is set', async () => {
+    usersRepository.findOne.mockResolvedValue(null);
+    safeActionPin.plantPinFallback.mockReturnValue('plant-pin');
+    (bcrypt.hash as jest.Mock)
+      .mockResolvedValueOnce('pwd-hash')
+      .mockResolvedValueOnce('pin-hash');
+    await service.onModuleInit();
+    expect(usersRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'admin@example.com',
+        passwordHash: 'pwd-hash',
+        safeActionPinHash: 'pin-hash',
       }),
     );
   });
@@ -202,6 +219,41 @@ describe('AuthService', () => {
       expect.objectContaining({
         userDisplayName: null,
         action: 'auth.password_change',
+      }),
+    );
+  });
+
+  it('changes safe action pin and audits', async () => {
+    usersRepository.findOneByOrFail.mockResolvedValue(user);
+    safeActionPin.changePin = jest.fn().mockResolvedValue(undefined);
+    await expect(
+      service.changeSafeActionPin(user.id, 'old', '1234', '127.0.0.1'),
+    ).resolves.toEqual({ ok: true, hasSafeActionPin: true });
+    expect(safeActionPin.changePin).toHaveBeenCalledWith(
+      user.id,
+      'old',
+      '1234',
+    );
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.safe_action_pin_change',
+        ip: '127.0.0.1',
+        result: 'success',
+      }),
+    );
+  });
+
+  it('audits safe action pin change with null displayName', async () => {
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      displayName: null,
+    });
+    safeActionPin.changePin = jest.fn().mockResolvedValue(undefined);
+    await service.changeSafeActionPin(user.id, undefined, '9999');
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userDisplayName: null,
+        action: 'auth.safe_action_pin_change',
       }),
     );
   });
