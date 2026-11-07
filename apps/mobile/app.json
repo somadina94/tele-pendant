@@ -32,7 +32,8 @@
     "plugins": [
       "expo-camera",
       "expo-speech-recognition",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-haptics"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

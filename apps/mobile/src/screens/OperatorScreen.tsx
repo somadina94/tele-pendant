@@ -25,6 +25,11 @@ import { apiGet, apiPost, getApiBase } from '../api';
 import type { Cell, Layout } from '../types';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
+import {
+  hapticHoldStart,
+  hapticMotionBlocked,
+  isMotionBlockedError,
+} from '../haptics';
 import { ESTOP, matrixCellStatePalette } from '../hmi-styles';
 import { useTheme } from '../theme';
 import { Banner, Card, showErrorAlert } from '../ui';
@@ -155,6 +160,7 @@ export function OperatorScreen({ token }: { token: string }) {
       heldId.current = cell.id;
       setHoldingId(cell.id);
       releaseAfterActivate.current = null;
+      void hapticHoldStart();
     }
     activatingId.current = cell.id;
     const speed =
@@ -171,6 +177,9 @@ export function OperatorScreen({ token }: { token: string }) {
         token,
       );
     } catch (err) {
+      if (cell.isMotion && isMotionBlockedError(err)) {
+        void hapticMotionBlocked();
+      }
       showErrorAlert(
         operatorApiError(
           err,
