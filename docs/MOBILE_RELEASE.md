@@ -65,7 +65,7 @@ Keep keystore files **outside git**. Default location: `apps/mobile/signing/` as
 | `TELE_PENDANT_ANDROID_KEY_ALIAS` | Key alias |
 | `TELE_PENDANT_ANDROID_KEY_PASSWORD` | Key password |
 
-**TP-43:** `apk:release` / `aab:release` **require** these vars (handover release keystore). Client must uninstall any debug-signed Dropbox APK before installing the release build (`apksigner` / Play signing CN will differ). Lab-only escape hatch: `ALLOW_DEBUG_SIGNING=1` (never for client handover).
+**TP-43:** `apk:release` / `aab:release` **require** these vars (handover release keystore). The build scripts patch `android/app/build.gradle` so release uses `MYAPP_UPLOAD_*` (Expo prebuild defaults to the debug keystore). After build, `apksigner verify --print-certs` must **not** show `CN=Android Debug`. Client must uninstall any debug-signed Dropbox APK before installing the release build. Lab-only escape hatch: `ALLOW_DEBUG_SIGNING=1` (never for client handover).
 
 ### iOS
 

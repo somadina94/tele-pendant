@@ -7,6 +7,7 @@ import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   androidDir,
+  assertApkReleaseSigned,
   logAndroidSigningNote,
   outDir,
   patchAppJsonForBuild,
@@ -36,6 +37,7 @@ try {
   mkdirSync(outDir, { recursive: true });
   const dest = join(outDir, 'tele-pendant-release.apk');
   copyFileSync(apk, dest);
+  assertApkReleaseSigned(dest, hasReleaseKeystore);
   console.log(`\nAPK ready: ${dest}`);
   console.log(`Source: ${apk}`);
   console.log(

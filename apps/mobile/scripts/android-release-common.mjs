@@ -1,5 +1,10 @@
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadMobileEnv } from './load-env.mjs';
@@ -73,6 +78,73 @@ export function signingGradleArgs() {
   return { signingProps, hasReleaseKeystore };
 }
 
+/**
+ * Expo prebuild leaves release signed with the debug keystore. Wire the
+ * standard MYAPP_UPLOAD_* Gradle properties (passed via -P) so release APKs
+ * use the handover keystore (TP-43).
+ */
+export function ensureAndroidReleaseSigningGradle(
+  useReleaseKeystore = true,
+) {
+  const gradlePath = join(androidDir, 'app/build.gradle');
+  if (!existsSync(gradlePath)) {
+    throw new Error(`Missing ${gradlePath}. Run expo prebuild first.`);
+  }
+  let source = readFileSync(gradlePath, 'utf8');
+
+  if (!source.includes('MYAPP_UPLOAD_STORE_FILE')) {
+    const marker =
+      "            keyPassword 'android'\n        }\n    }\n    buildTypes {";
+    if (!source.includes(marker)) {
+      throw new Error(
+        `Could not locate signingConfigs.debug in ${gradlePath} to add release signing (TP-43).`,
+      );
+    }
+    source = source.replace(
+      marker,
+      `            keyPassword 'android'
+        }
+        release {
+            if (project.hasProperty('MYAPP_UPLOAD_STORE_FILE')) {
+                storeFile file(MYAPP_UPLOAD_STORE_FILE)
+                storePassword MYAPP_UPLOAD_STORE_PASSWORD
+                keyAlias MYAPP_UPLOAD_KEY_ALIAS
+                keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+            }
+        }
+    }
+    buildTypes {`,
+    );
+  }
+
+  if (useReleaseKeystore) {
+    // Anchor on the Expo/RN release caution comment so we never touch debug.
+    const releaseBuildTypeSigning =
+      /(\/\/ Caution! In production, you need to generate your own keystore file\.\n\s*\/\/ see https:\/\/reactnative\.dev\/docs\/signed-apk-android\.\n\s*)signingConfig signingConfigs\.debug/;
+    if (releaseBuildTypeSigning.test(source)) {
+      source = source.replace(
+        releaseBuildTypeSigning,
+        '$1signingConfig signingConfigs.release',
+      );
+    } else if (
+      !source.includes(
+        '// see https://reactnative.dev/docs/signed-apk-android.\n            signingConfig signingConfigs.release',
+      )
+    ) {
+      throw new Error(
+        `Could not set release signingConfig in ${gradlePath} (TP-43).`,
+      );
+    }
+  }
+
+  writeFileSync(gradlePath, source);
+  console.log(
+    useReleaseKeystore
+      ? 'Patched android/app/build.gradle for MYAPP_UPLOAD_* release signing (TP-43).'
+      : 'Left release buildType on debug signing (ALLOW_DEBUG_SIGNING=1).',
+  );
+}
+
 export function patchAppJsonForBuild() {
   const otaBase = (process.env.OTA_PUBLIC_URL ?? defaultOta).replace(/\/$/, '');
   const updatesUrl = `${otaBase}/ota/manifest`;
@@ -140,6 +212,8 @@ export function prepareAndroidNativeProject() {
     throw new Error(`Missing ${gradlew}. expo prebuild did not create android/.`);
   }
   run('chmod +x gradlew', { cwd: androidDir });
+  const { hasReleaseKeystore } = signingGradleArgs();
+  ensureAndroidReleaseSigningGradle(hasReleaseKeystore);
 
   run(
     'npx expo export:embed --platform android --entry-file index.js --bundle-output /tmp/tele-pendant-release.bundle --assets-dest /tmp/tele-pendant-release-assets --dev false --minify true',
@@ -171,4 +245,47 @@ export function logAndroidSigningNote(hasReleaseKeystore) {
       ? 'Signed with TELE_PENDANT_ANDROID_KEYSTORE (handover release keystore).'
       : 'Signed with debug keystore; set TELE_PENDANT_ANDROID_* for release signing (docs/MOBILE_RELEASE.md).',
   );
+}
+
+/** Fail the build if a supposed release APK is still debug-signed (TP-43). */
+export function assertApkReleaseSigned(apkPath, requireRelease) {
+  if (!requireRelease) return;
+  const sdk = resolveAndroidSdk();
+  if (!sdk) {
+    console.warn('ANDROID_HOME missing; skipped apksigner verify.');
+    return;
+  }
+  const buildTools = join(sdk, 'build-tools');
+  if (!existsSync(buildTools)) {
+    console.warn('Android build-tools missing; skipped apksigner verify.');
+    return;
+  }
+  const versions = readdirSync(buildTools)
+    .filter((name) => /^\d/.test(name))
+    .sort()
+    .reverse();
+  const apksigner = versions
+    .map((version) => join(buildTools, version, 'apksigner'))
+    .find((path) => existsSync(path));
+  if (!apksigner) {
+    console.warn('apksigner not found; skipped cert verify.');
+    return;
+  }
+  let report = '';
+  try {
+    report = execSync(`"${apksigner}" verify --print-certs "${apkPath}"`, {
+      encoding: 'utf8',
+      env: process.env,
+    });
+  } catch (error) {
+    throw new Error(
+      `apksigner verify failed for ${apkPath}: ${error?.message ?? error}`,
+    );
+  }
+  console.log(report.trim());
+  if (/CN=Android Debug/i.test(report)) {
+    throw new Error(
+      'APK is still signed with the Android Debug keystore (TP-43). android/app/build.gradle must use signingConfigs.release with MYAPP_UPLOAD_*.',
+    );
+  }
 }
