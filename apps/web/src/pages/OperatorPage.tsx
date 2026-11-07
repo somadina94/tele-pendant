@@ -500,7 +500,7 @@ export function OperatorPage() {
         data-touch-min="44"
         data-stop-dock={isEstop ? 'true' : undefined}
         className={cn(
-          'matrix-cell flex h-auto min-h-11 flex-col items-stretch justify-center gap-0 whitespace-normal',
+          'matrix-cell flex h-auto min-h-11 flex-row flex-nowrap items-center justify-between gap-2 whitespace-nowrap',
           `state-${cellState}`,
           isEstop && 'estop',
         )}
@@ -538,28 +538,28 @@ export function OperatorPage() {
         aria-description={`${MATRIX_CELL_STATE_CODE[cellState]}: ${stateLabel}`}
         title={`${MATRIX_CELL_STATE_CODE[cellState]} · ${stateLabel}`}
       >
-        <span className="matrix-cell-row">
-          <span className="matrix-cell-label">{cell.label}</span>
+        <span className="matrix-cell-label">{cell.label}</span>
+        <span className="matrix-cell-trailing">
           <span className="matrix-cell-state">
             <StateIcon className="size-2.5 shrink-0" strokeWidth={2.5} />
             {stateLabel}
           </span>
+          {(cell.feedbackRegister || cell.statusRegister) && (
+            <span className="matrix-cell-meta">
+              {cell.feedbackRegister
+                ? `F ${String(
+                    tagValueForRegister(tags, cell.feedbackRegister.name),
+                  )}`
+                : null}
+              {cell.feedbackRegister && cell.statusRegister ? ' · ' : null}
+              {cell.statusRegister
+                ? `S ${String(
+                    tagValueForRegister(tags, cell.statusRegister.name),
+                  )}`
+                : null}
+            </span>
+          )}
         </span>
-        {(cell.feedbackRegister || cell.statusRegister) && (
-          <span className="matrix-cell-meta">
-            {cell.feedbackRegister
-              ? `F ${String(
-                  tagValueForRegister(tags, cell.feedbackRegister.name),
-                )}`
-              : null}
-            {cell.feedbackRegister && cell.statusRegister ? ' · ' : null}
-            {cell.statusRegister
-              ? `S ${String(
-                  tagValueForRegister(tags, cell.statusRegister.name),
-                )}`
-              : null}
-          </span>
-        )}
       </Button>
     );
   }

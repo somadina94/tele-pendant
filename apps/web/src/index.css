@@ -254,7 +254,7 @@
   @apply text-[9px] uppercase tracking-[0.14em] text-white/40;
 }
 .matrix-grid {
-  @apply relative z-0 mx-auto grid w-full max-w-3xl gap-1.5 md:max-w-4xl md:gap-1.5;
+  @apply relative z-0 grid w-full gap-1.5 md:gap-2;
   grid-auto-rows: minmax(2.75rem, auto);
 }
 .matrix-grid > .matrix-cell,
@@ -264,7 +264,6 @@
 @media (max-width: 767px) {
   .matrix-grid {
     grid-template-columns: minmax(0, 1fr) !important;
-    max-width: none;
   }
 }
 .matrix-grid-hole {
@@ -272,10 +271,10 @@
   @apply max-md:hidden min-h-11 md:min-h-11;
 }
 .matrix-cell {
-  /* FEAT-A3: ≥44px targets; narrow + compact type so the plant graphic leads.
+  /* FEAT-A3: ≥44px targets; single horizontal label · state · meta row.
    * Layout utilities also live on the Button className so twMerge beats
    * buttonVariants (inline-flex / whitespace-nowrap / gap-2 / h-9). */
-  @apply min-h-11 w-full touch-none select-none overflow-hidden px-1.5 py-1 text-xs md:min-h-11 md:px-2 md:py-1 md:text-xs;
+  @apply min-h-11 w-full touch-none select-none overflow-hidden px-3 py-2 text-sm md:min-h-11 md:px-3.5 md:py-2.5 md:text-sm;
   /* FEAT-A1 colour tokens — always paired with .matrix-cell-state text. */
   --matrix-state-idle-bg: hsl(210 40% 96%);
   --matrix-state-idle-fg: hsl(215 25% 27%);
@@ -304,17 +303,17 @@
   --matrix-state-fault-fg: hsl(271 80% 78%);
   --matrix-state-fault-bd: hsl(271 55% 52%);
 }
-.matrix-cell-row {
-  @apply flex min-w-0 w-full items-center justify-between gap-1.5;
-}
 .matrix-cell-label {
-  @apply min-w-0 truncate text-left font-semibold leading-tight;
+  @apply min-w-0 truncate text-left font-semibold leading-none;
+}
+.matrix-cell-trailing {
+  @apply flex min-w-0 shrink-0 items-center gap-1.5;
 }
 .matrix-cell-meta {
-  @apply min-w-0 truncate text-left text-[10px] font-normal leading-tight opacity-80;
+  @apply max-w-[9rem] truncate text-right text-[10px] font-normal leading-none opacity-80;
 }
 .matrix-cell-state {
-  @apply inline-flex max-w-[45%] shrink-0 items-center gap-0.5 truncate rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide;
+  @apply inline-flex shrink-0 items-center gap-0.5 truncate rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide;
 }
 .matrix-cell.state-idle:not(.estop) {
   background-color: var(--matrix-state-idle-bg) !important;
@@ -405,14 +404,13 @@
     font-size: 0.875rem;
   }
   .matrix-grid {
-    gap: 0.35rem;
-    max-width: 48rem;
+    gap: 0.5rem;
   }
   .matrix-cell {
     min-height: 2.75rem;
-    padding-block: 0.25rem;
-    padding-inline: 0.45rem;
-    font-size: 0.75rem;
+    padding-block: 0.45rem;
+    padding-inline: 0.75rem;
+    font-size: 0.8125rem;
   }
   .matrix-grid-hole {
     min-height: 2.75rem;
