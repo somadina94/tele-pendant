@@ -1,35 +1,33 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMinSize,
   IsArray,
   IsEmail,
   IsOptional,
   IsString,
-  MinLength,
-  ValidateIf,
 } from 'class-validator';
 
 export class FaceImageDto {
   @ApiPropertyOptional({
+    deprecated: true,
     description:
-      'Single frame (legacy). Prefer frames[] for challenge liveness.',
+      'Legacy single still — rejected by the API (TP-45). Use frames[3].',
     example: 'data:image/png;base64,AAAA',
   })
-  @ValidateIf((o: FaceImageDto) => !o.frames?.length)
+  @IsOptional()
   @IsString()
-  @MinLength(32)
   imageDataUrl?: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description:
       'Challenge frames in order: center, turn-left, turn-right (3 required).',
     type: [String],
+    minItems: 3,
   })
-  @ValidateIf((o: FaceImageDto) => !o.imageDataUrl)
   @IsArray()
   @ArrayMinSize(3)
   @IsString({ each: true })
-  frames?: string[];
+  frames!: string[];
 }
 
 export class FaceLoginDto extends FaceImageDto {

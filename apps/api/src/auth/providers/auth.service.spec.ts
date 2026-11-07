@@ -5,7 +5,7 @@ import { AuthService } from './auth.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 import * as faceUtil from './face.util';
 import {
-  descriptorFromImageDataUrl,
+  descriptorFromChallengeFrames,
   openTemplate,
   sealTemplate,
   serializeDescriptor,
@@ -27,6 +27,27 @@ function faceUrl(mode: 'blob' | 'ring'): string {
     }
   }
   return `data:image/png;base64,${PNG.sync.write(png).toString('base64')}`;
+}
+
+/** Three challenge frames with enough motion for liveness (TP-45). */
+function challengeFrames(baseShift = 0): string[] {
+  function shifted(shift: number) {
+    const png = new PNG({ width: 64, height: 64 });
+    for (let y = 0; y < 64; y++) {
+      for (let x = 0; x < 64; x++) {
+        const left = 4 + baseShift + shift;
+        const right = 28 + baseShift + shift;
+        const skin = x > left && x < right && y > 16 && y < 48;
+        const i = (y * 64 + x) << 2;
+        png.data[i] = skin ? 210 : 20;
+        png.data[i + 1] = skin ? 140 : 20;
+        png.data[i + 2] = skin ? 110 : 20;
+        png.data[i + 3] = 255;
+      }
+    }
+    return `data:image/png;base64,${PNG.sync.write(png).toString('base64')}`;
+  }
+  return [shifted(0), shifted(18), shifted(36)];
 }
 
 jest.mock('bcrypt', () => ({
@@ -377,14 +398,14 @@ describe('AuthService', () => {
   });
 
   it('rejects face login for suspended accounts after a match', async () => {
-    const image = faceUrl('blob');
-    const enrolled = serializeDescriptor(descriptorFromImageDataUrl(image));
+    const frames = challengeFrames();
+    const enrolled = serializeDescriptor(descriptorFromChallengeFrames(frames));
     usersRepository.find.mockResolvedValue([
       { ...user, suspended: true, faceTemplate: enrolled },
     ]);
-    await expect(
-      service.loginWithFace({ imageDataUrl: image }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.loginWithFace({ frames })).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 
   it('rejects unknown user and wrong password', async () => {
@@ -432,30 +453,27 @@ describe('AuthService', () => {
   });
 
   it('enrolls face template', async () => {
-    const image = faceUrl('blob');
+    const frames = challengeFrames();
     usersRepository.findOneByOrFail.mockResolvedValue({ ...user });
-    const result = await service.enrollFace(
-      user.id,
-      { imageDataUrl: image },
-      '127.0.0.1',
-    );
+    const result = await service.enrollFace(user.id, { frames }, '127.0.0.1');
     expect(result.ok).toBe(true);
     expect(usersRepository.save).toHaveBeenCalled();
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'auth.face_enroll',
+        details: 'challenge_frames=3',
         result: 'success',
       }),
     );
   });
 
   it('enrolls face and audits null displayName', async () => {
-    const image = faceUrl('blob');
+    const frames = challengeFrames();
     usersRepository.findOneByOrFail.mockResolvedValue({
       ...user,
       displayName: null,
     });
-    await service.enrollFace(user.id, { imageDataUrl: image });
+    await service.enrollFace(user.id, { frames });
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({
         userDisplayName: null,
@@ -470,28 +488,28 @@ describe('AuthService', () => {
       if (k === 'appConfig.faceTemplateKey') return key;
       return defaultConfig(k);
     });
-    const image = faceUrl('blob');
+    const frames = challengeFrames();
     usersRepository.findOneByOrFail.mockResolvedValue({ ...user });
-    await service.enrollFace(user.id, { imageDataUrl: image });
+    await service.enrollFace(user.id, { frames });
     const saved = usersRepository.save.mock.calls[0][0] as {
       faceTemplate: string;
     };
     expect(saved.faceTemplate.startsWith('v1:')).toBe(true);
     expect(openTemplate(saved.faceTemplate, key).length).toBeGreaterThan(0);
 
-    const sealed = sealTemplate(descriptorFromImageDataUrl(image), key);
+    const sealed = sealTemplate(descriptorFromChallengeFrames(frames), key);
     usersRepository.find.mockResolvedValue([{ ...user, faceTemplate: sealed }]);
-    const ok = await service.loginWithFace({ imageDataUrl: image });
+    const ok = await service.loginWithFace({ frames });
     expect(ok.accessToken).toBe('token');
   });
 
   it('face login audits null displayName on success', async () => {
-    const image = faceUrl('blob');
-    const enrolled = serializeDescriptor(descriptorFromImageDataUrl(image));
+    const frames = challengeFrames();
+    const enrolled = serializeDescriptor(descriptorFromChallengeFrames(frames));
     usersRepository.find.mockResolvedValue([
       { ...user, displayName: null, faceTemplate: enrolled },
     ]);
-    await service.loginWithFace({ imageDataUrl: image });
+    await service.loginWithFace({ frames });
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({
         userDisplayName: null,
@@ -501,57 +519,45 @@ describe('AuthService', () => {
     );
   });
 
-  it('rejects empty face capture and skips unreadable sealed templates', async () => {
+  it('rejects single still imageDataUrl and empty capture (TP-45)', async () => {
     configService.get.mockImplementation((k: string) => {
       if (k === 'appConfig.faceTemplateKey') return undefined;
       return defaultConfig(k);
     });
-    await expect(service.loginWithFace({})).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(service.loginWithFace({})).rejects.toThrow(/frames\[3\]/);
+    await expect(
+      service.loginWithFace({ imageDataUrl: faceUrl('blob') }),
+    ).rejects.toThrow(/frames\[3\]|TP-45/);
+    usersRepository.findOneByOrFail.mockResolvedValue({ ...user });
+    await expect(
+      service.enrollFace(user.id, { imageDataUrl: faceUrl('blob') }),
+    ).rejects.toThrow(/frames\[3\]|TP-45/);
+
     jest
-      .spyOn(faceUtil, 'descriptorFromImageDataUrl')
+      .spyOn(faceUtil, 'descriptorFromChallengeFrames')
       .mockImplementationOnce(() => {
         // Cover non-Error reject path in descriptorFromCapture.
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- intentional
         throw 'raw-reject';
       });
     await expect(
-      service.loginWithFace({ imageDataUrl: faceUrl('blob') }),
+      service.loginWithFace({ frames: challengeFrames() }),
     ).rejects.toMatchObject({
       response: expect.objectContaining({ message: 'Face capture rejected' }),
     });
 
-    const image = faceUrl('blob');
+    const frames = challengeFrames();
     usersRepository.find.mockResolvedValue([
       { ...user, faceTemplate: 'v1:bad:sealed:template' },
     ]);
-    await expect(
-      service.loginWithFace({ imageDataUrl: image }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.loginWithFace({ frames })).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 
   it('enrolls with challenge frame details when motion is present', async () => {
-    function shiftedFace(shift: number) {
-      const png = new PNG({ width: 64, height: 64 });
-      for (let y = 0; y < 64; y++) {
-        for (let x = 0; x < 64; x++) {
-          const left = 4 + shift;
-          const right = 28 + shift;
-          const skin = x > left && x < right && y > 16 && y < 48;
-          const i = (y * 64 + x) << 2;
-          png.data[i] = skin ? 210 : 20;
-          png.data[i + 1] = skin ? 140 : 20;
-          png.data[i + 2] = skin ? 110 : 20;
-          png.data[i + 3] = 255;
-        }
-      }
-      return `data:image/png;base64,${PNG.sync.write(png).toString('base64')}`;
-    }
     usersRepository.findOneByOrFail.mockResolvedValue({ ...user });
-    await service.enrollFace(user.id, {
-      frames: [shiftedFace(0), shiftedFace(18), shiftedFace(36)],
-    });
+    await service.enrollFace(user.id, { frames: challengeFrames() });
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'auth.face_enroll',
@@ -575,11 +581,11 @@ describe('AuthService', () => {
   });
 
   it('face login picks best match across candidates', async () => {
-    const image = faceUrl('blob');
-    const weak = faceUrl('ring');
+    const frames = challengeFrames();
+    const weakFrames = challengeFrames(20);
     const enrolled = {
       ...user,
-      faceTemplate: serializeDescriptor(descriptorFromImageDataUrl(image)),
+      faceTemplate: serializeDescriptor(descriptorFromChallengeFrames(frames)),
     };
     const twin = {
       ...user,
@@ -591,7 +597,9 @@ describe('AuthService', () => {
       ...user,
       id: 'u2',
       email: 'other@example.com',
-      faceTemplate: serializeDescriptor(descriptorFromImageDataUrl(weak)),
+      faceTemplate: serializeDescriptor(
+        descriptorFromChallengeFrames(weakFrames),
+      ),
     };
     usersRepository.find.mockResolvedValue([
       { ...user, faceTemplate: null },
@@ -600,24 +608,22 @@ describe('AuthService', () => {
       twin, // equal score → ! (score > best.score)
     ]);
 
-    const ok = await service.loginWithFace({ imageDataUrl: image });
+    const ok = await service.loginWithFace({ frames });
     expect(ok.accessToken).toBe('token');
     expect(ok.user.email).toBe(user.email);
     expect(ok.matchScore).toBeGreaterThan(0.9);
   });
 
   it('face login fails closed and audits non-Error', async () => {
-    const image = faceUrl('blob');
+    const frames = challengeFrames();
     usersRepository.find.mockResolvedValue([{ ...user, faceTemplate: null }]);
     await expect(
-      service.loginWithFace({ imageDataUrl: image }, user.email),
+      service.loginWithFace({ frames }, user.email),
     ).rejects.toBeInstanceOf(UnauthorizedException);
 
     const rejectValue = { code: 'face-boom' };
     usersRepository.find.mockRejectedValue(rejectValue);
-    await expect(service.loginWithFace({ imageDataUrl: image })).rejects.toBe(
-      rejectValue,
-    );
+    await expect(service.loginWithFace({ frames })).rejects.toBe(rejectValue);
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'auth.face_login',

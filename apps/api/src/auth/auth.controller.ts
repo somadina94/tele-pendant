@@ -163,7 +163,7 @@ export class AuthController {
   }
 
   /**
-   * Enroll local face template (challenge frames preferred). Not ISO-certified.
+   * Enroll local face template (challenge frames required — TP-45). Not ISO-certified.
    */
   @Post('face/enroll')
   @UseGuards(JwtAuthGuard)
@@ -172,7 +172,7 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
     summary:
-      'Enroll face template (local challenge liveness; not ISO-certified)',
+      'Enroll face template (requires frames[3] challenge; not ISO-certified)',
   })
   enrollFace(
     @Body() dto: FaceImageDto,
@@ -180,7 +180,7 @@ export class AuthController {
   ) {
     return this.authService.enrollFace(
       req.user.sub,
-      { imageDataUrl: dto.imageDataUrl, frames: dto.frames },
+      { frames: dto.frames },
       req.ip,
     );
   }
@@ -193,7 +193,7 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
     summary:
-      'Face login with optional challenge frames (prefer password if unsure)',
+      'Face login with frames[3] challenge liveness (prefer password if unsure)',
   })
   async faceLogin(
     @Body() dto: FaceLoginDto,
@@ -201,7 +201,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.loginWithFace(
-      { imageDataUrl: dto.imageDataUrl, frames: dto.frames },
+      { frames: dto.frames },
       dto.email,
       req.ip,
     );

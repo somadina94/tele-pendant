@@ -18,7 +18,6 @@ import { SafeActionPinService } from '../../users/providers/safe-action-pin.serv
 import { LoginDto } from '../dtos/login.dto';
 import {
   descriptorFromChallengeFrames,
-  descriptorFromImageDataUrl,
   FACE_MATCH_THRESHOLD,
   matchScore,
   openTemplate,
@@ -287,7 +286,7 @@ export class AuthService implements OnModuleInit {
   }
 
   /**
-   * Enroll local face template (challenge frames preferred). Not ISO-certified.
+   * Enroll local face template (challenge frames required — TP-45). Not ISO-certified.
    * Never used for e-stop / safe-action authorization.
    */
   async enrollFace(userId: string, input: FaceCaptureInput, ip?: string) {
@@ -303,9 +302,7 @@ export class AuthService implements OnModuleInit {
       userEmail: user.email,
       userDisplayName: user.displayName ?? null,
       action: 'auth.face_enroll',
-      details: input.frames?.length
-        ? `challenge_frames=${input.frames.length}`
-        : 'single_frame',
+      details: `challenge_frames=${input.frames!.length}`,
       ip,
       result: 'success',
     });
@@ -363,7 +360,7 @@ export class AuthService implements OnModuleInit {
         userEmail: best.user.email,
         userDisplayName: best.user.displayName ?? null,
         action: 'auth.face_login',
-        details: `score=${best.score.toFixed(3)};challenge=${Boolean(input.frames?.length)}`,
+        details: `score=${best.score.toFixed(3)};challenge_frames=${input.frames!.length}`,
         ip,
         result: 'success',
       });
@@ -413,16 +410,14 @@ export class AuthService implements OnModuleInit {
     return this.configService.get<string>('appConfig.faceTemplateKey') ?? '';
   }
 
+  /** TP-45: challenge frames only — single still imageDataUrl is rejected. */
   private descriptorFromCapture(input: FaceCaptureInput): number[] {
     try {
       if (input.frames && input.frames.length >= 3) {
         return descriptorFromChallengeFrames(input.frames);
       }
-      if (input.imageDataUrl) {
-        return descriptorFromImageDataUrl(input.imageDataUrl);
-      }
       throw new BadRequestException(
-        'Provide frames[3] for challenge liveness (or imageDataUrl)',
+        'Challenge frames required: provide frames[3] (center, turn-left, turn-right). Single imageDataUrl is not accepted (TP-45).',
       );
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
