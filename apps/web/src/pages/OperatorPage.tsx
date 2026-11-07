@@ -420,6 +420,20 @@ export function OperatorPage() {
   const imageUrl = layout?.background?.imageUrl ?? '';
   const cssBackground = layout?.background?.cssBackground?.trim() || '';
   const mode = safety?.mode ?? layout?.safety.mode ?? 'unknown';
+  const screens = layout?.backgrounds ?? [];
+  const useCustomGraphic = Boolean(imageUrl && photoOk);
+
+  async function switchScreen(id: string) {
+    if (layout?.background?.id === id) return;
+    try {
+      await apiPost(`/hmi/backgrounds/${id}/activate`);
+      await queryClient.invalidateQueries({ queryKey: ['hmi-layout'] });
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : 'Could not switch screen',
+      );
+    }
+  }
 
   useEffect(() => {
     if (!needsLive || tags) {
@@ -621,13 +635,35 @@ export function OperatorPage() {
         ) : null}
 
         <div className="operator-hmi-split">
+          {screens.length > 1 ? (
+            <div
+              className="flex flex-wrap gap-1.5"
+              role="tablist"
+              aria-label="Plant screens"
+            >
+              {screens.map((screen) => (
+                <Button
+                  key={screen.id}
+                  type="button"
+                  size="sm"
+                  variant={screen.active ? 'default' : 'outline'}
+                  className="h-8"
+                  aria-selected={screen.active}
+                  onClick={() => void switchScreen(screen.id)}
+                >
+                  {screen.name}
+                </Button>
+              ))}
+            </div>
+          ) : null}
           <HelpTip id="tour.operator.graphic">
             <div
               className="plant-graphic"
               data-feat="hmi-graphic"
+              data-graphic-mode={useCustomGraphic ? 'asset' : 'mimic'}
               style={cssBackground ? { background: cssBackground } : undefined}
             >
-              {imageUrl && photoOk ? (
+              {useCustomGraphic ? (
                 <img
                   alt="Plant background"
                   src={imageUrl}
@@ -658,9 +694,11 @@ export function OperatorPage() {
                   {mode}
                 </div>
               </div>
-              <div className="plant-mimic-stage" aria-hidden={false}>
-                <CraneMimic tags={tags} safety={safety ?? layout.safety} />
-              </div>
+              {!useCustomGraphic ? (
+                <div className="plant-mimic-stage" aria-hidden={false}>
+                  <CraneMimic tags={tags} safety={safety ?? layout.safety} />
+                </div>
+              ) : null}
               <div className="plant-overlay-stage">
                 {(layout.overlays ?? [])
                   .filter((o) => !isClusterMetricRegister(o.register?.name))

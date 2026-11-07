@@ -178,6 +178,12 @@
   @apply absolute inset-0 z-0 h-full w-full object-cover opacity-35;
   filter: grayscale(0.45) contrast(1.05) brightness(0.7);
 }
+/* FEAT-HMI phase 2: uploaded SVG/PNG is the graphic (mimic hidden). */
+.plant-graphic[data-graphic-mode='asset'] img {
+  @apply opacity-100;
+  object-fit: contain;
+  filter: none;
+}
 .plant-cluster-chrome {
   @apply absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-3.5 pb-2 pt-3 md:px-5 md:pt-3.5;
 }

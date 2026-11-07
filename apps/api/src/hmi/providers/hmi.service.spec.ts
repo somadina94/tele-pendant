@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { tmpdir } from 'node:os';
 import { HmiService } from './hmi.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 
@@ -39,8 +40,13 @@ describe('HmiService', () => {
     ),
   };
   const backgrounds = {
+    find: jest
+      .fn()
+      .mockResolvedValue([{ id: 'bg1', name: 'demo-crane', active: true }]),
     findOne: jest.fn().mockResolvedValue({ id: 'bg1', active: true }),
-    save: jest.fn(async (row: { id: string }) => row),
+    findOneBy: jest.fn(),
+    create: jest.fn((row: Record<string, unknown>) => ({ ...row })),
+    save: jest.fn(async (row: { id: string } | Array<{ id: string }>) => row),
   };
   const overlays = {
     find: jest.fn().mockResolvedValue([{ id: 'o1', text: 'H' }]),
@@ -86,7 +92,11 @@ describe('HmiService', () => {
     cells.find.mockResolvedValue([motionCell]);
     cells.findOne.mockResolvedValue(motionCell);
     registers.findOneBy.mockResolvedValue(null);
+    backgrounds.find.mockResolvedValue([
+      { id: 'bg1', name: 'demo-crane', active: true },
+    ]);
     backgrounds.findOne.mockResolvedValue({ id: 'bg1', active: true });
+    backgrounds.findOneBy.mockResolvedValue(null);
     safetyState.canIssueMotion.mockReturnValue(false);
     safetyState.getRoles.mockResolvedValue({
       eStopRegisterId: 'estop-id',
@@ -120,6 +130,9 @@ describe('HmiService', () => {
     const layout = await service.getLayout();
     expect(layout.matrix).toEqual({ rows: 1, cols: 1 });
     expect(layout.overlays).toHaveLength(1);
+    expect(layout.backgrounds).toEqual([
+      { id: 'bg1', name: 'demo-crane', active: true },
+    ]);
     expect(layout.safety.mode).toBe('normal');
     expect(await service.listRegisters()).toHaveLength(1);
   });
@@ -696,5 +709,87 @@ describe('HmiService', () => {
     await expect(
       service.updateBackground({ name: '   ' }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('creates, lists, and activates plant screens', async () => {
+    backgrounds.findOne.mockResolvedValueOnce(null);
+    backgrounds.create.mockReturnValue({
+      name: 'yard',
+      active: false,
+    });
+    backgrounds.save.mockImplementation(async (row: { id?: string }) => ({
+      id: row.id ?? 'bg2',
+      ...row,
+    }));
+    const created = await service.createBackground({ name: ' yard ' });
+    expect(created.name).toBe('yard');
+    expect(created.active).toBe(false);
+
+    backgrounds.findOne.mockResolvedValueOnce({ id: 'bg1', name: 'demo' });
+    await expect(
+      service.createBackground({ name: 'demo' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.createBackground({ name: '  ' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    backgrounds.findOneBy.mockResolvedValueOnce(null);
+    await expect(service.activateBackground('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    const other = { id: 'bg2', name: 'yard', active: false };
+    const current = { id: 'bg1', name: 'demo-crane', active: true };
+    backgrounds.findOneBy.mockResolvedValueOnce(other);
+    backgrounds.find.mockResolvedValueOnce([current, other]);
+    const activated = await service.activateBackground('bg2');
+    expect(activated.active).toBe(true);
+    expect(backgrounds.save).toHaveBeenCalled();
+  });
+
+  it('uploads a plant graphic asset onto the active screen', async () => {
+    const prevDir = process.env.SQLITE_DIR;
+    process.env.SQLITE_DIR = tmpdir();
+    backgrounds.findOne.mockResolvedValue({
+      id: 'bg1',
+      name: 'demo-crane',
+      active: true,
+      imageUrl: null,
+    });
+    backgrounds.save.mockImplementation(
+      async (row: { imageUrl?: string }) => row,
+    );
+
+    await expect(
+      service.uploadBackgroundAsset(undefined),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.uploadBackgroundAsset({
+        buffer: Buffer.alloc(0),
+        mimetype: 'image/png',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.uploadBackgroundAsset({
+        buffer: Buffer.from('x'),
+        mimetype: 'application/pdf',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.uploadBackgroundAsset({
+        buffer: Buffer.alloc(2_000_001),
+        mimetype: 'image/png',
+        size: 2_000_001,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const saved = await service.uploadBackgroundAsset({
+      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+      mimetype: 'image/svg+xml',
+    });
+    expect(saved.imageUrl).toMatch(/^\/hmi-assets\/.+\.svg$/);
+
+    if (prevDir === undefined) delete process.env.SQLITE_DIR;
+    else process.env.SQLITE_DIR = prevDir;
   });
 });

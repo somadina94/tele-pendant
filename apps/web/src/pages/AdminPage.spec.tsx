@@ -1093,4 +1093,69 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit Lonely' }));
     expect(screen.getByLabelText('alarm name')).toHaveValue('Lonely');
   });
+
+  it('manages plant screens and uploads a graphic asset', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') return [];
+      return {
+        ...layout,
+        background: {
+          id: 'bg1',
+          name: 'demo-crane',
+          cssBackground: '',
+          imageUrl: '',
+        },
+        backgrounds: [
+          { id: 'bg1', name: 'demo-crane', active: true },
+          { id: 'bg2', name: 'yard', active: false },
+        ],
+      };
+    });
+    const post = vi.spyOn(api, 'apiPost').mockResolvedValue({});
+    const upload = vi.spyOn(api, 'apiUpload').mockResolvedValue({
+      imageUrl: '/hmi-assets/plant.svg',
+    });
+    await goConfigSection('Background');
+    expect(screen.getByText('demo-crane')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+    await screen.findByText('Active screen updated.');
+    expect(post).toHaveBeenCalledWith('/hmi/backgrounds/bg2/activate');
+
+    fireEvent.change(screen.getByLabelText('new screen name'), {
+      target: { value: 'dock' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add screen' }));
+    await screen.findByText('Screen created.');
+    expect(post).toHaveBeenCalledWith('/hmi/backgrounds', { name: 'dock' });
+
+    const file = new File(['<svg/>'], 'plant.svg', { type: 'image/svg+xml' });
+    fireEvent.change(screen.getByLabelText('background upload'), {
+      target: { files: [file] },
+    });
+    await screen.findByText('Uploaded plant graphic.');
+    expect(upload).toHaveBeenCalledWith('/hmi/background/asset', file);
+
+    upload.mockRejectedValueOnce(new Error('too big'));
+    fireEvent.change(screen.getByLabelText('background upload'), {
+      target: { files: [file] },
+    });
+    await screen.findByText('too big');
+
+    post.mockRejectedValueOnce(new Error('dup'));
+    fireEvent.change(screen.getByLabelText('new screen name'), {
+      target: { value: 'yard' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add screen' }));
+    await screen.findByText('dup');
+
+    post.mockRejectedValueOnce(new Error('busy'));
+    fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+    await screen.findByText('busy');
+
+    fireEvent.change(screen.getByLabelText('background upload'), {
+      target: { files: [] },
+    });
+    expect(upload).toHaveBeenCalledTimes(2);
+  });
 });

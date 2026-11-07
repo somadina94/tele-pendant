@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { corsOriginDelegate } from './common/cors-origins';
+import { serveHmiAssets } from './hmi/hmi-assets';
 import {
   clientExpectsExpoSignature,
   loadOtaPrivateKeyPem,
@@ -105,6 +106,7 @@ export function appCreate(app: INestApplication): void {
   );
   app.use(cookieParser());
   app.use(serveOta);
+  app.use(serveHmiAssets);
   app.setGlobalPrefix('api/v1');
 
   app.useGlobalPipes(

@@ -303,8 +303,36 @@ export function ConfigScreen({ token }: { token: string }) {
               {t('background')}
             </Text>
           </HelpTip>
+          <Text className="mt-1 text-xs text-muted-foreground">
+            Upload graphics on web Config. Here: switch screens and edit the
+            active name / CSS / image URL. Empty image URL keeps the crane
+            mimic.
+          </Text>
+          <BackgroundScreens
+            screens={layout?.backgrounds ?? []}
+            note={notes['background-screens']}
+            onActivate={async (id) => {
+              try {
+                await apiPost(`/hmi/backgrounds/${id}/activate`, {}, token);
+                await refreshLayout();
+                remember('background-screens', 'Active screen updated.');
+              } catch (err) {
+                showErrorFrom(err, 'Activate failed');
+              }
+            }}
+            onCreate={async (name) => {
+              try {
+                await apiPost('/hmi/backgrounds', { name }, token);
+                await refreshLayout();
+                remember('background-screens', 'Screen created.');
+              } catch (err) {
+                showErrorFrom(err, 'Create failed');
+              }
+            }}
+          />
           {layout?.background ? (
             <BackgroundForm
+              key={layout.background.id}
               name={layout.background.name}
               cssBackground={layout.background.cssBackground ?? ''}
               imageUrl={layout.background.imageUrl ?? ''}
@@ -728,6 +756,63 @@ function OverlayForm({
   );
 }
 
+function BackgroundScreens({
+  screens,
+  note,
+  onActivate,
+  onCreate,
+}: {
+  screens: Array<{ id: string; name: string; active: boolean }>;
+  note?: string;
+  onActivate: (id: string) => Promise<void>;
+  onCreate: (name: string) => Promise<void>;
+}) {
+  const [newName, setNewName] = useState('');
+  return (
+    <View className="mt-3 gap-2">
+      <Text className="text-sm font-semibold text-foreground">
+        Plant screens
+      </Text>
+      {screens.map((screen) => (
+        <View
+          key={screen.id}
+          className="flex-row items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+        >
+          <Text className="flex-1 text-sm text-foreground">
+            {screen.name}
+            {screen.active ? ' · Active' : ''}
+          </Text>
+          {!screen.active ? (
+            <Pressable
+              className="min-h-[44px] justify-center rounded-md border border-border px-3"
+              onPress={() => void onActivate(screen.id)}
+            >
+              <Text className="text-sm text-foreground">Activate</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ))}
+      <Field
+        label="New screen name"
+        value={newName}
+        onChangeText={setNewName}
+      />
+      <Pressable
+        className="min-h-[44px] flex-row items-center justify-center rounded-lg bg-secondary px-4 py-3 active:opacity-80"
+        disabled={!newName.trim()}
+        onPress={() => {
+          const name = newName.trim();
+          if (!name) return;
+          void onCreate(name).then(() => setNewName(''));
+        }}
+      >
+        <Text className="font-bold text-secondary-foreground">Add screen</Text>
+      </Pressable>
+      {note ? <Text className="my-1 text-success">{note}</Text> : null}
+    </View>
+  );
+}
+
 function BackgroundForm({
   name: initialName,
   cssBackground: initialCss,
@@ -748,6 +833,11 @@ function BackgroundForm({
   const [name, setName] = useState(initialName);
   const [cssBackground, setCss] = useState(initialCss);
   const [imageUrl, setImage] = useState(initialImage);
+  useEffect(() => {
+    setName(initialName);
+    setCss(initialCss);
+    setImage(initialImage);
+  }, [initialName, initialCss, initialImage]);
   return (
     <>
       <Field label="Name" value={name} onChangeText={setName} />

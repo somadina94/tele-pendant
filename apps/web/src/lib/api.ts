@@ -84,6 +84,20 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return apiSend<T>('DELETE', path);
 }
 
+/** Multipart upload (do not set Content-Type — browser sets boundary). */
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  const body = new FormData();
+  body.append('file', file);
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: authHeaders(false),
+    body,
+  });
+  if (!res.ok) await handleFailedResponse(res, path);
+  const json = (await res.json()) as ApiEnvelope<T>;
+  return json.data;
+}
+
 async function apiSend<T>(
   method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
@@ -146,6 +160,12 @@ export interface OverlayDto {
   register?: RegisterRef | null;
 }
 
+export interface HmiBackgroundSummary {
+  id: string;
+  name: string;
+  active: boolean;
+}
+
 export interface HmiLayout {
   matrix: { rows: number; cols: number };
   cells: CellDto[];
@@ -155,6 +175,8 @@ export interface HmiLayout {
     cssBackground?: string | null;
     imageUrl?: string | null;
   } | null;
+  /** FEAT-HMI phase 2: plant screens for Operator switcher. */
+  backgrounds?: HmiBackgroundSummary[];
   overlays: OverlayDto[];
   registers: RegisterRef[];
   safety: {

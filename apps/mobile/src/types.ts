@@ -39,6 +39,12 @@ export type Background = {
   imageUrl?: string | null;
 };
 
+export type BackgroundSummary = {
+  id: string;
+  name: string;
+  active: boolean;
+};
+
 /** FEAT-A5 exclusive Operator control lease. */
 export type ControlLease = {
   held: boolean;
@@ -52,6 +58,8 @@ export type Layout = {
   matrix: { rows: number; cols: number };
   cells: Cell[];
   background: Background | null;
+  /** FEAT-HMI phase 2: plant screens for Operator switcher. */
+  backgrounds?: BackgroundSummary[];
   overlays: Overlay[];
   registers: RegisterRef[];
   safety: {

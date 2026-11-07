@@ -6,6 +6,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Repository } from 'typeorm';
 import { AuditService } from '../../audit/providers/audit.service';
 import { BackgroundDisplay } from '../../backgrounds/entities/background-display.entity';
@@ -17,6 +20,11 @@ import { SafetyStateService } from '../../safety/providers/safety-state.service'
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
 import { SafeActionPinService } from '../../users/providers/safe-action-pin.service';
 import { UserRole } from '../../users/enums/user-role.enum';
+import {
+  HMI_ASSET_MIME,
+  hmiAssetPublicPath,
+  hmiAssetsDirectory,
+} from '../hmi-assets';
 
 type Actor = AuditActor;
 
@@ -74,6 +82,7 @@ export class HmiService {
         })
       : [];
     const registers = await this.registers.find({ order: { name: 'ASC' } });
+    const backgrounds = await this.listBackgrounds();
     return {
       matrix: {
         rows: cells.reduce((m, c) => Math.max(m, c.row + 1), 0),
@@ -81,10 +90,115 @@ export class HmiService {
       },
       cells,
       background,
+      backgrounds,
       overlays,
       registers,
       safety: this.safetyState.snapshot(),
     };
+  }
+
+  async listBackgrounds(): Promise<
+    Array<Pick<BackgroundDisplay, 'id' | 'name' | 'active'>>
+  > {
+    const rows = await this.backgrounds.find({
+      order: { name: 'ASC' },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      active: row.active,
+    }));
+  }
+
+  async createBackground(
+    input: {
+      name: string;
+      cssBackground?: string | null;
+      imageUrl?: string | null;
+    },
+    actor?: Actor,
+  ): Promise<BackgroundDisplay> {
+    const name = input.name.trim();
+    if (!name) throw new BadRequestException('Background name is required');
+    const existing = await this.backgrounds.findOne({ where: { name } });
+    if (existing) {
+      throw new BadRequestException('Background name already exists');
+    }
+    const row = this.backgrounds.create({
+      name,
+      cssBackground: input.cssBackground?.trim() || null,
+      imageUrl: input.imageUrl?.trim() || null,
+      active: false,
+    });
+    const saved = await this.backgrounds.save(row);
+    await this.auditService.write({
+      ...this.actorFields(actor),
+      action: 'background.create',
+      resource: saved.id,
+      details: saved.name,
+      result: 'success',
+    });
+    return saved;
+  }
+
+  async activateBackground(
+    id: string,
+    actor?: Actor,
+  ): Promise<BackgroundDisplay> {
+    const row = await this.backgrounds.findOneBy({ id });
+    if (!row) throw new NotFoundException('Background not found');
+    const all = await this.backgrounds.find();
+    for (const bg of all) {
+      bg.active = bg.id === id;
+    }
+    await this.backgrounds.save(all);
+    row.active = true;
+    await this.auditService.write({
+      ...this.actorFields(actor),
+      action: 'background.activate',
+      resource: row.id,
+      details: row.name,
+      result: 'success',
+    });
+    return row;
+  }
+
+  async uploadBackgroundAsset(
+    file:
+      | {
+          buffer: Buffer;
+          mimetype: string;
+          originalname?: string;
+          size?: number;
+        }
+      | undefined,
+    actor?: Actor,
+  ): Promise<BackgroundDisplay> {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Plant graphic file is required');
+    }
+    if ((file.size ?? file.buffer.length) > 2_000_000) {
+      throw new BadRequestException('Plant graphic must be 2 MB or smaller');
+    }
+    const ext = HMI_ASSET_MIME[file.mimetype];
+    if (!ext) {
+      throw new BadRequestException(
+        'Unsupported file type — use SVG, PNG, JPEG, WebP, or GIF',
+      );
+    }
+    const filename = `${randomUUID()}.${ext}`;
+    writeFileSync(join(hmiAssetsDirectory(), filename), file.buffer);
+    const row = await this.activeBackground();
+    row.imageUrl = hmiAssetPublicPath(filename);
+    const saved = await this.backgrounds.save(row);
+    await this.auditService.write({
+      ...this.actorFields(actor),
+      action: 'background.asset_upload',
+      resource: saved.id,
+      details: `${saved.name} → ${saved.imageUrl}`,
+      result: 'success',
+    });
+    return saved;
   }
 
   async listRegisters() {

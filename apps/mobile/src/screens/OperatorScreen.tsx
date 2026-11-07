@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import {
+  formatOverlay,
+  isClusterMetricRegister,
   isOperatorScreenReady,
   MATRIX_CELL_STATE_CODE,
   MATRIX_CELL_STATE_I18N,
@@ -56,6 +58,15 @@ function statusTone(mode: string): 'ok' | 'warn' | 'danger' {
   }
   if (mode !== 'normal' && mode !== 'unknown') return 'warn';
   return 'ok';
+}
+
+/** Resolve /hmi-assets/… paths against the API origin for React Native. */
+function resolvePlantImageUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const origin = getApiBase().replace(/\/api\/v1\/?$/, '');
+  return `${origin}${trimmed.startsWith('/') ? trimmed : `/${trimmed}`}`;
 }
 
 export function OperatorScreen({ token }: { token: string }) {
@@ -388,7 +399,8 @@ export function OperatorScreen({ token }: { token: string }) {
   const youHold = Boolean(control?.youHold);
   const controlHeldByOther = Boolean(control?.held && !youHold);
 
-  const imageUrl = layoutQuery.data?.background?.imageUrl ?? '';
+  const rawImageUrl = layoutQuery.data?.background?.imageUrl ?? '';
+  const imageUrl = resolvePlantImageUrl(rawImageUrl);
   const cssBackground =
     layoutQuery.data?.background?.cssBackground?.trim() || '';
   // RN View only accepts solid colors (not CSS gradients).
@@ -396,9 +408,23 @@ export function OperatorScreen({ token }: { token: string }) {
     cssBackground && !/[()]/.test(cssBackground) ? cssBackground : '';
   const safetyMode = safety.mode;
   const tone = statusTone(safetyMode);
+  const screens = layoutQuery.data?.backgrounds ?? [];
+  const useCustomGraphic = Boolean(imageUrl && photoOk);
   useEffect(() => {
     setPhotoOk(true);
   }, [imageUrl]);
+
+  async function switchScreen(id: string) {
+    if (layoutQuery.data?.background?.id === id) return;
+    try {
+      await apiPost(`/hmi/backgrounds/${id}/activate`, {}, token);
+      await layoutQuery.refetch();
+    } catch (err) {
+      showErrorAlert(
+        err instanceof Error ? err.message : 'Could not switch screen',
+      );
+    }
+  }
 
   const grid = useMemo(() => {
     const layout = layoutQuery.data;
@@ -603,25 +629,53 @@ export function OperatorScreen({ token }: { token: string }) {
             {t('stealControlHint')}
           </Text>
         ) : null}
+        {screens.length > 1 ? (
+          <View className="flex-row flex-wrap gap-2">
+            {screens.map((screen) => (
+              <Pressable
+                key={screen.id}
+                accessibilityRole="button"
+                className={`min-h-[44px] rounded-md border px-3 py-2 ${
+                  screen.active
+                    ? 'border-primary bg-primary'
+                    : 'border-border bg-card'
+                }`}
+                onPress={() => void switchScreen(screen.id)}
+              >
+                <Text
+                  className={`text-sm ${
+                    screen.active
+                      ? 'text-primary-foreground'
+                      : 'text-foreground'
+                  }`}
+                >
+                  {screen.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
         <HelpTip id="tour.operator.graphic">
           <View
             className="relative h-[200px] overflow-hidden rounded-xl border border-white/10"
             style={{ backgroundColor: solidBackground || '#07090c' }}
           >
-            {imageUrl && photoOk ? (
+            {useCustomGraphic ? (
               <Image
                 source={{ uri: imageUrl }}
                 className="absolute inset-0 h-full w-full"
-                style={{ opacity: 0.28 }}
+                style={{ opacity: 1, resizeMode: 'contain' }}
                 onError={() => setPhotoOk(false)}
               />
             ) : null}
-            <View
-              className="absolute inset-0"
-              style={{
-                backgroundColor: 'rgba(0,0,0,0.35)',
-              }}
-            />
+            {!useCustomGraphic ? (
+              <View
+                className="absolute inset-0"
+                style={{
+                  backgroundColor: 'rgba(0,0,0,0.35)',
+                }}
+              />
+            ) : null}
             <View className="z-10 flex-row items-center justify-between px-3.5 pb-1 pt-2.5">
               <Text
                 className="flex-1 text-[10px] font-medium uppercase text-white/70"
@@ -650,8 +704,38 @@ export function OperatorScreen({ token }: { token: string }) {
                 </Text>
               </View>
             </View>
-            <View className="absolute inset-x-0 bottom-14 top-9 z-[8] px-1">
-              <CraneMimic tags={tags} safety={safety} />
+            {!useCustomGraphic ? (
+              <View className="absolute inset-x-0 bottom-14 top-9 z-[8] px-1">
+                <CraneMimic tags={tags} safety={safety} />
+              </View>
+            ) : null}
+            <View
+              className="absolute inset-x-0 bottom-14 top-9 z-[10]"
+              pointerEvents="none"
+            >
+              {(layoutQuery.data?.overlays ?? [])
+                .filter((o) => !isClusterMetricRegister(o.register?.name))
+                .map((o) => (
+                  <View
+                    key={o.id}
+                    className="absolute min-w-[4.5rem] items-center rounded-lg border border-white/18 bg-black/70 px-2.5 py-1.5"
+                    style={{
+                      left: `${o.xPct}%`,
+                      top: `${o.yPct}%`,
+                      transform: [{ translateX: -36 }, { translateY: -18 }],
+                    }}
+                  >
+                    <Text className="text-[9px] uppercase text-white/55">
+                      {o.label}
+                    </Text>
+                    <Text className="font-mono text-sm font-semibold text-white">
+                      {formatOverlay(
+                        o.format,
+                        tagValueForRegister(tags, o.register?.name),
+                      )}
+                    </Text>
+                  </View>
+                ))}
             </View>
             <View className="absolute inset-x-0 bottom-0 z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1">
               {(

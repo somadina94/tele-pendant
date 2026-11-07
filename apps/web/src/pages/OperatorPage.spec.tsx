@@ -1184,4 +1184,68 @@ describe('OperatorPage', () => {
       await screen.findByText(/Claim exclusive control before moving/i),
     ).toBeInTheDocument();
   });
+
+  it('switches plant screens and hides mimic when a custom graphic is set', async () => {
+    mockGetWithControl({
+      ...layout,
+      background: {
+        ...layout.background,
+        id: 'bg1',
+        name: 'demo-crane',
+        imageUrl: '/hmi-assets/plant.svg',
+      },
+      backgrounds: [
+        { id: 'bg1', name: 'demo-crane', active: true },
+        { id: 'bg2', name: 'yard', active: false },
+      ],
+    });
+    let failSwitch = false;
+    const post = vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return heldControl as never;
+      }
+      if (String(path).includes('/hmi/backgrounds/')) {
+        if (failSwitch) throw new Error('switch failed');
+        return { id: 'bg2', name: 'yard', active: true } as never;
+      }
+      return { ok: true } as never;
+    });
+    renderWithProviders(<OperatorPage />);
+    expect(
+      await screen.findByRole('img', { name: 'Plant background' }),
+    ).toHaveAttribute('src', '/hmi-assets/plant.svg');
+    expect(screen.getByRole('tablist', { name: 'Plant screens' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'demo-crane' }));
+    fireEvent.click(screen.getByRole('button', { name: 'yard' }));
+    await waitFor(() =>
+      expect(
+        post.mock.calls.some(
+          (call) => call[0] === '/hmi/backgrounds/bg2/activate',
+        ),
+      ).toBe(true),
+    );
+
+    failSwitch = true;
+    fireEvent.click(screen.getByRole('button', { name: 'yard' }));
+    expect(await screen.findByText('switch failed')).toBeInTheDocument();
+
+    post.mockImplementation(async (path) => {
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return heldControl as never;
+      }
+      if (String(path).includes('/hmi/backgrounds/')) {
+        throw 'switch denied';
+      }
+      return { ok: true } as never;
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'yard' }));
+    expect(
+      await screen.findByText('Could not switch screen'),
+    ).toBeInTheDocument();
+
+    const safetyHandler = socket.on.mock.calls.find(
+      (c) => c[0] === 'safety.state',
+    )?.[1] as (p: unknown) => void;
+    safetyHandler({ mode: 'normal', control: undefined });
+  });
 });

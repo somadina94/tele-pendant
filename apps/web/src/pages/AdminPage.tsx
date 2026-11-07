@@ -8,6 +8,7 @@ import {
   apiPatch,
   apiPost,
   apiPut,
+  apiUpload,
   HmiLayout,
   RegisterRef,
 } from '@/lib/api';
@@ -561,10 +562,32 @@ export function AdminPage() {
           <Card>
             <CardHeader>
               <CardTitle>Background</CardTitle>
+              <CardDescription>
+                Upload an SVG or photo for the active Operator screen, or keep
+                the built-in crane mimic when no image is set. Add extra screens
+                to switch plant views on Operator.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-6">
+              <BackgroundScreens
+                screens={layout?.backgrounds ?? []}
+                onActivate={(id) =>
+                  apiPost(`/hmi/backgrounds/${id}/activate`).then(() =>
+                    refreshLayout(),
+                  )
+                }
+                onCreate={(name) =>
+                  apiPost('/hmi/backgrounds', { name }).then(() =>
+                    refreshLayout(),
+                  )
+                }
+                note={notes['background-screens']}
+                onNote={(note) => remember('background-screens', note)}
+              />
+              <Separator />
               {layout?.background ? (
                 <BackgroundEditor
+                  key={layout.background.id}
                   initial={{
                     name: layout.background.name,
                     cssBackground: layout.background.cssBackground ?? '',
@@ -574,6 +597,11 @@ export function AdminPage() {
                   onNote={(note) => remember('background', note)}
                   onSubmit={(value) =>
                     apiPatch('/hmi/background', value).then(() =>
+                      refreshLayout(),
+                    )
+                  }
+                  onUpload={(file) =>
+                    apiUpload('/hmi/background/asset', file).then(() =>
                       refreshLayout(),
                     )
                   }
@@ -1694,11 +1722,115 @@ function OverlayEditor({
   );
 }
 
+function BackgroundScreens({
+  screens,
+  onActivate,
+  onCreate,
+  note,
+  onNote,
+}: {
+  screens: Array<{ id: string; name: string; active: boolean }>;
+  onActivate: (id: string) => Promise<unknown>;
+  onCreate: (name: string) => Promise<unknown>;
+  note?: Note;
+  onNote: (note: Note) => void;
+}) {
+  const [newName, setNewName] = useState('');
+
+  async function activate(id: string) {
+    try {
+      await onActivate(id);
+      const success = { ok: true as const, text: 'Active screen updated.' };
+      onNote(success);
+      toastOk(success.text);
+    } catch (err) {
+      const failure = { ok: false as const, text: noteText(err) };
+      onNote(failure);
+      toastErr(failure.text);
+    }
+  }
+
+  async function create(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await onCreate(newName.trim());
+      setNewName('');
+      const success = { ok: true as const, text: 'Screen created.' };
+      onNote(success);
+      toastOk(success.text);
+    } catch (err) {
+      const failure = { ok: false as const, text: noteText(err) };
+      onNote(failure);
+      toastErr(failure.text);
+    }
+  }
+
+  return (
+    <div className="grid gap-3">
+      <div>
+        <h3 className="text-sm font-medium">Plant screens</h3>
+        <p className="text-xs text-muted-foreground">
+          Activate a screen to edit its graphic. Operators can switch screens on
+          the Operator page.
+        </p>
+      </div>
+      <ul className="grid gap-2">
+        {screens.map((screen) => (
+          <li
+            key={screen.id}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2"
+          >
+            <span className="text-sm font-medium">
+              {screen.name}
+              {screen.active ? (
+                <Badge className="ml-2" variant="secondary">
+                  Active
+                </Badge>
+              ) : null}
+            </span>
+            {!screen.active ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void activate(screen.id)}
+              >
+                Activate
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => void create(e)}
+      >
+        <div className="grid min-w-[12rem] flex-1 gap-1">
+          <Label htmlFor="new-screen-name">New screen name</Label>
+          <Input
+            id="new-screen-name"
+            aria-label="new screen name"
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            placeholder="yard-overview"
+          />
+        </div>
+        <Button type="submit" disabled={!newName.trim()}>
+          <Plus />
+          Add screen
+        </Button>
+      </form>
+      <StatusNote note={note} />
+    </div>
+  );
+}
+
 function BackgroundEditor({
   initial,
   note,
   onNote,
   onSubmit,
+  onUpload,
 }: {
   initial: { name: string; cssBackground: string; imageUrl: string };
   note?: Note;
@@ -1708,11 +1840,20 @@ function BackgroundEditor({
     cssBackground: string;
     imageUrl: string;
   }) => Promise<void>;
+  onUpload: (file: File) => Promise<unknown>;
 }) {
   const [name, setName] = useState(initial.name);
   const [cssBackground, setCssBackground] = useState(initial.cssBackground);
   const [imageUrl, setImageUrl] = useState(initial.imageUrl);
   const [imageBroken, setImageBroken] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    setName(initial.name);
+    setCssBackground(initial.cssBackground);
+    setImageUrl(initial.imageUrl);
+    setImageBroken(false);
+  }, [initial.name, initial.cssBackground, initial.imageUrl]);
 
   useEffect(() => {
     setImageBroken(false);
@@ -1729,6 +1870,26 @@ function BackgroundEditor({
       const failure = { ok: false as const, text: noteText(err) };
       onNote(failure);
       toastErr(failure.text);
+    }
+  }
+
+  async function uploadFile(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    try {
+      await onUpload(file);
+      const success = {
+        ok: true as const,
+        text: 'Uploaded plant graphic.',
+      };
+      onNote(success);
+      toastOk(success.text);
+    } catch (err) {
+      const failure = { ok: false as const, text: noteText(err) };
+      onNote(failure);
+      toastErr(failure.text);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -1753,19 +1914,34 @@ function BackgroundEditor({
         />
       </div>
       <div className="grid gap-2">
+        <Label htmlFor="background-upload">Upload SVG or image</Label>
+        <Input
+          id="background-upload"
+          aria-label="background upload"
+          type="file"
+          accept="image/svg+xml,image/png,image/jpeg,image/webp,image/gif,.svg"
+          disabled={uploading}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            void uploadFile(file);
+          }}
+        />
+        <CardDescription>
+          Uploaded graphics replace the built-in crane mimic on Operator. Clear
+          the image URL and save to restore the mimic.
+        </CardDescription>
+      </div>
+      <div className="grid gap-2">
         <Label htmlFor="background-image">Image URL</Label>
         <Input
           id="background-image"
           aria-label="background image"
           value={imageUrl}
           onChange={(event) => setImageUrl(event.target.value)}
-          placeholder="https://images.example.com/bay.jpg"
+          placeholder="/hmi-assets/… or https://…"
         />
       </div>
-      <CardDescription>
-        Paste the image file address. A photo page such as unsplash.com/photos
-        will not draw. Right-click the picture and copy the image address.
-      </CardDescription>
       {imageUrl.trim() ? (
         <img
           className="max-h-48 rounded-md border object-contain"
@@ -1778,12 +1954,12 @@ function BackgroundEditor({
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            This link did not load as a picture. Copy the image address, not the
-            photo page.
+            This link did not load as a picture. Upload a file or paste a direct
+            image address.
           </AlertDescription>
         </Alert>
       ) : null}
-      <Button type="submit">
+      <Button type="submit" disabled={uploading}>
         <Save />
         Save background
       </Button>

@@ -37,6 +37,10 @@ export default defineConfig({
         target: apiProxyTarget,
         changeOrigin: true,
       },
+      '/hmi-assets': {
+        target: apiProxyTarget,
+        changeOrigin: true,
+      },
       '/socket.io': {
         target: apiProxyTarget,
         changeOrigin: true,

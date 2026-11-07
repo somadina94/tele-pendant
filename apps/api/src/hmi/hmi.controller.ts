@@ -8,9 +8,12 @@ import {
   Patch,
   Post,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { ApiAuth } from '../common/swagger/api-auth.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -19,6 +22,7 @@ import { JwtAuthGuard } from '../auth/providers/jwt-auth.guard';
 import { RolesGuard } from '../auth/providers/roles.guard';
 import { UserRole } from '../users/enums/user-role.enum';
 import { ActivateCellDto } from './dtos/activate-cell.dto';
+import { CreateBackgroundDto } from './dtos/create-background.dto';
 import { SaveBackgroundDto } from './dtos/save-background.dto';
 import { SaveCellDto } from './dtos/save-cell.dto';
 import { SaveOverlayDto } from './dtos/save-overlay.dto';
@@ -131,6 +135,35 @@ export class HmiController {
     return this.hmiService.deleteOverlay(id, this.actor(req));
   }
 
+  @Get('backgrounds')
+  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'List plant HMI screens (backgrounds)' })
+  listBackgrounds() {
+    return this.hmiService.listBackgrounds();
+  }
+
+  @Post('backgrounds')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({
+    summary: 'Create a plant HMI screen (inactive until activated)',
+  })
+  createBackground(
+    @Body() dto: CreateBackgroundDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.createBackground(dto, this.actor(req));
+  }
+
+  @Post('backgrounds/:id/activate')
+  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Switch the active plant HMI screen' })
+  activateBackground(
+    @Param('id') id: string,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.activateBackground(id, this.actor(req));
+  }
+
   @Patch('background')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({ summary: 'Update the active plant graphic' })
@@ -139,6 +172,41 @@ export class HmiController {
     @Req() req: Request & { user: JwtPayload },
   ) {
     return this.hmiService.updateBackground(dto, this.actor(req));
+  }
+
+  @Post('background/asset')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({
+    summary: 'Upload SVG/PNG plant graphic for the active screen',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+      required: ['file'],
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 2_000_000 },
+    }),
+  )
+  uploadBackgroundAsset(
+    @UploadedFile()
+    file:
+      | {
+          buffer: Buffer;
+          mimetype: string;
+          originalname?: string;
+          size?: number;
+        }
+      | undefined,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.uploadBackgroundAsset(file, this.actor(req));
   }
 
   @Post('cells/:id/activate')

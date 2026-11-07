@@ -6,6 +6,7 @@ import {
   apiPatch,
   apiPost,
   apiPut,
+  apiUpload,
 } from './api';
 
 describe('api helpers', () => {
@@ -253,5 +254,39 @@ describe('api helpers', () => {
     expect(fetchMock.mock.calls[0][1].method).toBe('DELETE');
     expect(fetchMock.mock.calls[0][1].body).toBeUndefined();
     await expect(apiDelete('/fail')).rejects.toThrow('gone');
+  });
+
+  it('uploads multipart without forcing JSON content-type', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          apiVersion: 'v1',
+          data: { imageUrl: '/hmi-assets/a.svg' },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 413,
+        text: async () => 'too large',
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const file = new File(['<svg/>'], 'plant.svg', { type: 'image/svg+xml' });
+    await expect(apiUpload('/hmi/background/asset', file)).resolves.toEqual({
+      imageUrl: '/hmi-assets/a.svg',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/hmi/background/asset',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { Authorization: 'Bearer tok' },
+      }),
+    );
+    expect(fetchMock.mock.calls[0][1].body).toBeInstanceOf(FormData);
+    await expect(apiUpload('/hmi/background/asset', file)).rejects.toThrow(
+      'too large',
+    );
   });
 });
