@@ -81,12 +81,23 @@ export class AuthController {
   }
 
   /**
-   * Clear session cookie.
+   * Clear session cookie and revoke outstanding JWTs when a token is present (TP-40).
    */
   @Post('logout')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Logout (clears access_token cookie)' })
-  logout(@Res({ passthrough: true }) res: Response) {
+  @ApiOperation({
+    summary: 'Logout (clears access_token cookie and revokes Bearer sessions)',
+  })
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const header = req.headers.authorization;
+    const bearer =
+      typeof header === 'string' && header.toLowerCase().startsWith('bearer ')
+        ? header.slice(7).trim()
+        : undefined;
+    const cookieToken = (req.cookies as Record<string, string> | undefined)?.[
+      ACCESS_TOKEN_COOKIE
+    ];
+    await this.authService.revokeSessionsFromToken(bearer || cookieToken);
     res.clearCookie(ACCESS_TOKEN_COOKIE, { path: '/' });
     return { ok: true };
   }

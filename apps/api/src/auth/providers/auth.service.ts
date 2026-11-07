@@ -36,6 +36,8 @@ export interface JwtPayload {
   email: string;
   role: UserRole;
   displayName?: string | null;
+  /** Matches `User.tokenVersion`; mismatch means session was revoked. */
+  tv?: number;
 }
 
 /**
@@ -118,8 +120,66 @@ export class AuthService implements OnModuleInit {
       email: user.email,
       role: user.role,
       displayName: user.displayName ?? null,
+      tv: user.tokenVersion ?? 0,
     };
     return this.jwtService.signAsync(payload);
+  }
+
+  /**
+   * TP-40: every authenticated request must see a live, non-suspended user whose
+   * tokenVersion still matches the JWT (revoked by logout / password / suspend).
+   */
+  async assertActiveSession(payload: JwtPayload): Promise<JwtPayload> {
+    const user = await this.usersRepository.findOne({
+      where: { id: payload.sub },
+    });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    if (user.suspended) {
+      throw new UnauthorizedException(
+        'Account suspended — contact an administrator',
+      );
+    }
+    const tokenVersion = user.tokenVersion ?? 0;
+    if ((payload.tv ?? 0) !== tokenVersion) {
+      throw new UnauthorizedException('Session revoked');
+    }
+    return {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      displayName: user.displayName ?? null,
+      tv: tokenVersion,
+    };
+  }
+
+  /** Invalidate all outstanding JWTs for this user (logout / password / suspend). */
+  async revokeSessions(userId: string): Promise<void> {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) return;
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    await this.usersRepository.save(user);
+  }
+
+  /**
+   * Best-effort revoke from a raw access token (logout). Ignores invalid/expired tokens
+   * so the cookie can still be cleared.
+   */
+  async revokeSessionsFromToken(token: string | undefined): Promise<void> {
+    if (!token?.trim()) return;
+    try {
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
+        secret: this.configService.get<string>('appConfig.jwt.secret'),
+        audience: this.configService.get<string>('appConfig.jwt.audience'),
+        issuer: this.configService.get<string>('appConfig.jwt.issuer'),
+      });
+      if (payload?.sub) {
+        await this.revokeSessions(payload.sub);
+      }
+    } catch {
+      // Cookie clear still proceeds; Bearer may already be expired.
+    }
   }
 
   async validateUser(email: string, password: string): Promise<User> {
@@ -151,6 +211,7 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Current password is incorrect');
     }
     user.passwordHash = await bcrypt.hash(newPassword, 12);
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     await this.usersRepository.save(user);
     await this.auditService.write({
       userId: user.id,

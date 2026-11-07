@@ -11,7 +11,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { ACCESS_TOKEN_COOKIE } from '../common/constants';
-import { JwtPayload } from '../auth/providers/auth.service';
+import { AuthService, JwtPayload } from '../auth/providers/auth.service';
 import { SafetyStateService } from '../safety/providers/safety-state.service';
 
 @WebSocketGateway({
@@ -31,6 +31,7 @@ export class RealtimeGateway
     private readonly safetyState: SafetyStateService,
     @Inject(JwtService) private readonly jwtService: JwtService,
     @Inject(ConfigService) private readonly configService: ConfigService,
+    @Inject(AuthService) private readonly authService: AuthService,
   ) {}
 
   broadcast(event: string, payload: unknown): void {
@@ -54,7 +55,9 @@ export class RealtimeGateway
       if (!payload?.sub) {
         throw new Error('invalid payload');
       }
-      this.setUser(client, payload);
+      // TP-40: signature alone is not enough — reject suspended/deleted/revoked.
+      const session = await this.authService.assertActiveSession(payload);
+      this.setUser(client, session);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unauthorized';
       this.logger.warn(`Realtime reject ${client.id}: ${message}`);

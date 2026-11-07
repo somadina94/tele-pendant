@@ -76,6 +76,7 @@ describe('UsersService', () => {
       role: UserRole.OPERATOR,
       suspended: false,
       passwordHash: 'old',
+      tokenVersion: 0,
     });
     usersRepository.save.mockImplementation(async (x) => x);
     const service = new UsersService(
@@ -89,6 +90,34 @@ describe('UsersService', () => {
     );
     expect(row.displayName).toBe('Jay');
     expect(row.suspended).toBe(true);
+    expect(usersRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ tokenVersion: 1, suspended: true }),
+    );
+  });
+
+  it('bumps tokenVersion when admin resets password (TP-40)', async () => {
+    usersRepository.findOne.mockResolvedValue({
+      id: 'u2',
+      email: 'op@plant.local',
+      displayName: 'Jordan',
+      role: UserRole.OPERATOR,
+      suspended: false,
+      passwordHash: 'old',
+      tokenVersion: 4,
+    });
+    usersRepository.save.mockImplementation(async (x) => x);
+    const service = new UsersService(
+      usersRepository as never,
+      auditService as never,
+    );
+    await service.update(
+      'u2',
+      { password: 'brand-new-password' },
+      { userId: 'admin-id', userEmail: 'admin@x', userDisplayName: 'Admin' },
+    );
+    expect(usersRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ tokenVersion: 5 }),
+    );
   });
 
   it('removes a non-admin user', async () => {

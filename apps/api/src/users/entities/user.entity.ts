@@ -36,6 +36,10 @@ export class User {
   @Column({ type: 'boolean', default: false })
   suspended!: boolean;
 
+  /** Bumped on logout, password change, and suspend to revoke outstanding JWTs. */
+  @Column({ name: 'token_version', type: 'int', default: 0 })
+  tokenVersion!: number;
+
   @Column({ name: 'safe_action_pin_hash', type: 'varchar', nullable: true })
   safeActionPinHash?: string | null;
 

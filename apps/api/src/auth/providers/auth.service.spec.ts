@@ -44,6 +44,7 @@ describe('AuthService', () => {
     locale: 'en',
     faceTemplate: null as string | null,
     suspended: false,
+    tokenVersion: 0,
   };
 
   const usersRepository = {
@@ -55,6 +56,7 @@ describe('AuthService', () => {
   };
   const jwtService = {
     signAsync: jest.fn().mockResolvedValue('token'),
+    verifyAsync: jest.fn(),
   };
   const configService = {
     get: jest.fn(),
@@ -82,6 +84,9 @@ describe('AuthService', () => {
     jest.clearAllMocks();
     user.faceTemplate = null;
     user.displayName = 'Admin';
+    user.suspended = false;
+    user.tokenVersion = 0;
+    user.passwordHash = 'hash';
     configService.get.mockImplementation(defaultConfig);
     safeActionPin.plantPinFallback.mockReturnValue('');
     service = new AuthService(
@@ -194,9 +199,122 @@ describe('AuthService', () => {
     await expect(
       service.changePassword(user.id, 'old', 'new-password', '127.0.0.1'),
     ).resolves.toEqual({ ok: true });
+    expect(user.tokenVersion).toBe(1);
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'auth.password_change' }),
     );
+  });
+
+  it('assertActiveSession accepts live users and rejects suspended/missing/revoked (TP-40)', async () => {
+    usersRepository.findOne.mockResolvedValue({
+      ...user,
+      tokenVersion: 2,
+      displayName: null,
+    });
+    await expect(
+      service.assertActiveSession({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        tv: 2,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        sub: user.id,
+        email: user.email,
+        tv: 2,
+        displayName: null,
+      }),
+    );
+
+    usersRepository.findOne.mockResolvedValue(null);
+    await expect(
+      service.assertActiveSession({
+        sub: 'gone',
+        email: 'x',
+        role: UserRole.OPERATOR,
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    usersRepository.findOne.mockResolvedValue({ ...user, suspended: true });
+    await expect(
+      service.assertActiveSession({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        tv: 0,
+      }),
+    ).rejects.toThrow(/suspended/i);
+
+    usersRepository.findOne.mockResolvedValue({ ...user, tokenVersion: 3 });
+    await expect(
+      service.assertActiveSession({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        tv: 0,
+      }),
+    ).rejects.toThrow(/revoked/i);
+  });
+
+  it('revokes sessions and ignores bad logout tokens (TP-40)', async () => {
+    const noTv = { ...user, tokenVersion: undefined as unknown as number };
+    usersRepository.findOne.mockResolvedValue(noTv);
+    await service.revokeSessions(user.id);
+    expect(noTv.tokenVersion).toBe(1);
+    expect(usersRepository.save).toHaveBeenCalled();
+
+    usersRepository.findOne.mockResolvedValue(null);
+    await service.revokeSessions('missing');
+
+    jwtService.verifyAsync.mockResolvedValue({ sub: user.id });
+    usersRepository.findOne.mockResolvedValue(user);
+    await service.revokeSessionsFromToken('good-token');
+    expect(jwtService.verifyAsync).toHaveBeenCalled();
+
+    jwtService.verifyAsync.mockResolvedValue({});
+    await service.revokeSessionsFromToken('no-sub');
+
+    await service.revokeSessionsFromToken(undefined);
+    await service.revokeSessionsFromToken('   ');
+    jwtService.verifyAsync.mockRejectedValue(new Error('expired'));
+    await service.revokeSessionsFromToken('stale');
+  });
+
+  it('treats missing tokenVersion as zero when asserting, signing, and changing password (TP-40)', async () => {
+    usersRepository.findOne.mockResolvedValue({
+      ...user,
+      tokenVersion: undefined,
+      displayName: undefined,
+    });
+    await expect(
+      service.assertActiveSession({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+      }),
+    ).resolves.toEqual(expect.objectContaining({ tv: 0, displayName: null }));
+
+    usersRepository.findOne.mockResolvedValue({
+      ...user,
+      tokenVersion: undefined,
+      displayName: undefined,
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    await service.login({ email: user.email, password: 'x' });
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ tv: 0, displayName: null }),
+    );
+
+    const pwdUser = {
+      ...user,
+      tokenVersion: undefined as unknown as number,
+    };
+    usersRepository.findOneByOrFail.mockResolvedValue(pwdUser);
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('new-hash');
+    await service.changePassword(user.id, 'old', 'new-password');
+    expect(pwdUser.tokenVersion).toBe(1);
   });
 
   it('rejects change password when current password is wrong', async () => {

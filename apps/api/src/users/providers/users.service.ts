@@ -107,9 +107,14 @@ export class UsersService {
       user.displayName = displayName;
     }
     if (dto.role !== undefined) user.role = dto.role;
+    const wasSuspended = user.suspended === true;
     if (dto.suspended !== undefined) user.suspended = dto.suspended;
     if (dto.password !== undefined) {
       user.passwordHash = await bcrypt.hash(dto.password, 12);
+      user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    } else if (dto.suspended === true && !wasSuspended) {
+      // TP-40: suspending must kill outstanding JWTs immediately.
+      user.tokenVersion = (user.tokenVersion ?? 0) + 1;
     }
 
     const saved = await this.usersRepository.save(user);

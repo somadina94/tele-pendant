@@ -19,15 +19,22 @@ describe('RealtimeGateway', () => {
       return undefined;
     }),
   };
+  const authService = {
+    assertActiveSession: jest.fn(async (payload: { sub: string }) => payload),
+  };
 
   let gateway: RealtimeGateway;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    authService.assertActiveSession.mockImplementation(
+      async (payload: { sub: string }) => payload,
+    );
     gateway = new RealtimeGateway(
       safetyState as never,
       jwtService as never,
       configService as never,
+      authService as never,
     );
   });
 
@@ -103,6 +110,29 @@ describe('RealtimeGateway', () => {
       client({ auth: { token: 'bad' }, disconnect }) as never,
     );
     expect(disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('disconnects when the session is suspended or revoked (TP-40)', async () => {
+    jwtService.verifyAsync.mockResolvedValue({ sub: 'u1' });
+    authService.assertActiveSession.mockRejectedValue(
+      new Error('Account suspended — contact an administrator'),
+    );
+    const disconnect = jest.fn();
+    await gateway.handleConnection(
+      client({ auth: { token: 'stale' }, disconnect }) as never,
+    );
+    expect(authService.assertActiveSession).toHaveBeenCalled();
+    expect(disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('disconnects when the payload has no sub', async () => {
+    jwtService.verifyAsync.mockResolvedValue({});
+    const disconnect = jest.fn();
+    await gateway.handleConnection(
+      client({ auth: { token: 'nosub' }, disconnect }) as never,
+    );
+    expect(disconnect).toHaveBeenCalledWith(true);
+    expect(authService.assertActiveSession).not.toHaveBeenCalled();
   });
 
   it('releases only the disconnecting socket holder (TP-37)', () => {
