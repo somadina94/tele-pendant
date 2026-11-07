@@ -51,7 +51,8 @@ describe('getRealtimeSocket', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked');
     });
-    const { getRealtimeSocket, resetRealtimeSocket } = await import('./realtime');
+    const { getRealtimeSocket, resetRealtimeSocket } =
+      await import('./realtime');
     resetRealtimeSocket();
     getRealtimeSocket();
     expect(ioMock).toHaveBeenCalledWith(
