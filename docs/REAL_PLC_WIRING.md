@@ -57,7 +57,7 @@ Keep the **names** Tele-Pendant already uses (`coil.eStop`, `holding.hoistHeight
 | `holding.hoistHeightMm` | holding | `0` | `100` | Holding / analog register for height in mm (or scaled engineering units) |
 | `holding.loadKg` | holding | `1` | `101` | Load / weight holding |
 | `holding.speedPct` | holding | `2` | `102` | Optional speed % |
-| `holding.heartbeat` | holding | `10` | `110` | Register the API writes as a watchdog heartbeat (PLC must monitor it) |
+| `holding.heartbeat` | holding | `10` | `110` | Watchdog: API refreshes this ~every poll; PLC should stop motion if the value goes stale (recommend **>2 s** without change) |
 | `holding.safeState` | holding | `11` | `111` | Register written on comms-lost / safe-state |
 | `discrete.motorRunning` | discrete | `0` | `5` | Discrete / digital input: motor running feedback |
 | `discrete.fault` | discrete | `1` | `6` | Fault feedback (if used) |

@@ -116,7 +116,7 @@ TLS stays on your reverse proxy and certificate. The web container sends `Strict
 
 ### Security checklist
 
-- Set strong `JWT_SECRET`, `ADMIN_PASSWORD`, `SAFE_ACTION_PIN`, and `FACE_TEMPLATE_KEY` (32+ chars) before production.
+- Set strong `JWT_SECRET`, `ADMIN_PASSWORD`, `SAFE_ACTION_PIN`, and `FACE_TEMPLATE_KEY` (32+ chars) before production. With `NODE_ENV=production`, the API **refuses to boot** if any of those still match the documented `.env.example` demo defaults (TP-50).
 - `COOKIE_SECURE=true` when serving HTTPS.
 - Face templates are encrypted at rest when `FACE_TEMPLATE_KEY` is set; they are never returned to clients.
 - Software deadman/e-stop/watchdog supervise the HMI path only; not SIL. See `REAL_PLC_WIRING.md` for **step-by-step real PLC registration** (example values and where to get host, port, unit id, and register addresses from the machine).
