@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Mic, QrCode, ScanLine } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { HelpTip } from '../lib/tour';
+import { getRealtimeSocket } from '../lib/realtime';
 import { PageSpinner } from '@/components/page-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,10 @@ import { CameraAccessAlert } from '@/components/device-camera-panel';
 import { useDeviceCamera } from '@/lib/use-device-camera';
 import { isSupervisorOrAdmin } from '@/lib/user-session';
 import { toastErr, toastOk } from '@/lib/toast';
+
+/** Keep deadman pulsed through a short timed voice jog (matches API VOICE_JOG_MS). */
+const VOICE_DEADMAN_HOLD_MS = 2500;
+const VOICE_DEADMAN_PULSE_MS = 400;
 
 type SpeechAlt = { transcript: string };
 type SpeechResult = ArrayLike<SpeechAlt> & { isFinal?: boolean };
@@ -57,6 +62,50 @@ export function MediaPage() {
   const [manualCode, setManualCode] = useState('TP-CRANE-DEMO-01');
   const canResolveManual = manualCode.trim().length > 0;
   const [listening, setListening] = useState(false);
+  const deadmanPulseRef = useRef<number | null>(null);
+  const deadmanHoldUntilRef = useRef(0);
+
+  const pulseDeadman = useCallback(() => {
+    getRealtimeSocket().emit('deadman.pulse');
+    void apiPost('/safety/deadman/pulse').catch(() => undefined);
+  }, []);
+
+  const releaseDeadman = useCallback(() => {
+    getRealtimeSocket().emit('deadman.release');
+    void apiPost('/safety/deadman/release').catch(() => undefined);
+  }, []);
+
+  const stopDeadmanHold = useCallback(() => {
+    if (deadmanPulseRef.current != null) {
+      window.clearInterval(deadmanPulseRef.current);
+      deadmanPulseRef.current = null;
+    }
+    deadmanHoldUntilRef.current = 0;
+    releaseDeadman();
+  }, [releaseDeadman]);
+
+  const startDeadmanHold = useCallback(
+    (durationMs?: number) => {
+      pulseDeadman();
+      if (durationMs != null) {
+        deadmanHoldUntilRef.current = Date.now() + durationMs;
+      } else {
+        deadmanHoldUntilRef.current = 0;
+      }
+      if (deadmanPulseRef.current != null) return;
+      deadmanPulseRef.current = window.setInterval(() => {
+        if (
+          deadmanHoldUntilRef.current > 0 &&
+          Date.now() >= deadmanHoldUntilRef.current
+        ) {
+          stopDeadmanHold();
+          return;
+        }
+        pulseDeadman();
+      }, VOICE_DEADMAN_PULSE_MS);
+    },
+    [pulseDeadman, stopDeadmanHold],
+  );
 
   const camera = useQuery({
     queryKey: ['camera-config'],
@@ -201,9 +250,15 @@ export function MediaPage() {
         ? res.message || `Heard: ${heard}. Executed: ${res.label}`
         : `Heard: ${heard}. Not executed: ${res.reason ?? 'unknown'}`;
       setVoiceLog(line);
-      if (res.ok) toastOk(res.label ?? direction);
-      else toastErr(res.reason ?? 'not executed');
+      if (res.ok) {
+        startDeadmanHold(VOICE_DEADMAN_HOLD_MS);
+        toastOk(res.label ?? direction);
+      } else {
+        stopDeadmanHold();
+        toastErr(res.reason ?? 'not executed');
+      }
     } catch (err) {
+      stopDeadmanHold();
       const message = err instanceof Error ? err.message : 'failed';
       setVoiceLog(`Heard: ${heard}. Not executed: ${message}`);
       toastErr(message);
@@ -237,6 +292,8 @@ export function MediaPage() {
     recognition.maxAlternatives = 5;
     recognition.lang = 'en-US';
     let sent = false;
+    // TP-29: Listen itself is the deadman hold for timed voice motion.
+    startDeadmanHold();
     recognition.onresult = (event) => {
       const phrases: string[] = [];
       for (let i = 0; i < event.results.length; i++) {
@@ -267,6 +324,7 @@ export function MediaPage() {
         setVoiceLog(t('nothingHeard'));
         recognition.stop();
         setListening(false);
+        stopDeadmanHold();
         return;
       }
       void apiPost<{ ok: boolean; label?: string; reason?: string }>(
@@ -279,8 +337,14 @@ export function MediaPage() {
               ? `Heard: ${heard}. Executed: ${res.label}`
               : `Heard: ${heard}. Not executed: ${res.reason ?? 'unknown'}`,
           );
+          if (res.ok && /hoist|trolley/i.test(res.label ?? '')) {
+            startDeadmanHold(VOICE_DEADMAN_HOLD_MS);
+          } else {
+            stopDeadmanHold();
+          }
         })
         .catch((err: Error) => {
+          stopDeadmanHold();
           setVoiceLog(`Heard: ${heard}. Not executed: ${err.message}`);
         })
         .finally(() => {
@@ -291,6 +355,7 @@ export function MediaPage() {
     recognition.onerror = (event) => {
       if (event.error === 'aborted') return;
       sent = true;
+      stopDeadmanHold();
       setVoiceLog(
         event.error === 'no-speech'
           ? t('nothingHeard')
@@ -300,13 +365,17 @@ export function MediaPage() {
     };
     recognition.onend = () => {
       setListening(false);
-      if (!sent) setVoiceLog(t('nothingHeard'));
+      if (!sent) {
+        stopDeadmanHold();
+        setVoiceLog(t('nothingHeard'));
+      }
     };
     setListening(true);
     recognition.start();
     window.setTimeout(() => {
       recognition.stop();
       setListening(false);
+      if (!sent) stopDeadmanHold();
     }, 8000);
   }
 
@@ -422,9 +491,9 @@ export function MediaPage() {
               <CardHeader>
                 <CardTitle>Voice commands</CardTitle>
                 <CardDescription>
-                  Use Listen for allowlisted commands. Say stop anytime. Hoist
-                  and trolley motion by voice follow the Allow timed media
-                  motion switch in Config; otherwise hold motion on Operator.
+                  Use Listen for allowlisted commands. Say stop anytime. Timed
+                  hoist/trolley voice needs Allow timed media motion in Config
+                  and a deadman hold (Listen pulses deadman while active).
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">

@@ -39,6 +39,7 @@ describe('MediaService', () => {
     pulseDeadman: jest.fn(),
     releaseDeadman: jest.fn(),
     allowTimedMediaMotion: jest.fn().mockResolvedValue(true),
+    canIssueMotion: jest.fn().mockReturnValue(true),
   };
   const auditService = { write: jest.fn().mockResolvedValue({}) };
 
@@ -65,6 +66,7 @@ describe('MediaService', () => {
       ],
     });
     safetyState.allowTimedMediaMotion.mockResolvedValue(true);
+    safetyState.canIssueMotion.mockReturnValue(true);
     service = new MediaService(
       codes as never,
       hmiService as never,
@@ -165,29 +167,33 @@ describe('MediaService', () => {
   it('maps exact and fuzzy voice aliases', async () => {
     const exact = await service.voiceCommand('hoist up', {
       role: UserRole.OPERATOR,
+      userId: 'u1',
       userEmail: 'op@example.com',
     });
     expect(exact.ok).toBe(true);
-    expect(safetyState.pulseDeadman).toHaveBeenCalled();
+    expect(safetyState.pulseDeadman).not.toHaveBeenCalled();
+    expect(safetyState.canIssueMotion).toHaveBeenCalledWith('u1');
 
-    safetyState.pulseDeadman.mockClear();
     const fuzzy = await service.voiceCommand('please hoist up now', {
       role: UserRole.OPERATOR,
+      userId: 'u1',
     });
     expect(fuzzy.ok).toBe(true);
 
-    safetyState.pulseDeadman.mockClear();
+    safetyState.canIssueMotion.mockClear();
     const stop = await service.voiceCommand('emergency stop', {
       role: UserRole.SUPERVISOR,
       safeActionPin: '1234',
     });
     expect(stop.ok).toBe(true);
+    expect(safetyState.canIssueMotion).not.toHaveBeenCalled();
     expect(safetyState.pulseDeadman).not.toHaveBeenCalled();
   });
 
   it('uses a later alternative when the top transcript misses', async () => {
     const result = await service.voiceCommand('banana', {
       role: UserRole.OPERATOR,
+      userId: 'u1',
       alternatives: ['completely wrong', 'hoist up'],
     });
     expect(result).toEqual(
@@ -208,10 +214,11 @@ describe('MediaService', () => {
     );
   });
 
-  it('jogs hoist up then clears the coil', async () => {
+  it('jogs hoist then clears the coil without releasing deadman (TP-29)', async () => {
     jest.useFakeTimers();
     const result = await service.voiceCommand('hoist down', {
       role: UserRole.OPERATOR,
+      userId: 'u1',
     });
     expect(result.ok).toBe(false);
 
@@ -227,16 +234,18 @@ describe('MediaService', () => {
     });
     const down = await service.voiceCommand('down', {
       role: UserRole.OPERATOR,
+      userId: 'u1',
     });
     expect(down).toEqual(
       expect.objectContaining({ ok: true, label: 'Hoist Down' }),
     );
     await jest.advanceTimersByTimeAsync(2800);
     expect(hmiService.activateCell).toHaveBeenCalledWith('down', false, {});
-    expect(safetyState.releaseDeadman).toHaveBeenCalled();
+    expect(safetyState.releaseDeadman).not.toHaveBeenCalled();
+    expect(safetyState.pulseDeadman).not.toHaveBeenCalled();
   });
 
-  it('still releases deadman if clearing the coil fails', async () => {
+  it('still clears the jog timer if clearing the coil fails', async () => {
     jest.useFakeTimers();
     hmiService.activateCell.mockImplementation(
       (_id: string, value: boolean) => {
@@ -244,10 +253,35 @@ describe('MediaService', () => {
         return Promise.resolve({ ok: true });
       },
     );
-    await service.voiceCommand('hoist up', { role: UserRole.OPERATOR });
-    await service.voiceCommand('hoist up', { role: UserRole.OPERATOR });
+    await service.voiceCommand('hoist up', {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+    });
+    await service.voiceCommand('hoist up', {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+    });
     await jest.advanceTimersByTimeAsync(2800);
-    expect(safetyState.releaseDeadman).toHaveBeenCalled();
+    expect(safetyState.releaseDeadman).not.toHaveBeenCalled();
+  });
+
+  it('refuses timed motion without an active deadman hold (TP-29)', async () => {
+    safetyState.canIssueMotion.mockReturnValue(false);
+    const blocked = await service.voiceCommand('hoist up', {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+    });
+    expect(blocked).toEqual(
+      expect.objectContaining({ ok: false, reason: 'deadman_required' }),
+    );
+    expect(hmiService.activateCell).not.toHaveBeenCalled();
+    expect(safetyState.pulseDeadman).not.toHaveBeenCalled();
+
+    const stop = await service.voiceCommand('stop', {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+    });
+    expect(stop.ok).toBe(true);
   });
 
   it('clears the opposite hoist coil and ignores a non-hoist motion cell', async () => {
@@ -258,7 +292,10 @@ describe('MediaService', () => {
         { id: 'left', label: 'Trolley L', isMotion: true },
       ],
     });
-    await service.voiceCommand('down', { role: UserRole.OPERATOR });
+    await service.voiceCommand('down', {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+    });
     expect(hmiService.activateCell).toHaveBeenCalledWith(
       'up',
       false,
@@ -276,8 +313,14 @@ describe('MediaService', () => {
         return Promise.resolve({ ok: true });
       },
     );
-    await service.voiceCommand('up', { role: UserRole.OPERATOR });
-    await service.voiceCommand('trolley left', { role: UserRole.OPERATOR });
+    await service.voiceCommand('up', {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+    });
+    await service.voiceCommand('trolley left', {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+    });
     expect(hmiService.activateCell).toHaveBeenCalledWith(
       'left',
       true,

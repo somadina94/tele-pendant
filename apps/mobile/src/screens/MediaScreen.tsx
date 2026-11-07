@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, ScrollView, Text, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -17,6 +17,10 @@ import {
   showErrorFrom,
 } from '../ui';
 
+/** Keep deadman pulsed through a short timed voice jog (matches API VOICE_JOG_MS). */
+const VOICE_DEADMAN_HOLD_MS = 2500;
+const VOICE_DEADMAN_PULSE_MS = 400;
+
 export function MediaScreen({ token }: { token: string }) {
   const { t } = useLocale();
   const isFocused = useIsFocused();
@@ -26,11 +30,61 @@ export function MediaScreen({ token }: { token: string }) {
   const [scanning, setScanning] = useState(false);
   const [cameraBlocked, setCameraBlocked] = useState(false);
   const lastCode = useRef('');
+  const deadmanPulseRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const deadmanHoldUntilRef = useRef(0);
   const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
     if (!isFocused && scanning) setScanning(false);
   }, [isFocused, scanning]);
+
+  const releaseDeadman = useCallback(() => {
+    void apiPost('/safety/deadman/release', undefined, token).catch(
+      () => undefined,
+    );
+  }, [token]);
+
+  const stopDeadmanHold = useCallback(() => {
+    if (deadmanPulseRef.current) {
+      clearInterval(deadmanPulseRef.current);
+      deadmanPulseRef.current = null;
+    }
+    deadmanHoldUntilRef.current = 0;
+    releaseDeadman();
+  }, [releaseDeadman]);
+
+  const startDeadmanHold = useCallback(
+    (durationMs?: number) => {
+      void apiPost('/safety/deadman/pulse', undefined, token).catch(
+        () => undefined,
+      );
+      if (durationMs != null) {
+        deadmanHoldUntilRef.current = Date.now() + durationMs;
+      } else {
+        deadmanHoldUntilRef.current = 0;
+      }
+      if (deadmanPulseRef.current) return;
+      deadmanPulseRef.current = setInterval(() => {
+        if (
+          deadmanHoldUntilRef.current > 0 &&
+          Date.now() >= deadmanHoldUntilRef.current
+        ) {
+          stopDeadmanHold();
+          return;
+        }
+        void apiPost('/safety/deadman/pulse', undefined, token).catch(
+          () => undefined,
+        );
+      }, VOICE_DEADMAN_PULSE_MS);
+    },
+    [stopDeadmanHold, token],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (deadmanPulseRef.current) clearInterval(deadmanPulseRef.current);
+    };
+  }, []);
 
   async function resolve(value: string) {
     setResult(null);
@@ -56,7 +110,10 @@ export function MediaScreen({ token }: { token: string }) {
       }>('/media/voice', { transcript }, token);
       if (res.ok) {
         setVoice(`Heard: ${transcript}. Executed: ${res.label}`);
+        if (/stop/i.test(res.label ?? '')) stopDeadmanHold();
+        else startDeadmanHold(VOICE_DEADMAN_HOLD_MS);
       } else {
+        stopDeadmanHold();
         showErrorAlert(
           `Not executed: ${res.reason ?? 'unknown'}`,
           'Voice command',
@@ -64,6 +121,7 @@ export function MediaScreen({ token }: { token: string }) {
         setVoice(`Heard: ${transcript}`);
       }
     } catch (err) {
+      stopDeadmanHold();
       showErrorFrom(err, 'Voice command failed', 'Media');
       setVoice(transcript ? `Heard: ${transcript}` : null);
     }
@@ -115,6 +173,8 @@ export function MediaScreen({ token }: { token: string }) {
         showErrorAlert('Microphone permission denied.', 'Listen');
         return;
       }
+      // TP-29: Listen itself is the deadman hold for timed voice motion.
+      startDeadmanHold();
       const sub = recognition.addListener('result', (event) => {
         const transcript = event.results?.[0]?.transcript?.trim() ?? '';
         sub.remove();
@@ -122,12 +182,14 @@ export function MediaScreen({ token }: { token: string }) {
         if (transcript) {
           void command(transcript);
         } else {
+          stopDeadmanHold();
           setVoice('Nothing heard.');
         }
       });
       recognition.start({ lang: 'en-US', interimResults: false });
       setVoice('Listening…');
     } catch {
+      stopDeadmanHold();
       showErrorAlert(
         'Listen needs a local debug build (npx expo run:android).',
         'Listen',

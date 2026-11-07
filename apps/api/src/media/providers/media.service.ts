@@ -169,7 +169,19 @@ export class MediaService implements OnModuleInit {
             'Timed motion is off. Hold the button on Operator, or turn on Allow timed media motion in Config.',
         };
       }
-      this.beginMotionJog(cell.id, opts.userId ?? 'media');
+      // TP-29: never synthesize deadman here — require the session hold
+      // (Listen deadman pulse or Operator hold) before timed voice motion.
+      if (!this.safetyState.canIssueMotion(opts.userId)) {
+        return {
+          ok: false,
+          reason: 'deadman_required',
+          transcript: heard,
+          label,
+          message:
+            'Hold deadman while Listen is active (or hold a motion button on Operator) before timed voice motion.',
+        };
+      }
+      this.beginMotionJog(cell.id);
       const otherLabel =
         label === 'Hoist Up'
           ? 'Hoist Down'
@@ -226,18 +238,14 @@ export class MediaService implements OnModuleInit {
     };
   }
 
-  /** Hold deadman for a short jog, then drop the motion coil. */
-  private beginMotionJog(cellId: string, userId: string): void {
+  /** Drop the motion coil after a short jog; client keeps deadman hold (TP-29). */
+  private beginMotionJog(cellId: string): void {
     this.endMotionJog(null);
     const started = Date.now();
-    const holder = { userId, socketId: `media:${userId}` };
-    this.safetyState.pulseDeadman(holder);
     this.motionJog = setInterval(() => {
       if (Date.now() - started >= VOICE_JOG_MS) {
         this.endMotionJog(cellId);
-        return;
       }
-      this.safetyState.pulseDeadman(holder);
     }, VOICE_JOG_PULSE_MS);
     this.motionJog.unref();
   }
@@ -255,9 +263,8 @@ export class MediaService implements OnModuleInit {
     try {
       await this.hmiService.activateCell(cellId, false, {});
     } catch {
-      // releaseDeadman still clears PLC deadman + all motion coils.
+      // Client deadman release / safety tick still clears motion coils.
     }
-    await this.safetyState.releaseDeadman({ force: true });
   }
 
   cameraConfig() {

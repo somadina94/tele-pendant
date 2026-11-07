@@ -163,11 +163,11 @@ Default demo layout (empty corners):
 | **Device camera** | Shows live video; **Scan QR / barcode in frame** tries to read a code from the image. Needs camera permission. |
 | **Manual code field + Resolve** | Type a known code (demo: `TP-CRANE-DEMO-01`) and jump to the linked screen. |
 | **Code shortcut buttons** | Same as Resolve for preset codes (crane → Operator, `TP-OPS` → Ops). |
-| **Listen (8s)** | Browser or device speech recognition. Say allowlisted words. **up** / **down** run a ~2 s timed hoist only when **Allow timed media motion** is checked in Config **Safety roles** and saved (off by default). No separate UP/DOWN tap buttons on Media. |
+| **Listen (8s)** | Browser or device speech recognition. Say allowlisted words. **up** / **down** run a ~2 s timed hoist only when **Allow timed media motion** is checked in Config **Safety roles** and saved (off by default). Listen pulses deadman while active so timed voice cannot move without a hold (TP-29). No separate UP/DOWN tap buttons on Media. |
 
 **Plant CCTV later:** The Media screen uses the device camera. An administrator can connect a plant camera on the server. The screen then says **Plant camera configured**.
 
-**Voice security:** Only allowlisted words run motion. Random speech shows “not executed.” Saying **stop** commands the crane to stop without a PIN. Timed **up** / **down** stay off until an admin checks **Allow timed media motion** under Config **Safety roles** and saves.
+**Voice security:** Only allowlisted words run motion. Random speech shows “not executed.” Saying **stop** commands the crane to stop without a PIN. Timed **up** / **down** stay off until an admin checks **Allow timed media motion** under Config **Safety roles** and saves. Even when that switch is on, timed voice motion still needs an active deadman hold (Listen pulses it; Operator hold also counts).
 
 ---
 
@@ -304,7 +304,7 @@ Tells the supervision logic which registers mean what:
 | **Deadman** | Register pulsed while operator holds motion. |
 | **Heartbeat** | Register proving PLC comms are alive. |
 | **Safe state** | Register reporting machine-safe status. |
-| **Allow timed media motion** | Checkbox (default off). When on and saved, Media voice **up** / **down** may run a short timed hoist; does not add UP/DOWN buttons on Media. |
+| **Allow timed media motion** | Checkbox (default off). When on and saved, Media voice **up** / **down** may run a short timed hoist if deadman is held (Listen does this); does not add UP/DOWN buttons on Media. |
 
 If deadman is lost, communications fail, or e-stop asserts, the system **clears motion coils** for safety.
 

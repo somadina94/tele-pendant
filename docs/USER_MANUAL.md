@@ -114,7 +114,7 @@ Click **Media** in the top nav (or open http://localhost:8080/media).
 - Two code buttons:
   - **TP-CRANE-DEMO-01**: Demo crane bay A
   - **TP-OPS**: Ops dashboard
-- Section **Voice commands** with **Listen (8s)** only (no UP/DOWN tap buttons). Saying **up** or **down** runs a short timed hoist only after an admin enables **Allow timed media motion** under Config **Safety roles** and saves. **stop** still commands a stop without a PIN.
+- Section **Voice commands** with **Listen (8s)** only (no UP/DOWN tap buttons). Saying **up** or **down** runs a short timed hoist only after an admin enables **Allow timed media motion** under Config **Safety roles** and saves, and only while deadman is held (Listen pulses deadman while active). **stop** still commands a stop without a PIN.
 
 ### 6a. Resolve the crane code
 
@@ -152,10 +152,10 @@ Put `TP-CRANE-DEMO-01` back in the field if you want.
 
 ### 6e. Voice
 
-Voice uses **Listen (8s)** only. Timed hoist from speech is off until **Allow timed media motion** is checked in Config **Safety roles** (bottom of that form) and you click **Save safety roles**. Otherwise say **up** / **down** returns not executed or timed motion off. Hold-to-run motion stays on **Operator**.
+Voice uses **Listen (8s)** only. Timed hoist from speech is off until **Allow timed media motion** is checked in Config **Safety roles** (bottom of that form) and you click **Save safety roles**. Listen pulses deadman while active; without that hold (or an Operator deadman hold), voice **up** / **down** returns `deadman_required`. Hold-to-run motion stays on **Operator**.
 
-1. Open **Config**, sidebar **Safety roles**, check **Allow timed media motion**, click **Save safety roles**. Return to **Media**.
-2. Click **Listen (8s)** and say **up**.
+1. Open **Config**, sidebar **Safety roles**, check **Allow timed media motion**, enter reset PIN, click **Save safety roles**. Return to **Media**.
+2. Click **Listen (8s)** and say **up** while Listen is still active.
 3. **Success:** **Heard: up. Executed: Hoist Up**. On **Operator**, height climbs for about 2 seconds, then stops.
 4. Listen again and say **down**.
 5. **Success:** **Heard: down. Executed: Hoist Down**, and height falls for about 2 seconds.
