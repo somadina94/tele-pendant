@@ -254,7 +254,7 @@
   @apply text-[9px] uppercase tracking-[0.14em] text-white/40;
 }
 .matrix-grid {
-  @apply relative z-0 mx-auto grid w-full max-w-[22rem] gap-1 md:max-w-[26rem] md:gap-1;
+  @apply relative z-0 mx-auto grid w-full max-w-3xl gap-1.5 md:max-w-4xl md:gap-1.5;
   grid-auto-rows: minmax(2.75rem, auto);
 }
 .matrix-grid > .matrix-cell,
@@ -405,8 +405,8 @@
     font-size: 0.875rem;
   }
   .matrix-grid {
-    gap: 0.3rem;
-    max-width: 24rem;
+    gap: 0.35rem;
+    max-width: 48rem;
   }
   .matrix-cell {
     min-height: 2.75rem;
