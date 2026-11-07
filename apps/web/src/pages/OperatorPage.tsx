@@ -82,10 +82,16 @@ export function OperatorPage() {
   const [safety, setSafety] = useState<HmiLayout['safety'] | null>(null);
   const [holdingCellId, setHoldingCellId] = useState<string | null>(null);
   const heldRef = useRef<string | null>(null);
+  const [jogSpeed, setJogSpeed] = useState<'slow' | 'fast'>('fast');
+  const jogSpeedRef = useRef<'slow' | 'fast'>('fast');
   const [safePin, setSafePin] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [photoOk, setPhotoOk] = useState(true);
   const [liveFallback, setLiveFallback] = useState(false);
+
+  useEffect(() => {
+    jogSpeedRef.current = jogSpeed;
+  }, [jogSpeed]);
 
   const layoutQuery = useQuery({
     queryKey: ['hmi-layout'],
@@ -123,10 +129,12 @@ export function OperatorPage() {
       id: string;
       value: boolean;
       safeActionPin?: string;
+      speed?: 'slow' | 'fast';
     }) =>
       apiPost(`/hmi/cells/${args.id}/activate`, {
         value: args.value,
         safeActionPin: args.safeActionPin,
+        ...(args.speed ? { speed: args.speed } : {}),
       }),
     onError: (err: Error) => setMessage(err.message),
     onSuccess: () => {
@@ -166,8 +174,12 @@ export function OperatorPage() {
       setHoldingCellId(cell.id);
       pulseDeadman();
     }
+    const speed =
+      cell.isMotion && (cell.variableSpeed ?? true)
+        ? jogSpeedRef.current
+        : undefined;
     try {
-      await activate.mutateAsync({ id: cell.id, value: true });
+      await activate.mutateAsync({ id: cell.id, value: true, speed });
     } catch {
       if (heldRef.current === cell.id) {
         heldRef.current = null;
@@ -185,7 +197,11 @@ export function OperatorPage() {
     if (!mine) return;
     releaseDeadman();
     try {
-      await activate.mutateAsync({ id: cell.id, value: false });
+      await activate.mutateAsync({
+        id: cell.id,
+        value: false,
+        speed: (cell.variableSpeed ?? true) ? jogSpeedRef.current : undefined,
+      });
     } catch {
       // The coil drop is best-effort. The hold indicator is already clear.
     }
@@ -245,6 +261,15 @@ export function OperatorPage() {
 
   const layout = layoutQuery.data;
   const needsLive = useMemo(() => operatorNeedsLiveTags(layout), [layout]);
+  const showJogSpeed = useMemo(
+    () =>
+      Boolean(
+        layout?.cells.some(
+          (cell) => cell.isMotion && (cell.variableSpeed ?? true),
+        ),
+      ),
+    [layout?.cells],
+  );
   const imageUrl = layout?.background?.imageUrl ?? '';
   const cssBackground = layout?.background?.cssBackground?.trim() || '';
   const mode = safety?.mode ?? layout?.safety.mode ?? 'unknown';
@@ -430,6 +455,37 @@ export function OperatorPage() {
               </Button>
             </div>
           </HelpTip>
+          {showJogSpeed ? (
+            <div
+              className="flex flex-wrap items-center gap-2"
+              role="group"
+              aria-label={t('jogSpeed')}
+            >
+              <span className="text-xs text-muted-foreground md:text-sm">
+                {t('jogSpeed')}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant={jogSpeed === 'slow' ? 'default' : 'outline'}
+                className="h-9 min-h-9"
+                aria-pressed={jogSpeed === 'slow'}
+                onClick={() => setJogSpeed('slow')}
+              >
+                {t('jogSlow')}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={jogSpeed === 'fast' ? 'default' : 'outline'}
+                className="h-9 min-h-9"
+                aria-pressed={jogSpeed === 'fast'}
+                onClick={() => setJogSpeed('fast')}
+              >
+                {t('jogFast')}
+              </Button>
+            </div>
+          ) : null}
           <HelpTip id="tour.operator.matrix">
             <div
               className="matrix-grid"

@@ -155,6 +155,7 @@ export class HmiController {
       userDisplayName: req.user.displayName ?? null,
       role: req.user.role,
       safeActionPin: dto.safeActionPin,
+      speed: dto.speed,
       ip: req.ip,
     });
   }

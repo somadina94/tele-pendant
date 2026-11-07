@@ -437,6 +437,7 @@ export class HmiSeedService implements OnModuleInit {
     ];
 
     for (const def of cellDefs) {
+      const isMotion = def.isMotion ?? false;
       await this.cells.save(
         this.cells.create({
           row: def.row,
@@ -446,8 +447,11 @@ export class HmiSeedService implements OnModuleInit {
           primaryRegister: def.primary,
           feedbackRegister: def.feedback ?? null,
           statusRegister: def.status ?? null,
-          isMotion: def.isMotion ?? false,
+          isMotion,
           requiresSafeAction: def.requiresSafeAction ?? false,
+          variableSpeed: isMotion,
+          slowSpeedPct: 30,
+          fastSpeedPct: 100,
         }),
       );
     }

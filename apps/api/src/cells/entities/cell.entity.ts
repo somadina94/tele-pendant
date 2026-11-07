@@ -34,6 +34,19 @@ export class Cell {
   @Column({ name: 'requires_safe_action', type: 'boolean', default: false })
   requiresSafeAction!: boolean;
 
+  /**
+   * FEAT-A2: motion cells may write holding.speedPct (slow/fast) while held.
+   * Defaults on for new motion cells; ignored when not motion.
+   */
+  @Column({ name: 'variable_speed', type: 'boolean', default: true })
+  variableSpeed!: boolean;
+
+  @Column({ name: 'slow_speed_pct', type: 'int', default: 30 })
+  slowSpeedPct!: number;
+
+  @Column({ name: 'fast_speed_pct', type: 'int', default: 100 })
+  fastSpeedPct!: number;
+
   @ManyToOne(() => RegisterMap, { nullable: true, eager: true })
   @JoinColumn({ name: 'primary_register_id' })
   primaryRegister?: RegisterMap | null;

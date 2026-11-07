@@ -12,7 +12,10 @@ describe('HmiService', () => {
     label: 'Hoist Up',
     isMotion: true,
     requiresSafeAction: false,
-    primaryRegister: { kind: 'coil', address: 0 },
+    variableSpeed: true,
+    slowSpeedPct: 30,
+    fastSpeedPct: 100,
+    primaryRegister: { kind: 'coil', address: 0, name: 'coil.hoistUp' },
     row: 0,
     col: 0,
   };
@@ -82,6 +85,7 @@ describe('HmiService', () => {
     delete process.env.ADMIN_PASSWORD;
     cells.find.mockResolvedValue([motionCell]);
     cells.findOne.mockResolvedValue(motionCell);
+    registers.findOneBy.mockResolvedValue(null);
     backgrounds.findOne.mockResolvedValue({ id: 'bg1', active: true });
     safetyState.canIssueMotion.mockReturnValue(false);
     safetyState.getRoles.mockResolvedValue({
@@ -187,11 +191,79 @@ describe('HmiService', () => {
     expect(plcService.writeCoil).not.toHaveBeenCalled();
   });
 
+  it('writes holding.speedPct for slow vs fast motion jogs (FEAT-A2)', async () => {
+    safetyState.canIssueMotion.mockReturnValue(true);
+    registers.findOneBy.mockResolvedValue({
+      name: 'holding.speedPct',
+      kind: 'holding',
+      address: 2,
+    });
+    await service.activateCell('c1', true, {
+      role: UserRole.OPERATOR,
+      speed: 'slow',
+    });
+    expect(plcService.writeHolding).toHaveBeenCalledWith(2, 30);
+    expect(plcService.writeCoil).toHaveBeenCalledWith(0, true);
+
+    plcService.writeHolding.mockClear();
+    plcService.writeCoil.mockClear();
+    await service.activateCell('c1', true, {
+      role: UserRole.OPERATOR,
+      speed: 'fast',
+    });
+    expect(plcService.writeHolding).toHaveBeenCalledWith(2, 100);
+
+    plcService.writeHolding.mockClear();
+    await service.activateCell('c1', false, { role: UserRole.OPERATOR });
+    expect(plcService.writeHolding).toHaveBeenCalledWith(2, 0);
+    expect(plcService.writeCoil).toHaveBeenCalledWith(0, false);
+
+    // Defaults when variableSpeed / pct fields are missing on the row.
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      variableSpeed: undefined,
+      slowSpeedPct: undefined,
+      fastSpeedPct: undefined,
+    });
+    plcService.writeHolding.mockClear();
+    await service.activateCell('c1', true, {
+      role: UserRole.OPERATOR,
+      speed: 'slow',
+    });
+    expect(plcService.writeHolding).toHaveBeenCalledWith(2, 30);
+
+    // Skip speed writes when cell opts out.
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      variableSpeed: false,
+    });
+    plcService.writeHolding.mockClear();
+    plcService.writeCoil.mockClear();
+    await service.activateCell('c1', true, { role: UserRole.OPERATOR });
+    expect(plcService.writeHolding).not.toHaveBeenCalled();
+    expect(plcService.writeCoil).toHaveBeenCalledWith(0, true);
+
+    // Ignore non-holding speed register maps.
+    cells.findOne.mockResolvedValue(motionCell);
+    registers.findOneBy.mockResolvedValue({
+      name: 'holding.speedPct',
+      kind: 'coil',
+      address: 2,
+    });
+    plcService.writeHolding.mockClear();
+    await service.activateCell('c1', true, {
+      role: UserRole.OPERATOR,
+      speed: 'fast',
+    });
+    expect(plcService.writeHolding).not.toHaveBeenCalled();
+  });
+
   it('writes holding on/off and rejects read-only kinds', async () => {
     safetyState.canIssueMotion.mockReturnValue(true);
     cells.findOne.mockResolvedValue({
       ...motionCell,
       isMotion: false,
+      variableSpeed: false,
       primaryRegister: { kind: 'holding', address: 5 },
     });
     await service.activateCell('c1', true, { role: UserRole.OPERATOR });
@@ -385,6 +457,41 @@ describe('HmiService', () => {
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'cell.update' }),
     );
+  });
+
+  it('validates and clamps cell variable-speed percents (FEAT-A2)', async () => {
+    registers.findOneBy.mockImplementation(async ({ id }: { id: string }) => ({
+      id,
+      name: id,
+      kind: 'holding',
+    }));
+    const clamped = await service.createCell({
+      ...cellInput,
+      isMotion: true,
+      variableSpeed: true,
+      slowSpeedPct: 0,
+      fastSpeedPct: 250,
+    });
+    expect(clamped.slowSpeedPct).toBe(1);
+    expect(clamped.fastSpeedPct).toBe(100);
+
+    const fallbacks = await service.createCell({
+      ...cellInput,
+      isMotion: true,
+      slowSpeedPct: Number.NaN,
+      fastSpeedPct: Number.POSITIVE_INFINITY,
+    });
+    expect(fallbacks.slowSpeedPct).toBe(30);
+    expect(fallbacks.fastSpeedPct).toBe(100);
+
+    await expect(
+      service.createCell({
+        ...cellInput,
+        isMotion: true,
+        slowSpeedPct: 80,
+        fastSpeedPct: 40,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects a bad cell and a missing cell', async () => {

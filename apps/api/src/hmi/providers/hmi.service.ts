@@ -172,6 +172,7 @@ export class HmiService {
       role?: UserRole;
       safeActionPin?: string;
       ip?: string;
+      speed?: 'slow' | 'fast';
     },
   ) {
     const cell = await this.cells.findOne({ where: { id: cellId } });
@@ -198,6 +199,13 @@ export class HmiService {
       return { ok: true, cellId: cell.id, value: false, latched: true };
     }
 
+    const speedMode = opts.speed === 'slow' ? 'slow' : 'fast';
+    const usesVariableSpeed = cell.isMotion && (cell.variableSpeed ?? true);
+
+    if (usesVariableSpeed && value) {
+      await this.writeJogSpeedPct(cell, speedMode);
+    }
+
     const reg = cell.primaryRegister;
     if (reg.kind === 'coil') {
       await this.plcService.writeCoil(reg.address, value);
@@ -207,13 +215,19 @@ export class HmiService {
       throw new ForbiddenException('Register is read-only');
     }
 
+    if (usesVariableSpeed && !value) {
+      await this.writeJogSpeedPct(cell, null);
+    }
+
     await this.auditService.write({
       userId: opts.userId,
       userEmail: opts.userEmail,
       userDisplayName: opts.userDisplayName ?? null,
       action: 'cell.activate',
       resource: cell.label,
-      details: `${cell.label}=${value}`,
+      details: usesVariableSpeed
+        ? `${cell.label}=${value};speed=${value ? speedMode : 'off'}`
+        : `${cell.label}=${value}`,
       ip: opts.ip,
       result: 'success',
     });
@@ -222,7 +236,29 @@ export class HmiService {
       await this.safetyState.latchOperatorEStop(`STOP: ${cell.label}`);
     }
 
-    return { ok: true, cellId: cell.id, value };
+    return {
+      ok: true,
+      cellId: cell.id,
+      value,
+      ...(usesVariableSpeed && value ? { speed: speedMode } : {}),
+    };
+  }
+
+  /** FEAT-A2: write holding.speedPct for slow/fast jog (0 clears). */
+  private async writeJogSpeedPct(
+    cell: Cell,
+    mode: 'slow' | 'fast' | null,
+  ): Promise<void> {
+    const speedReg = await this.registers.findOneBy({
+      name: 'holding.speedPct',
+    });
+    if (!speedReg || speedReg.kind !== 'holding') {
+      return;
+    }
+    const slow = Math.min(100, Math.max(1, cell.slowSpeedPct ?? 30));
+    const fast = Math.min(100, Math.max(1, cell.fastSpeedPct ?? 100));
+    const pct = mode === null ? 0 : mode === 'slow' ? slow : fast;
+    await this.plcService.writeHolding(speedReg.address, pct);
   }
 
   async createCell(input: CellInput, actor?: Actor): Promise<Cell> {
@@ -409,6 +445,13 @@ export class HmiService {
       throw new BadRequestException('Row and column must be integers 0 to 32');
     }
     const primaryRegister = await this.registerById(input.primaryRegisterId);
+    const slowSpeedPct = clampSpeedPct(input.slowSpeedPct, 30);
+    const fastSpeedPct = clampSpeedPct(input.fastSpeedPct, 100);
+    if (slowSpeedPct > fastSpeedPct) {
+      throw new BadRequestException(
+        'slowSpeedPct must be less than or equal to fastSpeedPct',
+      );
+    }
     return {
       row: input.row,
       col: input.col,
@@ -416,6 +459,9 @@ export class HmiService {
       style,
       isMotion: input.isMotion,
       requiresSafeAction: input.requiresSafeAction,
+      variableSpeed: input.variableSpeed ?? input.isMotion,
+      slowSpeedPct,
+      fastSpeedPct,
       primaryRegister,
       feedbackRegister: await this.optionalRegister(input.feedbackRegisterId),
       statusRegister: await this.optionalRegister(input.statusRegisterId),
@@ -468,9 +514,17 @@ interface CellInput {
   style: string;
   isMotion: boolean;
   requiresSafeAction: boolean;
+  variableSpeed?: boolean;
+  slowSpeedPct?: number;
+  fastSpeedPct?: number;
   primaryRegisterId: string;
   feedbackRegisterId?: string | null;
   statusRegisterId?: string | null;
+}
+
+function clampSpeedPct(value: number | undefined, fallback: number): number {
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.min(100, Math.max(1, Math.round(value)));
 }
 
 interface OverlayInput {

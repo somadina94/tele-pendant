@@ -49,9 +49,15 @@ export function OperatorScreen({ token }: { token: string }) {
   const statePalette = matrixCellStatePalette(theme === 'dark');
   const [pin, setPin] = useState('');
   const [holdingId, setHoldingId] = useState<string | null>(null);
+  const [jogSpeed, setJogSpeed] = useState<'slow' | 'fast'>('fast');
+  const jogSpeedRef = useRef<'slow' | 'fast'>('fast');
   const [safety, setSafety] = useState<SafetySnap>({ mode: 'unknown' });
   const [height, setHeight] = useState<number | null>(null);
   const [tags, setTags] = useState<TagSnapshot | null>(null);
+
+  useEffect(() => {
+    jogSpeedRef.current = jogSpeed;
+  }, [jogSpeed]);
   const [photoOk, setPhotoOk] = useState(true);
   const [liveFallback, setLiveFallback] = useState(false);
   const socketRef = useRef<Socket | null>(null);
@@ -110,7 +116,11 @@ export function OperatorScreen({ token }: { token: string }) {
   const dropMotionCoil = useCallback(
     async (cellId: string) => {
       try {
-        await apiPost(`/hmi/cells/${cellId}/activate`, { value: false }, token);
+        await apiPost(
+          `/hmi/cells/${cellId}/activate`,
+          { value: false, speed: jogSpeedRef.current },
+          token,
+        );
       } catch {
         // Best-effort coil drop.
       }
@@ -147,11 +157,19 @@ export function OperatorScreen({ token }: { token: string }) {
       releaseAfterActivate.current = null;
     }
     activatingId.current = cell.id;
+    const speed =
+      cell.isMotion && (cell.variableSpeed ?? true)
+        ? jogSpeedRef.current
+        : undefined;
     try {
       if (cell.isMotion) {
         await pulseDeadman();
       }
-      await apiPost(`/hmi/cells/${cell.id}/activate`, { value: true }, token);
+      await apiPost(
+        `/hmi/cells/${cell.id}/activate`,
+        { value: true, ...(speed ? { speed } : {}) },
+        token,
+      );
     } catch (err) {
       showErrorAlert(
         operatorApiError(
@@ -436,6 +454,39 @@ export function OperatorScreen({ token }: { token: string }) {
             </View>
           </View>
         </HelpTip>
+        <View className="flex-row flex-wrap items-center gap-2">
+          <Text className="text-xs text-muted-foreground">{t('jogSpeed')}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: jogSpeed === 'slow' }}
+            className="h-12 min-h-12 items-center justify-center rounded-md border px-3"
+            style={{
+              borderColor: jogSpeed === 'slow' ? '#3D9CFD' : '#5C6B7A',
+              backgroundColor:
+                jogSpeed === 'slow' ? 'rgba(61,156,253,0.2)' : 'transparent',
+            }}
+            onPress={() => setJogSpeed('slow')}
+          >
+            <Text className="text-xs font-semibold text-foreground">
+              {t('jogSlow')}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: jogSpeed === 'fast' }}
+            className="h-12 min-h-12 items-center justify-center rounded-md border px-3"
+            style={{
+              borderColor: jogSpeed === 'fast' ? '#3D9CFD' : '#5C6B7A',
+              backgroundColor:
+                jogSpeed === 'fast' ? 'rgba(61,156,253,0.2)' : 'transparent',
+            }}
+            onPress={() => setJogSpeed('fast')}
+          >
+            <Text className="text-xs font-semibold text-foreground">
+              {t('jogFast')}
+            </Text>
+          </Pressable>
+        </View>
         <HelpTip id="tour.operator.matrix">
           <View className="mt-1 gap-[22px]">
             {grid &&

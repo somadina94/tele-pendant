@@ -437,6 +437,9 @@ export function AdminPage() {
                     style: cell.style,
                     isMotion: cell.isMotion,
                     requiresSafeAction: cell.requiresSafeAction,
+                    variableSpeed: cell.variableSpeed ?? cell.isMotion,
+                    slowSpeedPct: cell.slowSpeedPct ?? 30,
+                    fastSpeedPct: cell.fastSpeedPct ?? 100,
                     primaryRegisterId: cell.primaryRegister?.id ?? '',
                     feedbackRegisterId: cell.feedbackRegister?.id ?? '',
                     statusRegisterId: cell.statusRegister?.id ?? '',
@@ -469,6 +472,9 @@ export function AdminPage() {
                     style: 'default',
                     isMotion: false,
                     requiresSafeAction: false,
+                    variableSpeed: false,
+                    slowSpeedPct: 30,
+                    fastSpeedPct: 100,
                     primaryRegisterId: registers[0]?.id ?? '',
                     feedbackRegisterId: '',
                     statusRegisterId: '',
@@ -1269,6 +1275,9 @@ interface CellForm {
   style: string;
   isMotion: boolean;
   requiresSafeAction: boolean;
+  variableSpeed: boolean;
+  slowSpeedPct: number;
+  fastSpeedPct: number;
   primaryRegisterId: string;
   feedbackRegisterId: string;
   statusRegisterId: string;
@@ -1321,6 +1330,7 @@ function CellEditor({
   onSubmit: (value: CellForm) => Promise<void>;
   onDelete?: () => Promise<void>;
 }) {
+  const { t } = useT();
   const [row, setRow] = useState(String(initial.row));
   const [col, setCol] = useState(String(initial.col));
   const [label, setLabel] = useState(initial.label);
@@ -1328,6 +1338,13 @@ function CellEditor({
   const [isMotion, setIsMotion] = useState(initial.isMotion);
   const [requiresSafeAction, setRequiresSafeAction] = useState(
     initial.requiresSafeAction,
+  );
+  const [variableSpeed, setVariableSpeed] = useState(initial.variableSpeed);
+  const [slowSpeedPct, setSlowSpeedPct] = useState(
+    String(initial.slowSpeedPct),
+  );
+  const [fastSpeedPct, setFastSpeedPct] = useState(
+    String(initial.fastSpeedPct),
   );
   const [primaryRegisterId, setPrimaryRegisterId] = useState(
     initial.primaryRegisterId,
@@ -1340,6 +1357,7 @@ function CellEditor({
   );
   const motionId = useId();
   const safeId = useId();
+  const variableId = useId();
   const { askDelete, deleteConfirmDialog } = useDeleteConfirmDialog();
 
   async function submit(event: FormEvent) {
@@ -1352,6 +1370,9 @@ function CellEditor({
         style,
         isMotion,
         requiresSafeAction,
+        variableSpeed: isMotion ? variableSpeed : false,
+        slowSpeedPct: Number(slowSpeedPct) || 30,
+        fastSpeedPct: Number(fastSpeedPct) || 100,
         primaryRegisterId,
         feedbackRegisterId,
         statusRegisterId,
@@ -1468,7 +1489,46 @@ function CellEditor({
           />
           <Label htmlFor={safeId}>Safe action</Label>
         </div>
+        {isMotion ? (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id={variableId}
+              aria-label={`${noteKey} variable-speed`}
+              checked={variableSpeed}
+              onCheckedChange={(checked) => setVariableSpeed(checked === true)}
+            />
+            <Label htmlFor={variableId}>{t('variableSpeed')}</Label>
+          </div>
+        ) : null}
       </div>
+      {isMotion && variableSpeed ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor={`${noteKey}-slow`}>{t('slowSpeedPct')}</Label>
+            <Input
+              id={`${noteKey}-slow`}
+              aria-label={`${noteKey} slow-speed`}
+              type="number"
+              min={1}
+              max={100}
+              value={slowSpeedPct}
+              onChange={(event) => setSlowSpeedPct(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`${noteKey}-fast`}>{t('fastSpeedPct')}</Label>
+            <Input
+              id={`${noteKey}-fast`}
+              aria-label={`${noteKey} fast-speed`}
+              type="number"
+              min={1}
+              max={100}
+              value={fastSpeedPct}
+              onChange={(event) => setFastSpeedPct(event.target.value)}
+            />
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Button type="submit">
           {submitLabel === 'Add cell' ? <Plus /> : <Save />}

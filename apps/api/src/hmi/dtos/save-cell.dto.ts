@@ -43,6 +43,28 @@ export class SaveCellDto {
   @IsBoolean()
   requiresSafeAction!: boolean;
 
+  @ApiPropertyOptional({
+    description:
+      'FEAT-A2: write holding.speedPct slow/fast while motion is held',
+  })
+  @IsOptional()
+  @IsBoolean()
+  variableSpeed?: boolean;
+
+  @ApiPropertyOptional({ example: 30 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  slowSpeedPct?: number;
+
+  @ApiPropertyOptional({ example: 100 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  fastSpeedPct?: number;
+
   @ApiProperty()
   @IsString()
   @MinLength(1)

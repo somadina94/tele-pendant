@@ -633,6 +633,69 @@ describe('OperatorPage', () => {
     expect(hoist).toHaveTextContent('Hoist Up');
   });
 
+  it('sends slow vs fast speed on motion activate (FEAT-A2)', async () => {
+    renderWithProviders(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    expect(screen.getByRole('button', { name: 'Slow' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Slow' }));
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: true, speed: 'slow' }),
+      ),
+    );
+    fireEvent.pointerUp(hoist);
+    fireEvent.click(screen.getByRole('button', { name: 'Fast' }));
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: true, speed: 'fast' }),
+      ),
+    );
+    fireEvent.pointerUp(hoist);
+  });
+
+  it('omits speed on release when the cell disables variable speed (FEAT-A2)', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValue({
+      ...layout,
+      cells: layout.cells.map((cell) =>
+        cell.isMotion ? { ...cell, variableSpeed: false } : cell,
+      ),
+    });
+    renderWithProviders(<OperatorPage />);
+    expect(
+      screen.queryByRole('button', { name: 'Slow' }),
+    ).not.toBeInTheDocument();
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: true }),
+      ),
+    );
+    (api.apiPost as unknown as ReturnType<typeof vi.fn>).mockClear();
+    fireEvent.pointerUp(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: false }),
+      ),
+    );
+    const releaseCall = (
+      api.apiPost as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls.find(
+      (call) =>
+        call[0] === '/hmi/cells/m1/activate' &&
+        (call[1] as { value?: boolean }).value === false,
+    );
+    expect(releaseCall?.[1]).not.toHaveProperty('speed');
+  });
+
   it('maps matrix cells through idle / running / blocked / fault (FEAT-A1)', async () => {
     renderWithProviders(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });

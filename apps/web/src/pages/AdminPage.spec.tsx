@@ -488,11 +488,27 @@ describe('AdminPage', () => {
     });
     fireEvent.click(screen.getByLabelText('c1 motion'));
     fireEvent.click(screen.getByLabelText('c1 safe'));
+    // Motion was on; click toggled it off — turn back on for FEAT-A2 fields.
+    fireEvent.click(screen.getByLabelText('c1 motion'));
+    expect(screen.getByLabelText('c1 variable-speed')).toBeChecked();
+    fireEvent.change(screen.getByLabelText('c1 slow-speed'), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('c1 fast-speed'), {
+      target: { value: '' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save Up' }));
     await screen.findByText('Saved Lift.');
     expect(patch).toHaveBeenCalledWith(
       '/hmi/cells/c1',
-      expect.objectContaining({ label: 'Lift', row: 1, col: 2 }),
+      expect.objectContaining({
+        label: 'Lift',
+        row: 1,
+        col: 2,
+        variableSpeed: true,
+        slowSpeedPct: 30,
+        fastSpeedPct: 100,
+      }),
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete Lift' }));
@@ -531,11 +547,23 @@ describe('AdminPage', () => {
     });
     fireEvent.click(screen.getByLabelText('new-cell motion'));
     fireEvent.click(screen.getByLabelText('new-cell safe'));
+    fireEvent.click(screen.getByLabelText('new-cell variable-speed'));
+    fireEvent.change(screen.getByLabelText('new-cell slow-speed'), {
+      target: { value: '25' },
+    });
+    fireEvent.change(screen.getByLabelText('new-cell fast-speed'), {
+      target: { value: '90' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Add cell' }));
     await screen.findByText('Saved Extra.');
     expect(post).toHaveBeenCalledWith(
       '/hmi/cells',
-      expect.objectContaining({ label: 'Extra' }),
+      expect.objectContaining({
+        label: 'Extra',
+        variableSpeed: true,
+        slowSpeedPct: 25,
+        fastSpeedPct: 90,
+      }),
     );
 
     await goConfigSection('Live labels');

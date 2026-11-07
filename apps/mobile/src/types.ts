@@ -15,6 +15,9 @@ export type Cell = {
   style: string;
   isMotion: boolean;
   requiresSafeAction: boolean;
+  variableSpeed?: boolean;
+  slowSpeedPct?: number;
+  fastSpeedPct?: number;
   primaryRegister?: RegisterRef | null;
   feedbackRegister?: RegisterRef | null;
   statusRegister?: RegisterRef | null;
