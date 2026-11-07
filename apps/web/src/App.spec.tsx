@@ -95,7 +95,7 @@ describe('App', () => {
   it('allows authed routes when token present', async () => {
     localStorage.setItem('accessToken', 'tok');
     renderWithProviders(<App />, { route: '/operator' });
-    expect(await screen.findByText('Control matrix')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'STOP' })).toBeInTheDocument();
   });
 
   it('sends expired tokens back to login after session check', async () => {
