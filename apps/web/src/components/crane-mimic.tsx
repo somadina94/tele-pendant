@@ -9,19 +9,20 @@ type SafetyLike = {
 };
 
 const MOTOR_FILL = {
-  idle: '#6b7c8a',
-  run: '#5a9e86',
-  fault: '#c45b6a',
+  idle: '#8a9bab',
+  run: '#6ec4a3',
+  fault: '#e07a88',
 } as const;
 
 const SAFETY_STROKE = {
-  ok: 'rgba(143, 208, 192, 0.55)',
-  warn: 'rgba(252, 211, 77, 0.65)',
-  danger: 'rgba(251, 113, 133, 0.8)',
+  ok: 'rgba(160, 220, 200, 0.75)',
+  warn: 'rgba(252, 211, 77, 0.85)',
+  danger: 'rgba(251, 113, 133, 0.95)',
 } as const;
 
 /**
  * FEAT-HMI phase 1: ISA-101-ish muted SVG crane mimic driven by live tags.
+ * Uses SVG transform attributes (not CSS) so the trolley/hook stay in viewBox.
  */
 export function CraneMimic({
   tags,
@@ -41,6 +42,7 @@ export function CraneMimic({
   const hookMinY = 46;
   const hookMaxY = 118;
   const hookY = hookMaxY - view.hoistPct * (hookMaxY - hookMinY);
+  const ropeLen = Math.max(8, hookY - (bridgeY + 14));
   const motorFill = MOTOR_FILL[view.motorTone];
   const frameStroke = SAFETY_STROKE[view.safetyTone];
   const loadWidth = Math.max(2, view.loadPct * 56);
@@ -55,13 +57,6 @@ export function CraneMimic({
       data-motor={view.motorTone}
       data-safety={view.safetyTone}
     >
-      <defs>
-        <linearGradient id="crane-deck" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgba(180,195,210,0.18)" />
-          <stop offset="100%" stopColor="rgba(20,24,28,0.55)" />
-        </linearGradient>
-      </defs>
-
       {/* Bay / deck */}
       <rect
         x="18"
@@ -69,14 +64,14 @@ export function CraneMimic({
         width="364"
         height="10"
         rx="2"
-        fill="url(#crane-deck)"
-        stroke="rgba(210,220,230,0.22)"
+        fill="rgba(180,195,210,0.2)"
+        stroke="rgba(220,230,240,0.35)"
         strokeWidth="1"
       />
 
       {/* Columns */}
-      <rect x="28" y="24" width="8" height="98" fill="#3d4650" />
-      <rect x="364" y="24" width="8" height="98" fill="#3d4650" />
+      <rect x="28" y="24" width="8" height="98" fill="#7a8794" />
+      <rect x="364" y="24" width="8" height="98" fill="#7a8794" />
 
       {/* Bridge beam */}
       <rect
@@ -85,7 +80,7 @@ export function CraneMimic({
         width="344"
         height="10"
         rx="2"
-        fill="#4a5560"
+        fill="#9aa6b2"
         stroke={frameStroke}
         strokeWidth="1.5"
       />
@@ -94,26 +89,21 @@ export function CraneMimic({
         y1={bridgeY + 14}
         x2="364"
         y2={bridgeY + 14}
-        stroke="rgba(210,220,230,0.35)"
+        stroke="rgba(230,238,245,0.55)"
         strokeWidth="1.5"
         strokeLinecap="round"
       />
 
-      {/* Trolley + motor */}
-      <g
-        style={{
-          transform: `translate(${trolleyX}px, ${bridgeY + 8}px)`,
-          transition: 'transform 180ms linear',
-        }}
-      >
+      {/* Trolley + motor + hook */}
+      <g transform={`translate(${trolleyX} ${bridgeY + 8})`}>
         <rect
           x="-18"
           y="0"
           width="36"
           height="14"
           rx="2"
-          fill="#5c6772"
-          stroke="rgba(255,255,255,0.18)"
+          fill="#b0bcc8"
+          stroke="rgba(255,255,255,0.35)"
         />
         <rect
           x="-10"
@@ -124,28 +114,20 @@ export function CraneMimic({
           fill={motorFill}
           className={cn(view.motorTone === 'run' && 'crane-mimic-motor-run')}
         />
-        {/* Rope */}
         <line
           x1="0"
           y1="14"
           x2="0"
-          y2={hookY - (bridgeY + 8)}
-          stroke="rgba(220,228,235,0.7)"
-          strokeWidth="1.5"
+          y2={14 + ropeLen}
+          stroke="rgba(235,242,250,0.9)"
+          strokeWidth="1.75"
           strokeLinecap="round"
-          style={{ transition: 'y2 180ms linear' }}
         />
-        {/* Hook / load block */}
-        <g
-          style={{
-            transform: `translate(0px, ${hookY - (bridgeY + 8)}px)`,
-            transition: 'transform 180ms linear',
-          }}
-        >
+        <g transform={`translate(0 ${14 + ropeLen})`}>
           <path
             d="M-7 0 L7 0 L4 10 L-4 10 Z"
-            fill="#6a7380"
-            stroke="rgba(255,255,255,0.2)"
+            fill="#c5d0db"
+            stroke="rgba(255,255,255,0.35)"
           />
           <rect
             x="-8"
@@ -153,20 +135,19 @@ export function CraneMimic({
             width="16"
             height="8"
             rx="1"
-            fill={view.loadPct > 0.05 ? '#7a8694' : '#4e5762'}
+            fill={view.loadPct > 0.05 ? '#d0dae4' : '#8a96a2'}
           />
         </g>
       </g>
 
       {/* Load bar + motor legend */}
-      <g transform="translate(48, 8)">
+      <g transform="translate(48 8)">
         <text
           x="0"
           y="0"
-          fill="rgba(255,255,255,0.45)"
+          fill="rgba(255,255,255,0.55)"
           fontSize="8"
           letterSpacing="1.6"
-          style={{ textTransform: 'uppercase' }}
         >
           LOAD
         </text>
@@ -176,7 +157,7 @@ export function CraneMimic({
           width="56"
           height="5"
           rx="1"
-          fill="rgba(255,255,255,0.08)"
+          fill="rgba(255,255,255,0.12)"
         />
         <rect
           x="0"
@@ -186,21 +167,20 @@ export function CraneMimic({
           rx="1"
           fill={
             view.loadPct > 0.85
-              ? '#c45b6a'
+              ? '#e07a88'
               : view.loadPct > 0.55
-                ? '#c9a227'
-                : '#5a9e86'
+                ? '#d4b03a'
+                : '#6ec4a3'
           }
-          style={{ transition: 'width 180ms linear' }}
         />
       </g>
 
-      <g transform="translate(300, 10)">
+      <g transform="translate(300 10)">
         <circle cx="0" cy="0" r="4" fill={motorFill} />
         <text
           x="8"
           y="3"
-          fill="rgba(255,255,255,0.7)"
+          fill="rgba(255,255,255,0.8)"
           fontSize="9"
           letterSpacing="1.2"
         >
@@ -213,7 +193,7 @@ export function CraneMimic({
       </g>
 
       {view.safetyTone !== 'ok' ? (
-        <g transform="translate(160, 10)">
+        <g transform="translate(160 10)">
           <rect
             x="0"
             y="-8"
@@ -222,15 +202,15 @@ export function CraneMimic({
             rx="7"
             fill={
               view.safetyTone === 'danger'
-                ? 'rgba(196,91,106,0.35)'
-                : 'rgba(201,162,39,0.3)'
+                ? 'rgba(196,91,106,0.45)'
+                : 'rgba(201,162,39,0.4)'
             }
             stroke={frameStroke}
           />
           <text
             x="8"
             y="2"
-            fill="rgba(255,255,255,0.9)"
+            fill="rgba(255,255,255,0.95)"
             fontSize="8"
             letterSpacing="1.4"
           >

@@ -712,11 +712,11 @@ export function OperatorPage() {
             </div>
           </HelpTip>
 
-          <Card className="operator-matrix-card overflow-visible">
+          <Card className="operator-matrix-card overflow-hidden">
             <CardHeader className="hidden space-y-0 px-4 py-1.5 md:block md:space-y-0 md:py-2">
               <CardTitle className="text-sm">{t('controlMatrix')}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-1 px-2 pb-2 pt-2 md:space-y-1.5 md:px-3 md:pb-3 md:pt-0">
+            <CardContent className="space-y-2 px-2 pb-3 pt-2 md:space-y-2 md:px-3 md:pb-3 md:pt-0">
               <HelpTip id="tour.operator.safePin">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <Label
