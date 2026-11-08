@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { ApiAuth } from '../common/swagger/api-auth.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -123,6 +124,7 @@ export class SafetyController {
   }
 
   @Post('deadman/pulse')
+  @SkipThrottle()
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Pulse deadman hold (also available over WS)' })
   pulse(@Req() req: Request & { user: JwtPayload }) {

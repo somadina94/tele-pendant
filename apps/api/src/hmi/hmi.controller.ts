@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { ApiAuth } from '../common/swagger/api-auth.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -210,6 +211,7 @@ export class HmiController {
   }
 
   @Post('cells/:id/activate')
+  @SkipThrottle()
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Press/release a matrix cell (Modbus write)' })
   activate(

@@ -1,5 +1,6 @@
 import { Controller, Get, Inject, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ApiAuth } from '../common/swagger/api-auth.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/providers/jwt-auth.guard';
@@ -21,6 +22,7 @@ export class RealtimeController {
   ) {}
 
   @Get('tags')
+  @SkipThrottle()
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({
     summary: 'Latest live tag snapshot (HTTP backup for tags.update WS)',

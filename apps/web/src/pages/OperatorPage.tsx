@@ -182,7 +182,7 @@ export function OperatorPage() {
       }
     };
     void pull();
-    const id = window.setInterval(pull, 300);
+    const id = window.setInterval(pull, 500);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -245,7 +245,7 @@ export function OperatorPage() {
       }).catch(() => undefined);
     };
     pulse();
-    const id = window.setInterval(pulse, 400);
+    const id = window.setInterval(pulse, 800);
     return () => window.clearInterval(id);
   }, [holdingCellId]);
 

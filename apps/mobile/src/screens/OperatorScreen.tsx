@@ -185,7 +185,7 @@ export function OperatorScreen({ token }: { token: string }) {
       }
     };
     void pull();
-    const id = setInterval(pull, 300);
+    const id = setInterval(pull, 500);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -298,7 +298,7 @@ export function OperatorScreen({ token }: { token: string }) {
       ).catch(() => undefined);
     };
     pulse();
-    const id = setInterval(pulse, 400);
+    const id = setInterval(pulse, 800);
     return () => clearInterval(id);
   }, [holdingId, token]);
 

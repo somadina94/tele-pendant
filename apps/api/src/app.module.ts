@@ -32,10 +32,12 @@ const ENV = process.env.NODE_ENV;
       load: [appConfig, databaseConfig],
       validationSchema: enviromentValidation,
     }),
+    // Operator hold pulses tags/deadman/activate several times per second.
+    // 120/min was starving live updates in production (429 → stuttering values).
     ThrottlerModule.forRoot([
       {
         ttl: 60_000,
-        limit: 120,
+        limit: 600,
       },
     ]),
     TypeOrmModule.forRootAsync({
