@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Patch the client retest Word report: add Local/Prod/Verified columns and answer A–D.
+"""Patch the client retest Word report: add Local/Prod/Verified columns and answer A–D (signed as Williams).
 
 Reads:  TelePendant_Test_Report_updated_with_retest.docx
-Writes: TelePendant_Test_Report_vendor_response_8_Nov_2026.docx
+Writes: TelePendant_Test_Report_Williams_response_8_Nov_2026.docx
 """
 
 from __future__ import annotations
@@ -17,9 +17,9 @@ from docx.text.paragraph import Paragraph
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "TelePendant_Test_Report_updated_with_retest.docx"
-OUT = ROOT / "TelePendant_Test_Report_vendor_response_8_Nov_2026.docx"
+OUT = ROOT / "TelePendant_Test_Report_Williams_response_8_Nov_2026.docx"
 HEAD = "d7c4403"
-VERIFIED = "Williams + vendor (code / verify / live smoke)"
+VERIFIED = "Williams (code / verify / live smoke)"
 
 # ID -> (local, prod, verified_note)
 TP_RESULTS: dict[str, tuple[str, str, str]] = {
@@ -220,26 +220,26 @@ AREA_RESULTS: list[tuple[str, str, str]] = [
 
 # Follow-up row updates for original Q&A table (index 1..N)
 QA_VENDOR: list[str] = [
-    "Vendor 8 Nov: STOP one-press confirmed. First PIN now requires plant PIN (TP-38 Pass).",
-    "Vendor 8 Nov: e-stop latch persists across PLC/comms loss; only PIN reset clears (TP-39 Pass).",
-    "Vendor 8 Nov: timed media off on live; voice motion requires deadman (TP-29 Pass).",
-    "Vendor 8 Nov: release clears deadman+motion coils server-side (TP-35 Pass). PLC should stop if holding.heartbeat stale >2 s (REAL_PLC_WIRING).",
-    "Vendor 8 Nov: slide-off / background confirmed Pass (~0.8–0.9 s).",
-    "Vendor 8 Nov: software promises command stop ≤ ~1 poll after release. Real-PLC mechanical overrun is drive ramp; measure on site. Sim clean path ~0 mm.",
-    "Vendor 8 Nov: Media UP/DOWN gone; timed voice gated + deadman; Safety roles PIN verified + audited (TP-42).",
-    "Vendor 8 Nov: first personal PIN requires plant SAFE_ACTION_PIN (TP-38).",
-    "Vendor 8 Nov: Use this PLC confirm; reconnect loop fixed (TP-41).",
-    "Vendor 8 Nov: trolley feedback available when registers mapped (TP-15).",
-    "Vendor 8 Nov: shelved/open alarms reload at start-up (TP-09).",
-    "Vendor 8 Nov: Motion blocked banner clears after PIN reset (TP-08).",
-    "Vendor 8 Nov: ZXing Pass (TP-16).",
-    "Vendor 8 Nov: iOS IPA via handover:mobile:ios; release Android via release keystore (TP-43).",
-    "Vendor 8 Nov: Apple checklist unchanged — Team ID, Distribution .p12, profile, credentials.env.",
-    "Vendor 8 Nov: operator/supervisor users on live; roles exercised.",
-    "Vendor 8 Nov: exclusive control lease + steal+PIN (FEAT-A5 Pass). Not last-write-wins.",
-    "Vendor 8 Nov: release-signed APK/AAB + code-signed OTA (TP-43). Secrets out of band.",
-    "Vendor 8 Nov: Swagger off, headers, HSTS, CORS allowlist, JWT realtime (TP-34/44/37).",
-    "Vendor 8 Nov: audit filters/CSV; PLC writes, safety roles, alarm ack logged.",
+    "Williams 8 Nov: STOP one-press confirmed. First PIN now requires plant PIN (TP-38 Pass).",
+    "Williams 8 Nov: e-stop latch persists across PLC/comms loss; only PIN reset clears (TP-39 Pass).",
+    "Williams 8 Nov: timed media off on live; voice motion requires deadman (TP-29 Pass).",
+    "Williams 8 Nov: release clears deadman+motion coils server-side (TP-35 Pass). PLC should stop if holding.heartbeat stale >2 s (REAL_PLC_WIRING).",
+    "Williams 8 Nov: slide-off / background confirmed Pass (~0.8–0.9 s).",
+    "Williams 8 Nov: software promises command stop ≤ ~1 poll after release. Real-PLC mechanical overrun is drive ramp; measure on site. Sim clean path ~0 mm.",
+    "Williams 8 Nov: Media UP/DOWN gone; timed voice gated + deadman; Safety roles PIN verified + audited (TP-42).",
+    "Williams 8 Nov: first personal PIN requires plant SAFE_ACTION_PIN (TP-38).",
+    "Williams 8 Nov: Use this PLC confirm; reconnect loop fixed (TP-41).",
+    "Williams 8 Nov: trolley feedback available when registers mapped (TP-15).",
+    "Williams 8 Nov: shelved/open alarms reload at start-up (TP-09).",
+    "Williams 8 Nov: Motion blocked banner clears after PIN reset (TP-08).",
+    "Williams 8 Nov: ZXing Pass (TP-16).",
+    "Williams 8 Nov: iOS IPA via handover:mobile:ios; release Android via release keystore (TP-43).",
+    "Williams 8 Nov: Apple checklist unchanged — Team ID, Distribution .p12, profile, credentials.env.",
+    "Williams 8 Nov: operator/supervisor users on live; roles exercised.",
+    "Williams 8 Nov: exclusive control lease + steal+PIN (FEAT-A5 Pass). Not last-write-wins.",
+    "Williams 8 Nov: release-signed APK/AAB + code-signed OTA (TP-43). Secrets out of band.",
+    "Williams 8 Nov: Swagger off, headers, HSTS, CORS allowlist, JWT realtime (TP-34/44/37).",
+    "Williams 8 Nov: audit filters/CSV; PLC writes, safety roles, alarm ack logged.",
 ]
 
 MOBILE_RESULT_UPDATES: dict[str, tuple[str, str]] = {
@@ -367,7 +367,7 @@ SECTION_D_ANSWERS: list[tuple[str, str]] = [
     ),
     (
         "Please confirm the live demo runs 16cd252.",
-        f"Superseded. GitHub main tip at vendor response is {HEAD} (includes Critical/High fixes, Section A grid/HMI, and per-user email 2FA). Please retest against current main / redeployed live, not 16cd252 alone.",
+        f"Superseded. GitHub main tip at Williams response is {HEAD} (includes Critical/High fixes, Section A grid/HMI, and per-user email 2FA). Please retest against current main / redeployed live, not 16cd252 alone.",
     ),
     (
         "The live Assistant uses the online AI (Cursor key set)",
@@ -424,7 +424,7 @@ def add_column(table, header: str, values: list[str]) -> None:
         set_cell(row.cells[-1], text, bold=(i == 0))
 
 
-def insert_after(paragraph: Paragraph, text: str, bold_prefix: str = "Vendor answer (8 Nov 2026): ") -> Paragraph:
+def insert_after(paragraph: Paragraph, text: str, bold_prefix: str = "Williams answer (8 Nov 2026): ") -> Paragraph:
     from docx.oxml import OxmlElement
 
     new_p_el = OxmlElement("w:p")
@@ -462,7 +462,7 @@ def answer_matching(doc: Document, pairs: list[tuple[str, str]]) -> None:
         nxt = p._p.getnext()
         if nxt is not None:
             texts = "".join(t.text or "" for t in nxt.iter(qn("w:t")))
-            if texts.startswith("Vendor answer"):
+            if texts.startswith("Williams answer"):
                 continue
         insert_after(p, answer)
 
@@ -477,7 +477,7 @@ def main() -> None:
     if doc.paragraphs[1].text.startswith("Revision:"):
         doc.paragraphs[1].text = ""
         r = doc.paragraphs[1].add_run(
-            f"Revision: 8 Nov 2026 vendor response · main {HEAD} "
+            f"Revision: 8 Nov 2026 Williams response · main {HEAD} "
             "(Critical/High closed, Section A grid/HMI, per-user email 2FA). "
             "Added Local result / Prod result / Verified by columns; answers under A–D."
         )
@@ -492,7 +492,7 @@ def main() -> None:
             "This file adds Local result / Prod result / Verified by on the issue tables "
             "and answers Sections A–D from the 6 Nov retest questions. "
             f"Source of the client retest columns remains H. M. Lakshmi (6 Nov 2026).",
-            bold_prefix="Vendor note (8 Nov 2026): ",
+            bold_prefix="Williams note (8 Nov 2026): ",
         )
 
     # Summary bump
@@ -500,7 +500,7 @@ def main() -> None:
         if p.text.startswith("Original review (28 findings"):
             p.text = (
                 "Original review (28 findings) plus TP-29–TP-50 from the 6 Nov retest: "
-                "as of 8 Nov 2026 vendor response, tracked cases are Pass on main "
+                "as of 8 Nov 2026 Williams response, tracked cases are Pass on main "
                 f"({HEAD}) after local verify and live smoke where noted in the new columns. "
                 "Remaining hardware-only items (physical phone install M-14/15/16, real-PLC "
                 "mapping session) are scheduling/ops, not open software defects."
@@ -538,8 +538,8 @@ def main() -> None:
         print(f"WARN: QA_VENDOR len {len(QA_VENDOR)} vs rows {len(t2.rows)-1}")
     vals = list(QA_VENDOR)
     while len(vals) < len(t2.rows) - 1:
-        vals.append("Vendor 8 Nov: see Sections A–D answers.")
-    add_column(t2, "Vendor update (8 Nov 2026)", vals[: len(t2.rows) - 1])
+        vals.append("Williams 8 Nov: see Sections A–D answers.")
+    add_column(t2, "Williams update (8 Nov 2026)", vals[: len(t2.rows) - 1])
 
     # Table 3 — mobile
     t3 = doc.tables[3]
@@ -578,7 +578,7 @@ def main() -> None:
         "alarms highlighted on the part of the crane that has the problem",
     ]:
         p = find_para(doc, bullet)
-        if p and "Vendor answer" not in (p.text or ""):
+        if p and "Williams answer" not in (p.text or ""):
             # mark covered by parent answer — light note once on first bullet only
             pass
     answer_matching(doc, SECTION_B_ANSWERS)
