@@ -45,8 +45,17 @@ export class SafetyStateService {
   private deadmanHolderSocketId: string | null = null;
   /** After release/timeout: keep retrying PLC drop until deadman+motion coils are cleared. */
   private needsMotionDrop = false;
+  /** Bumped on pulse so an in-flight coil-drop cannot clear after a newer hold. */
+  private dropGeneration = 0;
   private readonly watchdogTimeoutMs = 2000;
-  private readonly deadmanTimeoutMs = 1500;
+  /** Allow a few missed client pulses under prod RTT before dropping motion. */
+  private readonly deadmanTimeoutMs = 2500;
+  /**
+   * Transient Modbus timeouts must not clear motion coils (that freezes live
+   * height/trolley until the next press). Require consecutive tick failures.
+   */
+  private readonly commsFailThreshold = 3;
+  private consecutiveCommsFails = 0;
   private allowTimedMedia = false;
 
   private readonly plcService: PlcService;
@@ -295,8 +304,21 @@ export class SafetyStateService {
     this.lastClientPulseAt = new Date();
     this.deadmanActive = true;
     this.deadmanHolderUserId = userId;
-    this.deadmanHolderSocketId = holder.socketId?.trim() || null;
+    const socketId = holder.socketId?.trim() || null;
+    // HTTP pulses omit socketId — keep the WS binding so reconnect matching stays stable.
+    this.deadmanHolderSocketId = socketId || this.deadmanHolderSocketId;
     this.needsMotionDrop = false;
+    this.dropGeneration += 1;
+  }
+
+  /**
+   * Socket.io flap mid-hold: drop the socket binding only. HTTP deadman pulses
+   * keep motion alive; true loss still expires via deadmanTimeoutMs (TP-35).
+   */
+  noteSocketDisconnect(socketId: string): void {
+    const id = socketId?.trim();
+    if (!id || this.deadmanHolderSocketId !== id) return;
+    this.deadmanHolderSocketId = null;
   }
 
   /**
@@ -338,11 +360,12 @@ export class SafetyStateService {
 
   /**
    * Write deadman coil false and clear all motion coils. Retried from tick()
-   * while needsMotionDrop remains set.
+   * while needsMotionDrop remains set. Aborts if a newer pulse arrived mid-drop.
    */
   private async dropMotionAndDeadmanCoil(): Promise<void> {
     const driver = this.plcService.getDriver();
     if (!driver.isConnected()) return;
+    const gen = this.dropGeneration;
     try {
       const deadman = await this.roleAddress(
         'deadmanRegisterId',
@@ -350,7 +373,9 @@ export class SafetyStateService {
         DEMO_CRANE_MAP.coils.deadman,
       );
       await driver.writeCoil(deadman, false);
+      if (gen !== this.dropGeneration || !this.needsMotionDrop) return;
       await this.clearMotionCoils();
+      if (gen !== this.dropGeneration || !this.needsMotionDrop) return;
       this.needsMotionDrop = false;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -383,8 +408,16 @@ export class SafetyStateService {
   async tick(): Promise<SafetySnapshot> {
     const driver = this.plcService.getDriver();
     if (!driver.isConnected()) {
+      this.consecutiveCommsFails += 1;
       // TP-39: never clear the software e-stop latch on comms loss.
-      await this.enterMode('comms_lost', 'PLC disconnected');
+      if (this.consecutiveCommsFails >= this.commsFailThreshold) {
+        await this.enterMode('comms_lost', 'PLC disconnected');
+      } else {
+        this.watchdogOk = false;
+        this.logger.debug(
+          `PLC disconnected (fail ${this.consecutiveCommsFails}/${this.commsFailThreshold})`,
+        );
+      }
       return this.snapshot();
     }
 
@@ -401,11 +434,13 @@ export class SafetyStateService {
       // Latch sticks until resetEStop (PIN); coil high also asserts it.
       this.eStopActive = this.eStopActive || coilHigh;
       if (coilHigh) {
+        this.consecutiveCommsFails = 0;
         await this.enterMode('e_stop', 'E-stop coil asserted');
         return this.snapshot();
       }
       if (this.eStopActive) {
         // Re-assert e_stop after reconnect / coil drop until PIN reset (TP-39).
+        this.consecutiveCommsFails = 0;
         if (this.mode !== 'e_stop') {
           await this.enterMode('e_stop', 'Software e-stop still latched');
         }
@@ -422,6 +457,7 @@ export class SafetyStateService {
       await driver.writeRegister(heartbeat, beat);
       this.lastHeartbeatAt = new Date();
       this.watchdogOk = true;
+      this.consecutiveCommsFails = 0;
 
       // Deadman expiry (lost pulses) or pending drop after explicit release
       if (
@@ -446,9 +482,16 @@ export class SafetyStateService {
         this.mode = 'normal';
       }
     } catch (err) {
+      this.consecutiveCommsFails += 1;
       this.watchdogOk = false;
       const message = err instanceof Error ? err.message : 'watchdog failure';
-      await this.enterMode('comms_lost', message);
+      if (this.consecutiveCommsFails >= this.commsFailThreshold) {
+        await this.enterMode('comms_lost', message);
+      } else {
+        this.logger.debug(
+          `PLC tick fail ${this.consecutiveCommsFails}/${this.commsFailThreshold}: ${message}`,
+        );
+      }
     }
 
     return this.snapshot();

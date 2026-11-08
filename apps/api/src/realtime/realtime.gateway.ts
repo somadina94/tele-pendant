@@ -68,14 +68,15 @@ export class RealtimeGateway
   }
 
   /**
-   * Link drop mid-hold: clear that session's deadman + motion coils instead of
-   * waiting for the ~1.5s pulse timeout. Keep the timeout as a second layer.
+   * Link flap mid-hold: unbind this socket only. Do not clear motion coils —
+   * HTTP deadman pulses + deadmanTimeoutMs cover a true drop (avoids prod stutter
+   * when Socket.IO reconnects through the proxy).
    */
   handleDisconnect(client: Socket) {
     this.logger.warn(
-      `Realtime disconnect ${client.id}; releasing holder deadman if any`,
+      `Realtime disconnect ${client.id}; clearing socket deadman binding if any`,
     );
-    void this.safetyState.releaseDeadman({ socketId: client.id });
+    this.safetyState.noteSocketDisconnect(client.id);
   }
 
   @SubscribeMessage('deadman.pulse')

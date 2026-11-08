@@ -224,6 +224,7 @@ export class HmiController {
       role: req.user.role,
       safeActionPin: dto.safeActionPin,
       speed: dto.speed,
+      refresh: dto.refresh,
       ip: req.ip,
     });
   }

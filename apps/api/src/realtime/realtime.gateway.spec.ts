@@ -4,6 +4,7 @@ describe('RealtimeGateway', () => {
   const safetyState = {
     pulseDeadman: jest.fn(),
     releaseDeadman: jest.fn().mockResolvedValue({ mode: 'normal' }),
+    noteSocketDisconnect: jest.fn(),
     snapshot: jest
       .fn()
       .mockReturnValue({ mode: 'normal', deadmanActive: false }),
@@ -135,11 +136,10 @@ describe('RealtimeGateway', () => {
     expect(authService.assertActiveSession).not.toHaveBeenCalled();
   });
 
-  it('releases only the disconnecting socket holder (TP-37)', () => {
+  it('unbinds the disconnecting socket without clearing motion coils', () => {
     gateway.handleDisconnect(client({ id: 'sock-9' }) as never);
-    expect(safetyState.releaseDeadman).toHaveBeenCalledWith({
-      socketId: 'sock-9',
-    });
+    expect(safetyState.noteSocketDisconnect).toHaveBeenCalledWith('sock-9');
+    expect(safetyState.releaseDeadman).not.toHaveBeenCalled();
   });
 
   it('pulses and releases deadman for the authenticated socket user', async () => {

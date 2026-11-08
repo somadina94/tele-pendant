@@ -204,9 +204,19 @@ export function OperatorPage() {
   useEffect(() => {
     const socket = getRealtimeSocket();
     if (!holdingCellId) return;
-    const id = window.setInterval(() => {
+    const cellId = holdingCellId;
+    const pulse = () => {
       socket.emit('deadman.pulse');
-    }, 400);
+      void apiPost('/safety/deadman/pulse').catch(() => undefined);
+      // Re-assert motion coil so a brief PLC glitch does not freeze live values mid-hold.
+      void apiPost(`/hmi/cells/${cellId}/activate`, {
+        value: true,
+        speed: jogSpeedRef.current,
+        refresh: true,
+      }).catch(() => undefined);
+    };
+    pulse();
+    const id = window.setInterval(pulse, 400);
     return () => window.clearInterval(id);
   }, [holdingCellId]);
 

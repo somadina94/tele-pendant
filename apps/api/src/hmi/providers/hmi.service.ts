@@ -287,6 +287,8 @@ export class HmiService {
       safeActionPin?: string;
       ip?: string;
       speed?: 'slow' | 'fast';
+      /** Hold refresh: rewrite coil without flooding audit. */
+      refresh?: boolean;
     },
   ) {
     const cell = await this.cells.findOne({ where: { id: cellId } });
@@ -333,18 +335,20 @@ export class HmiService {
       await this.writeJogSpeedPct(cell, null);
     }
 
-    await this.auditService.write({
-      userId: opts.userId,
-      userEmail: opts.userEmail,
-      userDisplayName: opts.userDisplayName ?? null,
-      action: 'cell.activate',
-      resource: cell.label,
-      details: usesVariableSpeed
-        ? `${cell.label}=${value};speed=${value ? speedMode : 'off'}`
-        : `${cell.label}=${value}`,
-      ip: opts.ip,
-      result: 'success',
-    });
+    if (!opts.refresh) {
+      await this.auditService.write({
+        userId: opts.userId,
+        userEmail: opts.userEmail,
+        userDisplayName: opts.userDisplayName ?? null,
+        action: 'cell.activate',
+        resource: cell.label,
+        details: usesVariableSpeed
+          ? `${cell.label}=${value};speed=${value ? speedMode : 'off'}`
+          : `${cell.label}=${value}`,
+        ip: opts.ip,
+        result: 'success',
+      });
+    }
 
     if (isEStopCell && value) {
       await this.safetyState.latchOperatorEStop(`STOP: ${cell.label}`);

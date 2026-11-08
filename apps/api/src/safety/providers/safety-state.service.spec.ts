@@ -241,6 +241,90 @@ describe('SafetyStateService', () => {
     expect(service.snapshot().deadmanActive).toBe(false);
   });
 
+  it('keeps deadman across socket flap; HTTP pulse preserves socket binding', () => {
+    claimAs('u1', 'Alice');
+    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    expect(service.canIssueMotion('u1')).toBe(true);
+    service.noteSocketDisconnect('sock-a');
+    expect(service.canIssueMotion('u1')).toBe(true);
+    service.pulseDeadman({ userId: 'u1' }); // HTTP — no socketId
+    service.noteSocketDisconnect('sock-other');
+    expect(service.canIssueMotion('u1')).toBe(true);
+  });
+
+  it('aborts an in-flight coil drop when a newer pulse arrives', async () => {
+    cells.find.mockResolvedValue([
+      { primaryRegister: { kind: 'coil', address: 7 } },
+    ]);
+    claimAs('u1', 'Alice');
+    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    let resolveDeadmanWrite: (() => void) | undefined;
+    const deadmanWriteGate = new Promise<void>((resolve) => {
+      resolveDeadmanWrite = resolve;
+    });
+    driver.writeCoil.mockImplementation(
+      async (addr: number, value: boolean) => {
+        if (addr === 10 && value === false) {
+          await deadmanWriteGate;
+        }
+      },
+    );
+    const releasePromise = service.releaseDeadman({ userId: 'u1' });
+    // Mid-drop: operator still holding — pulse cancels the clear.
+    await Promise.resolve();
+    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    resolveDeadmanWrite?.();
+    await releasePromise;
+    driver.writeCoil.mockClear();
+    await service.tick();
+    // Deadman stays active; tick should re-assert deadman coil true, not clear motion.
+    expect(service.snapshot().deadmanActive).toBe(true);
+    expect(driver.writeCoil).toHaveBeenCalledWith(10, true);
+    expect(driver.writeCoil).not.toHaveBeenCalledWith(7, false);
+  });
+
+  it('aborts after motion coils clear when a newer pulse arrives', async () => {
+    cells.find.mockResolvedValue([
+      { primaryRegister: { kind: 'coil', address: 7 } },
+    ]);
+    claimAs('u1', 'Alice');
+    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    let resolveMotionWrite: (() => void) | undefined;
+    const motionWriteGate = new Promise<void>((resolve) => {
+      resolveMotionWrite = resolve;
+    });
+    let motionWriteStarted = false;
+    driver.writeCoil.mockImplementation(
+      async (addr: number, value: boolean) => {
+        if (addr === 7 && value === false) {
+          motionWriteStarted = true;
+          await motionWriteGate;
+        }
+      },
+    );
+    const releasePromise = service.releaseDeadman({ userId: 'u1' });
+    for (let i = 0; i < 20 && !motionWriteStarted; i += 1) {
+      await Promise.resolve();
+    }
+    expect(motionWriteStarted).toBe(true);
+    // Pulse after clearMotionCoils has begun so the post-clear abort path runs.
+    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    resolveMotionWrite?.();
+    await releasePromise;
+    expect(service.snapshot().deadmanActive).toBe(true);
+    driver.writeCoil.mockClear();
+    await service.tick();
+    expect(driver.writeCoil).toHaveBeenCalledWith(10, true);
+  });
+
+  it('ignores unrelated socket disconnects and empty ids', () => {
+    claimAs('u1', 'Alice');
+    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    service.noteSocketDisconnect('');
+    service.noteSocketDisconnect('sock-other');
+    expect(service.canIssueMotion('u1')).toBe(true);
+  });
+
   it('on release writes deadman coil off and clears motion coils (TP-35)', async () => {
     cells.find.mockResolvedValue([
       { primaryRegister: { kind: 'coil', address: 7 } },
@@ -324,8 +408,10 @@ describe('SafetyStateService', () => {
     expect(snap.eStopActive).toBe(true);
   });
 
-  it('enters comms_lost when disconnected', async () => {
+  it('enters comms_lost when disconnected after consecutive fails', async () => {
     driver.isConnected.mockReturnValue(false);
+    await service.tick();
+    await service.tick();
     const snap = await service.tick();
     expect(snap.mode).toBe('comms_lost');
   });
@@ -336,6 +422,8 @@ describe('SafetyStateService', () => {
     expect(service.snapshot().eStopActive).toBe(true);
 
     driver.isConnected.mockReturnValue(false);
+    await service.tick();
+    await service.tick();
     const lost = await service.tick();
     expect(lost.mode).toBe('comms_lost');
     expect(lost.eStopActive).toBe(true);
@@ -355,6 +443,8 @@ describe('SafetyStateService', () => {
 
   it('restores normal after non-normal mode when healthy', async () => {
     driver.isConnected.mockReturnValue(false);
+    await service.tick();
+    await service.tick();
     await service.tick();
     expect(service.snapshot().mode).toBe('comms_lost');
     driver.isConnected.mockReturnValue(true);
@@ -383,8 +473,12 @@ describe('SafetyStateService', () => {
     expect(driver.writeCoil).toHaveBeenCalledWith(expect.any(Number), false);
   });
 
-  it('enters comms_lost on tick read failure', async () => {
+  it('enters comms_lost only after consecutive tick read failures', async () => {
     driver.readCoils.mockRejectedValue(new Error('timeout'));
+    const first = await service.tick();
+    expect(first.mode).toBe('normal');
+    expect(first.watchdogOk).toBe(false);
+    await service.tick();
     const snap = await service.tick();
     expect(snap.mode).toBe('comms_lost');
     expect(snap.watchdogOk).toBe(false);
@@ -397,8 +491,10 @@ describe('SafetyStateService', () => {
     expect(snap.mode).toBe('e_stop');
   });
 
-  it('handles non-Error throw in tick catch', async () => {
+  it('handles non-Error throw in tick catch after consecutive fails', async () => {
     driver.readCoils.mockRejectedValue('boom');
+    await service.tick();
+    await service.tick();
     const snap = await service.tick();
     expect(snap.mode).toBe('comms_lost');
   });

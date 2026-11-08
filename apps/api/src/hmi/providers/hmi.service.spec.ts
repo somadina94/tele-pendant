@@ -163,6 +163,18 @@ describe('HmiService', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('skips audit on hold refresh activates', async () => {
+    safetyState.canIssueMotion.mockReturnValue(true);
+    auditService.write.mockClear();
+    await service.activateCell('c1', true, {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+      refresh: true,
+    });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(0, true);
+    expect(auditService.write).not.toHaveBeenCalled();
+  });
+
   it('throws when cell missing or without primary register', async () => {
     cells.findOne.mockResolvedValue(null);
     await expect(

@@ -18,4 +18,10 @@ export class ActivateCellDto {
   @IsOptional()
   @IsIn(['slow', 'fast'])
   speed?: 'slow' | 'fast';
+
+  /** Mid-hold coil refresh — skips audit so Operator pulse does not flood the log. */
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  refresh?: boolean;
 }

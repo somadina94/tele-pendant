@@ -18,6 +18,8 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TagPollerService.name);
   private timer: NodeJS.Timeout | null = null;
   private tick = 0;
+  /** Skip overlapping polls — prod Modbus RTT otherwise stacks reads and stalls live tags. */
+  private inFlight = false;
 
   constructor(
     @Inject(PlcService) private readonly plcService: PlcService,
@@ -39,6 +41,8 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async poll(): Promise<void> {
+    if (this.inFlight) return;
+    this.inFlight = true;
     try {
       await this.plcService.reconnectIfNeeded();
       const safety = await this.safetyState.tick();
@@ -116,6 +120,8 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
       this.logger.debug(
         `poll error: ${err instanceof Error ? err.message : 'unknown'}`,
       );
+    } finally {
+      this.inFlight = false;
     }
   }
 }
