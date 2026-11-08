@@ -204,17 +204,19 @@ export function Field({
 export function Card({
   children,
   compact,
+  className = '',
 }: {
   children: ReactNode;
   /** Match web operator control card padding. */
   compact?: boolean;
+  className?: string;
 }) {
   return (
     <View
       className={
         compact
-          ? 'gap-1 rounded-xl border border-border bg-card px-2 pb-2 pt-2'
-          : 'mb-3 rounded-xl border border-border bg-card p-3'
+          ? `gap-1 rounded-xl border border-border bg-card px-2 pb-2 pt-2 ${className}`
+          : `mb-3 rounded-xl border border-border bg-card p-3 ${className}`
       }
     >
       {children}

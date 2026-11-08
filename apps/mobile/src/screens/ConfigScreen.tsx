@@ -554,12 +554,14 @@ function CellForm({
     style: string;
     isMotion: boolean;
     requiresSafeAction: boolean;
+    variableSpeed: boolean;
     primaryRegisterId: string;
     feedbackRegisterId: string;
     statusRegisterId: string;
   }) => Promise<void>;
   onDelete?: () => Promise<void>;
 }) {
+  const { t } = useLocale();
   const [row, setRow] = useState(String(cell?.row ?? 0));
   const [col, setCol] = useState(String(cell?.col ?? 0));
   const [label, setLabel] = useState(cell?.label ?? '');
@@ -567,6 +569,9 @@ function CellForm({
   const [isMotion, setIsMotion] = useState(cell?.isMotion ?? false);
   const [requiresSafeAction, setRequiresSafeAction] = useState(
     cell?.requiresSafeAction ?? false,
+  );
+  const [variableSpeed, setVariableSpeed] = useState(
+    cell?.variableSpeed ?? cell?.isMotion ?? false,
   );
   const [primaryRegisterId, setPrimary] = useState(
     cell?.primaryRegister?.id ?? primaryDefault,
@@ -630,8 +635,24 @@ function CellForm({
           { value: 'yes', label: 'Yes' },
           { value: 'no', label: 'No' },
         ]}
-        onChange={(v) => setIsMotion(v === 'yes')}
+        onChange={(v) => {
+          const next = v === 'yes';
+          setIsMotion(next);
+          if (!next) setVariableSpeed(false);
+          else if (!variableSpeed) setVariableSpeed(true);
+        }}
       />
+      {isMotion ? (
+        <SelectField
+          label={t('variableSpeed')}
+          value={variableSpeed ? 'yes' : 'no'}
+          options={[
+            { value: 'yes', label: 'Yes' },
+            { value: 'no', label: 'No' },
+          ]}
+          onChange={(v) => setVariableSpeed(v === 'yes')}
+        />
+      ) : null}
       <SelectField
         label="Requires safe action"
         value={requiresSafeAction ? 'yes' : 'no'}
@@ -651,6 +672,7 @@ function CellForm({
             style,
             isMotion,
             requiresSafeAction,
+            variableSpeed: isMotion ? variableSpeed : false,
             primaryRegisterId,
             feedbackRegisterId,
             statusRegisterId,

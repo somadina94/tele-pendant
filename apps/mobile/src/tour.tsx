@@ -183,7 +183,15 @@ export function TourBar({
   );
 }
 
-export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
+export function HelpTip({
+  id,
+  children,
+  className = '',
+}: {
+  id: string;
+  children: ReactNode;
+  className?: string;
+}) {
   const {
     enabled,
     currentStepId,
@@ -195,7 +203,13 @@ export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const highlighted = currentStepId === id;
 
-  if (!enabled) return <>{children}</>;
+  if (!enabled) {
+    return className ? (
+      <View className={className}>{children}</View>
+    ) : (
+      <>{children}</>
+    );
+  }
 
   // During an active walkthrough, only highlight — never stack a second Modal
   // on top of WalkthroughModal (Done would only clear local `open` and stay stuck).
@@ -203,7 +217,7 @@ export function HelpTip({ id, children }: { id: string; children: ReactNode }) {
 
   return (
     <View
-      className={`relative mb-0.5 ${
+      className={`relative mb-0.5 ${className} ${
         highlighted ? 'rounded-lg border-2 border-primary p-1' : ''
       }`}
     >
