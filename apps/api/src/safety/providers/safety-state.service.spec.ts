@@ -467,10 +467,24 @@ describe('SafetyStateService', () => {
     const now = Date.now();
     jest.setSystemTime(now);
     pulseHeld();
-    jest.setSystemTime(now + 5000);
+    jest.setSystemTime(now + 7000);
     await service.tick();
     expect(service.snapshot().deadmanActive).toBe(false);
     expect(driver.writeCoil).toHaveBeenCalledWith(expect.any(Number), false);
+  });
+
+  it('keeps deadman through a socket flap within grace', async () => {
+    jest.useFakeTimers();
+    const now = Date.now();
+    jest.setSystemTime(now);
+    claimAs('u1', 'Alice');
+    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    service.noteSocketDisconnect('sock-a');
+    // Would have expired under the old 1.5–2.5s timeout.
+    jest.setSystemTime(now + 3500);
+    await service.tick();
+    expect(service.snapshot().deadmanActive).toBe(true);
+    expect(service.canIssueMotion('u1')).toBe(true);
   });
 
   it('enters comms_lost only after consecutive tick read failures', async () => {
@@ -544,7 +558,7 @@ describe('SafetyStateService', () => {
     const now = Date.now();
     jest.setSystemTime(now);
     pulseHeld();
-    jest.setSystemTime(now + 5000);
+    jest.setSystemTime(now + 7000);
     await service.tick();
     expect(driver.writeCoil).toHaveBeenCalledWith(7, false);
     process.env.SAFE_ACTION_PIN = '1234';
