@@ -54,7 +54,9 @@ pnpm docker:prod
 
 Same as freelancer_bot: `SERVER_HOST`, `SERVER_USERNAME`, `SERVER_PORT`, and either `SERVER_PASSWORD` or `SERVER_SSH_KEY`. Optional: `SERVER_DEPLOY_PATH` (default `~/tele-pendant`).
 
-Images pushed on main: `tele-pendant-api`, `tele-pendant-sim`, `tele-pendant-web` under `ghcr.io/<owner>/`.
+Images pushed on main: `tele-pendant-api`, `tele-pendant-sim`, `tele-pendant-web` under `ghcr.io/somadina94/`.
+
+Manual server deploy needs `GHCR_USERNAME` + `GHCR_PULL_TOKEN` (`read:packages`) in `.env`, then `./deploy.sh`.
 
 ### Live (production)
 

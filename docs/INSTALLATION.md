@@ -48,10 +48,15 @@ pnpm docker:dev
 
 ```bash
 cp .env.example .env
-# set TELE_PENDANT_*_IMAGE or use deploy.sh after CI push
+# Manual GHCR pull on the server — set in .env:
+#   GHCR_USERNAME=<github user>
+#   GHCR_PULL_TOKEN=<PAT with read:packages>
+# Optional: TELE_PENDANT_{API,SIM,WEB}_IMAGE=ghcr.io/somadina94/tele-pendant-*:latest
 ./deploy.sh
-# fallback: DEPLOY_BUILD_LOCAL=1 ./deploy.sh
+# fallback (build on server): DEPLOY_BUILD_LOCAL=1 ./deploy.sh
 ```
+
+`deploy.sh` logs in to GHCR, prunes stopped/idle containers and unused images before/after pull, then recreates the stack.
 
 ## Database migrations (upgrades)
 

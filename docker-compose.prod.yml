@@ -8,7 +8,7 @@ name: tele-pendant-prod
 
 services:
   modbus-sim:
-    image: ${TELE_PENDANT_SIM_IMAGE:-ghcr.io/OWNER/tele-pendant-sim:latest}
+    image: ${TELE_PENDANT_SIM_IMAGE:-ghcr.io/somadina94/tele-pendant-sim:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: ${TELE_PENDANT_API_IMAGE:-ghcr.io/OWNER/tele-pendant-api:latest}
+    image: ${TELE_PENDANT_API_IMAGE:-ghcr.io/somadina94/tele-pendant-api:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -60,7 +60,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: ${TELE_PENDANT_WEB_IMAGE:-ghcr.io/OWNER/tele-pendant-web:latest}
+    image: ${TELE_PENDANT_WEB_IMAGE:-ghcr.io/somadina94/tele-pendant-web:latest}
     build:
       context: .
       dockerfile: Dockerfile
