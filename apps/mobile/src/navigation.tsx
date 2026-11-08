@@ -5,6 +5,7 @@ import {
   type DrawerContentComponentProps,
 } from '@react-navigation/drawer';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import type { NavigatorScreenParams } from '@react-navigation/native';
 import {
   BookOpen,
   Camera,
@@ -42,21 +43,21 @@ import { ChangeResetPinScreen } from './screens/ChangeResetPinScreen';
 import { TwoFactorScreen } from './screens/TwoFactorScreen';
 import type { ScreenName } from './types';
 
+export type MainTabParamList = {
+  operator: undefined;
+  ops: undefined;
+  media: undefined;
+  assistant: undefined;
+};
+
 export type RootDrawerParamList = {
-  MainTabs: undefined;
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   face: undefined;
   config: undefined;
   audit: undefined;
   changePassword: undefined;
   changeResetPin: undefined;
   twoFactor: undefined;
-};
-
-export type MainTabParamList = {
-  operator: undefined;
-  ops: undefined;
-  media: undefined;
-  assistant: undefined;
 };
 
 const Drawer = createDrawerNavigator<RootDrawerParamList>();

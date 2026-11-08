@@ -4,7 +4,6 @@ import {
   AppState,
   Image,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   useWindowDimensions,
@@ -596,8 +595,8 @@ export function OperatorScreen({ token }: { token: string }) {
       >
         <Text
           numberOfLines={1}
-          className="shrink text-sm font-semibold"
-          style={{ color: palette.foreground, maxWidth: '42%' }}
+          className="shrink font-semibold"
+          style={{ color: palette.foreground, fontSize: 14, flexGrow: 1 }}
         >
           {cell.label}
         </Text>
@@ -609,13 +608,13 @@ export function OperatorScreen({ token }: { token: string }) {
             backgroundColor: palette.chip,
           }}
         >
-          {MATRIX_CELL_STATE_CODE[cellState]} · {stateLabel}
+          {MATRIX_CELL_STATE_CODE[cellState]}
         </Text>
         {metaParts.length ? (
           <Text
             numberOfLines={1}
-            className="ml-auto min-w-0 shrink text-[10px] opacity-80"
-            style={{ color: metaColor, flexShrink: 1 }}
+            className="shrink text-[10px] opacity-80"
+            style={{ color: metaColor, maxWidth: 88 }}
           >
             {metaParts.join(' · ')}
           </Text>
@@ -624,7 +623,8 @@ export function OperatorScreen({ token }: { token: string }) {
     );
   };
 
-  const plantMinHeight = windowWidth >= 768 ? 160 : 140;
+  /** Prefer showing all motion cells; plant fills leftover space. */
+  const plantMinHeight = windowWidth >= 768 ? 140 : 110;
 
   return (
     <View className="flex-1 bg-background" style={{ minHeight: 0 }}>
@@ -864,25 +864,23 @@ export function OperatorScreen({ token }: { token: string }) {
         </HelpTip>
 
         <Card compact className="shrink-0">
-          <View className="flex-row flex-wrap items-center justify-between gap-x-2 gap-y-1">
-            <HelpTip id="tour.operator.safePin">
-              <View className="flex-row flex-wrap items-center gap-1.5">
-                <Text className="text-[11px] text-muted-foreground">
-                  {t('safePin')}
-                </Text>
+          <HelpTip id="tour.operator.safePin">
+            <View className="gap-1">
+              <View className="flex-row items-center gap-1.5">
                 <TextInput
-                  className="h-8 min-h-8 w-24 rounded-md border border-border bg-input px-2 text-xs text-foreground"
+                  className="h-9 min-h-9 flex-1 rounded-md border border-border bg-input px-2.5 text-xs text-foreground"
                   value={pin}
                   onChangeText={setPin}
                   secureTextEntry
                   autoCapitalize="none"
                   placeholder={t('safePin')}
                   placeholderTextColor="#5C6B7A"
+                  accessibilityLabel={t('safePin')}
                 />
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('resetEstop')}
-                  className="h-8 min-h-8 shrink-0 items-center justify-center rounded-md border border-border px-2"
+                  className="h-9 min-h-9 shrink-0 items-center justify-center rounded-md border border-border px-2.5"
                   onPress={() => void resetEStop()}
                 >
                   <Text className="text-[11px] font-semibold text-foreground">
@@ -890,100 +888,92 @@ export function OperatorScreen({ token }: { token: string }) {
                   </Text>
                 </Pressable>
               </View>
-            </HelpTip>
-            {showJogSpeed ? (
-              <View
-                className="flex-row flex-wrap items-center gap-1"
-                accessibilityLabel={t('jogSpeed')}
-              >
-                <Text className="text-[11px] text-muted-foreground">
-                  {t('jogSpeed')}
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: jogSpeed === 'slow' }}
-                  className="h-8 min-h-8 items-center justify-center rounded-md border px-2"
-                  style={{
-                    borderColor: jogSpeed === 'slow' ? '#3D9CFD' : '#5C6B7A',
-                    backgroundColor:
-                      jogSpeed === 'slow'
-                        ? 'rgba(61,156,253,0.2)'
-                        : 'transparent',
-                  }}
-                  onPress={() => setJogSpeed('slow')}
+              {showJogSpeed ? (
+                <View
+                  className="flex-row flex-wrap items-center gap-1.5"
+                  accessibilityLabel={t('jogSpeed')}
                 >
-                  <Text className="text-[11px] font-semibold text-foreground">
-                    {t('jogSlow')}
+                  <Text className="text-[11px] text-muted-foreground">
+                    {t('jogSpeed')}
                   </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: jogSpeed === 'fast' }}
-                  className="h-8 min-h-8 items-center justify-center rounded-md border px-2"
-                  style={{
-                    borderColor: jogSpeed === 'fast' ? '#3D9CFD' : '#5C6B7A',
-                    backgroundColor:
-                      jogSpeed === 'fast'
-                        ? 'rgba(61,156,253,0.2)'
-                        : 'transparent',
-                  }}
-                  onPress={() => setJogSpeed('fast')}
-                >
-                  <Text className="text-[11px] font-semibold text-foreground">
-                    {t('jogFast')}
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </View>
-          <HelpTip id="tour.operator.holdHint">
-            <Text className="mt-1 text-[11px] text-muted-foreground">
-              {t('holdHint')}
-            </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: jogSpeed === 'slow' }}
+                    className="h-8 min-h-8 items-center justify-center rounded-md border px-2.5"
+                    style={{
+                      borderColor: jogSpeed === 'slow' ? '#3D9CFD' : '#5C6B7A',
+                      backgroundColor:
+                        jogSpeed === 'slow'
+                          ? 'rgba(61,156,253,0.2)'
+                          : 'transparent',
+                    }}
+                    onPress={() => setJogSpeed('slow')}
+                  >
+                    <Text className="text-[11px] font-semibold text-foreground">
+                      {t('jogSlow')}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: jogSpeed === 'fast' }}
+                    className="h-8 min-h-8 items-center justify-center rounded-md border px-2.5"
+                    style={{
+                      borderColor: jogSpeed === 'fast' ? '#3D9CFD' : '#5C6B7A',
+                      backgroundColor:
+                        jogSpeed === 'fast'
+                          ? 'rgba(61,156,253,0.2)'
+                          : 'transparent',
+                    }}
+                    onPress={() => setJogSpeed('fast')}
+                  >
+                    <Text className="text-[11px] font-semibold text-foreground">
+                      {t('jogFast')}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
           </HelpTip>
-          <HelpTip id="tour.operator.matrix">
-            <ScrollView
-              className="mt-1 max-h-56"
-              scrollEnabled={!holdingId}
-              nestedScrollEnabled
-              keyboardShouldPersistTaps="handled"
-            >
-              <View className="flex-row flex-wrap" style={{ gap: matrixGap }}>
+          <HelpTip id="tour.operator.holdHint">
+            <HelpTip id="tour.operator.matrix">
+              <View
+                className={
+                  matrixCols > 1 ? 'mt-1 flex-row flex-wrap' : 'mt-1 gap-1.5'
+                }
+                style={matrixCols > 1 ? { gap: matrixGap } : undefined}
+              >
                 {grid &&
                   grid.cells.map((cell, idx) => {
-                    const slotStyle = {
-                      width: matrixCellWidth,
-                      marginBottom: 2,
-                    };
                     if (!cell) {
-                      return (
+                      return matrixCols > 1 ? (
                         <View
                           key={`empty-${idx}`}
-                          style={slotStyle}
+                          style={{ width: matrixCellWidth, height: 44 }}
                           accessibilityElementsHidden
                         />
-                      );
+                      ) : null;
                     }
                     if (
                       stopCell &&
                       (cell.id === stopCell.id || cell.style === 'estop')
                     ) {
-                      return (
-                        <View
-                          key={`stop-slot-${cell.id}`}
-                          style={slotStyle}
-                          accessibilityElementsHidden
-                        />
-                      );
+                      return null;
                     }
                     return (
-                      <View key={cell.id} style={slotStyle}>
+                      <View
+                        key={cell.id}
+                        style={
+                          matrixCols > 1
+                            ? { width: matrixCellWidth }
+                            : { width: '100%' }
+                        }
+                      >
                         {renderMobileCell(cell)}
                       </View>
                     );
                   })}
               </View>
-            </ScrollView>
+            </HelpTip>
           </HelpTip>
         </Card>
       </View>

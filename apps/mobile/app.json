@@ -38,7 +38,7 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "http://localhost:3010/ota/manifest",
+      "url": "https://api.tele-pendant.jahbyte.com/ota/manifest",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,

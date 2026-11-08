@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../api';
@@ -11,14 +11,16 @@ import type {
 } from '../types';
 import { useLocale } from '../locale';
 import {
-  MOBILE_CONFIG_SECTIONS,
+  mobileConfigSectionsForRole,
   type MobileConfigSection,
 } from '../config-sections';
 import { HelpTip } from '../tour';
+import { getStoredUserRole } from '../user-session';
 import {
   alarmSeveritySelectOptions,
   normalizeAlarmSeverity,
   type AlarmSeverity,
+  type UserRole,
 } from '@tele-pendant/shared';
 import {
   confirmAction,
@@ -62,10 +64,19 @@ function isProtectedStopCell(style: string, label: string): boolean {
   return style === 'estop' || label.trim().toUpperCase() === 'STOP';
 }
 
+type ConfigUser = {
+  id: string;
+  email: string;
+  displayName: string | null;
+  role: string;
+  suspended?: boolean;
+};
+
 export function ConfigScreen({ token }: { token: string }) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const layoutQuery = useQuery({
     queryKey: ['layout', token],
     queryFn: () => apiGet<Layout>('/hmi/layout', token),
@@ -76,7 +87,23 @@ export function ConfigScreen({ token }: { token: string }) {
   });
   const layout = layoutQuery.data;
   const registers = layout?.registers ?? [];
+  const sectionOptions = useMemo(
+    () => mobileConfigSectionsForRole(userRole),
+    [userRole],
+  );
   const [section, setSection] = useState<MobileConfigSection>('plc');
+
+  useEffect(() => {
+    void getStoredUserRole().then((role) => {
+      setUserRole(role);
+    });
+  }, [token]);
+
+  useEffect(() => {
+    if (!sectionOptions.some((s) => s.value === section)) {
+      setSection(sectionOptions[0]?.value ?? 'plc');
+    }
+  }, [sectionOptions, section]);
 
   function remember(key: string, text: string) {
     setNotes((current) => ({ ...current, [key]: text }));
@@ -95,11 +122,14 @@ export function ConfigScreen({ token }: { token: string }) {
       <SelectField
         label="Section"
         value={section}
-        options={MOBILE_CONFIG_SECTIONS}
-        onChange={setSection}
+        options={sectionOptions}
+        onChange={(value) => setSection(value as MobileConfigSection)}
       />
       {layoutQuery.isLoading ? (
         <Text className="text-sm text-muted-foreground">Loading layout…</Text>
+      ) : null}
+      {section === 'users' ? (
+        <UsersBlock token={token} notes={notes} remember={remember} />
       ) : null}
       {section === 'plc' ? (
         <>
@@ -365,6 +395,295 @@ export function ConfigScreen({ token }: { token: string }) {
   );
 }
 
+function isManagedUser(row: ConfigUser) {
+  return row.role !== 'admin';
+}
+
+function UsersBlock({
+  token,
+  notes,
+  remember,
+}: {
+  token: string;
+  notes: Record<string, string>;
+  remember: (key: string, text: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const users = useQuery({
+    queryKey: ['users', token],
+    queryFn: () => apiGet<ConfigUser[]>('/users', token),
+  });
+  const reportedLoadError = useRef(false);
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'operator' | 'supervisor'>('operator');
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (users.isError && !reportedLoadError.current) {
+      reportedLoadError.current = true;
+      showErrorFrom(users.error, 'Could not load users');
+    }
+    if (!users.isError) {
+      reportedLoadError.current = false;
+    }
+  }, [users.error, users.isError]);
+
+  async function refresh() {
+    await queryClient.invalidateQueries({ queryKey: ['users', token] });
+  }
+
+  return (
+    <>
+      <HelpTip id="tour.config.users">
+        <Text className="mt-2 text-lg font-bold text-foreground">Users</Text>
+      </HelpTip>
+      <Text className="mb-2 text-xs text-muted-foreground">
+        Create operator/supervisor accounts. Admins cannot be edited here.
+      </Text>
+      {users.isLoading ? (
+        <Text className="text-sm text-muted-foreground">Loading users…</Text>
+      ) : null}
+      {(users.data ?? []).length === 0 && users.isSuccess ? (
+        <Text className="mb-2 text-sm text-muted-foreground">No users yet.</Text>
+      ) : null}
+      {(users.data ?? []).map((row) => {
+        const managed = isManagedUser(row);
+        const editing = editingId === row.id;
+        return (
+          <View
+            key={row.id}
+            className="mb-3 rounded-lg border border-border bg-card p-3"
+          >
+            <Text className="font-medium text-foreground">
+              {row.displayName || row.email}
+            </Text>
+            <Text className="text-xs text-muted-foreground">
+              {row.email} · {row.role}
+              {row.suspended ? ' · suspended' : ''}
+            </Text>
+            {notes[row.id] ? (
+              <Text className="mt-1 text-xs text-success">{notes[row.id]}</Text>
+            ) : null}
+            {managed ? (
+              <View className="mt-2 flex-row flex-wrap gap-2">
+                <Pressable
+                  className="rounded-lg border border-border px-3 py-2 active:opacity-80"
+                  onPress={() => setEditingId(editing ? null : row.id)}
+                >
+                  <Text className="text-sm text-foreground">
+                    {editing ? 'Close' : 'Edit'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  className="rounded-lg border border-border px-3 py-2 active:opacity-80"
+                  onPress={() => {
+                    void (async () => {
+                      const next = !(row.suspended === true);
+                      const ok = await confirmAction(
+                        next ? 'Suspend user?' : 'Reactivate user?',
+                        next
+                          ? `Block sign-in for ${row.displayName || row.email}?`
+                          : `Allow ${row.displayName || row.email} to sign in again?`,
+                        next ? 'Suspend' : 'Reactivate',
+                      );
+                      if (!ok) return;
+                      try {
+                        await apiPatch(
+                          `/users/${row.id}`,
+                          { suspended: next },
+                          token,
+                        );
+                        await refresh();
+                        remember(
+                          row.id,
+                          next ? 'User suspended.' : 'User reactivated.',
+                        );
+                      } catch (err) {
+                        showErrorFrom(err, 'Could not update user');
+                      }
+                    })();
+                  }}
+                >
+                  <Text className="text-sm text-foreground">
+                    {row.suspended ? 'Reactivate' : 'Suspend'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  className="rounded-lg border border-destructive px-3 py-2 active:opacity-80"
+                  onPress={() => {
+                    void (async () => {
+                      const ok = await confirmDestructive(
+                        'Remove user?',
+                        `Permanently delete ${row.displayName || row.email}? This cannot be undone.`,
+                      );
+                      if (!ok) return;
+                      try {
+                        await apiDelete(`/users/${row.id}`, token);
+                        await refresh();
+                        remember(row.id, 'User removed.');
+                        if (editingId === row.id) setEditingId(null);
+                      } catch (err) {
+                        showErrorFrom(err, 'Could not remove user');
+                      }
+                    })();
+                  }}
+                >
+                  <Text className="text-sm text-destructive">Remove</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Text className="mt-1 text-xs text-muted-foreground">
+                Admin accounts are managed outside this list.
+              </Text>
+            )}
+            {editing && managed ? (
+              <UserEditForm
+                row={row}
+                note={notes[`edit-${row.id}`]}
+                onSave={async (value) => {
+                  try {
+                    await apiPatch(`/users/${row.id}`, value, token);
+                    await refresh();
+                    remember(`edit-${row.id}`, 'User updated.');
+                    setEditingId(null);
+                  } catch (err) {
+                    showErrorFrom(err, 'Could not update user');
+                  }
+                }}
+              />
+            ) : null}
+          </View>
+        );
+      })}
+      <Text className="mb-1 mt-2 font-medium text-foreground">Add user</Text>
+      {notes['new-user'] ? (
+        <Text className="mb-1 text-xs text-success">{notes['new-user']}</Text>
+      ) : null}
+      <Field label="Display name" value={displayName} onChangeText={setDisplayName} />
+      <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+      <Field
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        secure
+      />
+      <SelectField
+        label="Role"
+        value={role}
+        options={[
+          { value: 'operator', label: 'Operator' },
+          { value: 'supervisor', label: 'Supervisor' },
+        ]}
+        onChange={(v) => setRole(v as 'operator' | 'supervisor')}
+      />
+      <Pressable
+        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
+        onPress={() => {
+          void (async () => {
+            try {
+              await apiPost(
+                '/users',
+                { email, displayName, password, role },
+                token,
+              );
+              await refresh();
+              setEmail('');
+              setDisplayName('');
+              setPassword('');
+              remember('new-user', `Added ${displayName || email}.`);
+            } catch (err) {
+              showErrorFrom(err, 'Could not add user');
+            }
+          })();
+        }}
+      >
+        <Text className="font-semibold text-primary-foreground">Add user</Text>
+      </Pressable>
+    </>
+  );
+}
+
+function UserEditForm({
+  row,
+  note,
+  onSave,
+}: {
+  row: ConfigUser;
+  note?: string;
+  onSave: (value: {
+    displayName: string;
+    email: string;
+    role: 'operator' | 'supervisor';
+    suspended: boolean;
+    password?: string;
+  }) => Promise<void>;
+}) {
+  const [displayName, setDisplayName] = useState(row.displayName ?? '');
+  const [email, setEmail] = useState(row.email);
+  const [role, setRole] = useState<'operator' | 'supervisor'>(
+    row.role === 'supervisor' ? 'supervisor' : 'operator',
+  );
+  const [suspended, setSuspended] = useState(row.suspended === true);
+  const [password, setPassword] = useState('');
+
+  return (
+    <View className="mt-3 border-t border-border pt-3">
+      <Field label="Display name" value={displayName} onChangeText={setDisplayName} />
+      <Field
+        label="Email"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+      />
+      <SelectField
+        label="Role"
+        value={role}
+        options={[
+          { value: 'operator', label: 'Operator' },
+          { value: 'supervisor', label: 'Supervisor' },
+        ]}
+        onChange={(v) => setRole(v as 'operator' | 'supervisor')}
+      />
+      <SelectField
+        label="Suspended"
+        value={suspended ? 'yes' : 'no'}
+        options={[
+          { value: 'no', label: 'No' },
+          { value: 'yes', label: 'Yes' },
+        ]}
+        onChange={(v) => setSuspended(v === 'yes')}
+      />
+      <Field
+        label="New password (optional)"
+        value={password}
+        onChangeText={setPassword}
+        secure
+        placeholder="Leave blank to keep current"
+      />
+      {note ? <Text className="mb-1 text-xs text-success">{note}</Text> : null}
+      <Pressable
+        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
+        onPress={() => {
+          void onSave({
+            displayName,
+            email,
+            role,
+            suspended,
+            ...(password.trim() ? { password: password.trim() } : {}),
+          });
+        }}
+      >
+        <Text className="font-semibold text-primary-foreground">
+          Save changes
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function PlcForm({
   row,
   note,
@@ -555,6 +874,8 @@ function CellForm({
     isMotion: boolean;
     requiresSafeAction: boolean;
     variableSpeed: boolean;
+    slowSpeedPct?: number;
+    fastSpeedPct?: number;
     primaryRegisterId: string;
     feedbackRegisterId: string;
     statusRegisterId: string;
@@ -572,6 +893,12 @@ function CellForm({
   );
   const [variableSpeed, setVariableSpeed] = useState(
     cell?.variableSpeed ?? cell?.isMotion ?? false,
+  );
+  const [slowSpeedPct, setSlowSpeedPct] = useState(
+    String(cell?.slowSpeedPct ?? 30),
+  );
+  const [fastSpeedPct, setFastSpeedPct] = useState(
+    String(cell?.fastSpeedPct ?? 100),
   );
   const [primaryRegisterId, setPrimary] = useState(
     cell?.primaryRegister?.id ?? primaryDefault,
@@ -643,15 +970,33 @@ function CellForm({
         }}
       />
       {isMotion ? (
-        <SelectField
-          label={t('variableSpeed')}
-          value={variableSpeed ? 'yes' : 'no'}
-          options={[
-            { value: 'yes', label: 'Yes' },
-            { value: 'no', label: 'No' },
-          ]}
-          onChange={(v) => setVariableSpeed(v === 'yes')}
-        />
+        <>
+          <SelectField
+            label={t('variableSpeed')}
+            value={variableSpeed ? 'yes' : 'no'}
+            options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+            ]}
+            onChange={(v) => setVariableSpeed(v === 'yes')}
+          />
+          {variableSpeed ? (
+            <>
+              <Field
+                label="Slow speed %"
+                value={slowSpeedPct}
+                onChangeText={setSlowSpeedPct}
+                keyboardType="numeric"
+              />
+              <Field
+                label="Fast speed %"
+                value={fastSpeedPct}
+                onChangeText={setFastSpeedPct}
+                keyboardType="numeric"
+              />
+            </>
+          ) : null}
+        </>
       ) : null}
       <SelectField
         label="Requires safe action"
@@ -673,6 +1018,12 @@ function CellForm({
             isMotion,
             requiresSafeAction,
             variableSpeed: isMotion ? variableSpeed : false,
+            ...(isMotion && variableSpeed
+              ? {
+                  slowSpeedPct: Number(slowSpeedPct) || 30,
+                  fastSpeedPct: Number(fastSpeedPct) || 100,
+                }
+              : {}),
             primaryRegisterId,
             feedbackRegisterId,
             statusRegisterId,
