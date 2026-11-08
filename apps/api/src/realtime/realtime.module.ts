@@ -5,6 +5,7 @@ import { PlcModule } from '../plc/plc.module';
 import { SafetyModule } from '../safety/safety.module';
 import { TrendsModule } from '../trends/trends.module';
 import { TagPollerService } from './providers/tag-poller.service';
+import { RealtimeController } from './realtime.controller';
 import { RealtimeGateway } from './realtime.gateway';
 
 @Module({
@@ -15,7 +16,8 @@ import { RealtimeGateway } from './realtime.gateway';
     TrendsModule,
     forwardRef(() => AlarmsModule),
   ],
+  controllers: [RealtimeController],
   providers: [RealtimeGateway, TagPollerService],
-  exports: [RealtimeGateway],
+  exports: [RealtimeGateway, TagPollerService],
 })
 export class RealtimeModule {}

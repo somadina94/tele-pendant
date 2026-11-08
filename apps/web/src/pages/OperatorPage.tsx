@@ -160,6 +160,35 @@ export function OperatorPage() {
     };
   }, []);
 
+  /**
+   * HTTP backup for live tags. Host nginx often stalls Socket.IO in production
+   * (local Docker without that proxy looks fine); keep values moving via REST.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const pull = async () => {
+      try {
+        const payload = await apiGet<LiveTags & { at: string | null }>(
+          '/realtime/tags',
+        );
+        if (cancelled || payload.at == null) return;
+        setTags((prev) => ({
+          ...prev,
+          ...payload,
+          values: { ...prev?.values, ...payload.values },
+        }));
+      } catch {
+        // ignore transient errors
+      }
+    };
+    void pull();
+    const id = window.setInterval(pull, 300);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
   /** FEAT-A5: claim exclusive control; heartbeat while this Operator is open. */
   useEffect(() => {
     let cancelled = false;

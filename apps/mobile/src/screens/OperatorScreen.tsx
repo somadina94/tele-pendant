@@ -166,6 +166,32 @@ export function OperatorScreen({ token }: { token: string }) {
     };
   }, [token, applyControl]);
 
+  /** HTTP backup when Socket.IO stalls behind a host reverse proxy (prod). */
+  useEffect(() => {
+    let cancelled = false;
+    const pull = async () => {
+      try {
+        const payload = await apiGet<TagSnapshot & { at: string | null }>(
+          '/realtime/tags',
+          token,
+        );
+        if (cancelled || payload.at == null) return;
+        if (typeof payload.hoistHeightMm === 'number') {
+          setHeight(payload.hoistHeightMm);
+        }
+        setTags(payload);
+      } catch {
+        // ignore
+      }
+    };
+    void pull();
+    const id = setInterval(pull, 300);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [token]);
+
   /** FEAT-A5: exclusive control claim + heartbeat while Operator is open. */
   useEffect(() => {
     let cancelled = false;

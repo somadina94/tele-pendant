@@ -13,6 +13,18 @@ import { SafetyStateService } from '../../safety/providers/safety-state.service'
 import { TrendsService } from '../../trends/providers/trends.service';
 import { RealtimeGateway } from '../realtime.gateway';
 
+export type LiveTagSnapshot = {
+  hoistHeightMm: number;
+  loadKg: number;
+  speedPct: number;
+  trolleyPositionMm: number;
+  motorRunning: boolean;
+  fault: boolean;
+  commsOk: boolean;
+  values: Record<string, number | boolean>;
+  at: string;
+};
+
 @Injectable()
 export class TagPollerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TagPollerService.name);
@@ -20,6 +32,7 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
   private tick = 0;
   /** Skip overlapping polls — prod Modbus RTT otherwise stacks reads and stalls live tags. */
   private inFlight = false;
+  private lastTags: LiveTagSnapshot | null = null;
 
   constructor(
     @Inject(PlcService) private readonly plcService: PlcService,
@@ -38,6 +51,11 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
+  }
+
+  /** Last broadcast payload — used by GET /realtime/tags when WS is laggy in prod. */
+  latest(): LiveTagSnapshot | { at: null } {
+    return this.lastTags ?? { at: null };
   }
 
   private async poll(): Promise<void> {
@@ -95,7 +113,7 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
       const [commsOk] = await driver.readDiscreteInputs(commsAddr, 1);
       const values = await this.plcService.readNamedValues();
 
-      this.gateway.broadcast(WS_EVENTS.TAGS_UPDATE, {
+      const snapshot: LiveTagSnapshot = {
         hoistHeightMm: height ?? 0,
         loadKg: loadKg ?? 0,
         speedPct: speed ?? 0,
@@ -105,7 +123,9 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
         commsOk: Boolean(commsOk),
         values,
         at: new Date().toISOString(),
-      });
+      };
+      this.lastTags = snapshot;
+      this.gateway.broadcast(WS_EVENTS.TAGS_UPDATE, snapshot);
 
       await this.alarms.evaluate();
 

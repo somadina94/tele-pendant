@@ -191,6 +191,7 @@ describe('OperatorPage', () => {
     );
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
       if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return defaultTags as never;
       return layout as never;
     });
     vi.spyOn(api, 'apiPost').mockImplementation(async (path: string) => {
@@ -223,9 +224,40 @@ describe('OperatorPage', () => {
   function mockGetWithControl(layoutValue: unknown = layout) {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
       if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return defaultTags as never;
       return layoutValue as never;
     });
   }
+
+  it('applies HTTP live-tag backup and ignores empty/error polls', async () => {
+    const get = vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return defaultTags as never;
+      return layout as never;
+    });
+    renderWithProviders(<OperatorPage />);
+    expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/realtime/tags');
+    });
+    get.mockImplementation(async (path) => {
+      if (path === '/realtime/tags') return { at: null } as never;
+      if (path === '/safety/control') return heldControl as never;
+      return layout as never;
+    });
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/realtime/tags');
+    });
+    get.mockImplementation(async (path) => {
+      if (path === '/realtime/tags') throw new Error('proxy stall');
+      if (path === '/safety/control') return heldControl as never;
+      return layout as never;
+    });
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/realtime/tags');
+    });
+    expect(screen.getByText('Hoist Up')).toBeInTheDocument();
+  });
 
   it('renders matrix overlays and handles motion press/release', async () => {
     const { container } = renderWithProviders(<OperatorPage />);
@@ -400,6 +432,12 @@ describe('OperatorPage', () => {
   it('opens the operator screen after the live tag fallback timer', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     socket.on.mockImplementation(() => {});
+    // No WS and no HTTP tags yet — wait for the 2.5s liveFallback path.
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return { at: null } as never;
+      return layout as never;
+    });
     renderWithProviders(<OperatorPage />);
     expect(
       screen.getByRole('status', { name: 'Operator' }),
@@ -412,6 +450,11 @@ describe('OperatorPage', () => {
   it('clears the live fallback timer on unmount', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     socket.on.mockImplementation(() => {});
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return { at: null } as never;
+      return layout as never;
+    });
     const view = renderWithProviders(<OperatorPage />);
     expect(
       screen.getByRole('status', { name: 'Operator' }),
@@ -429,6 +472,11 @@ describe('OperatorPage', () => {
         if (event === 'tags.update') tagsHandler = handler;
       },
     );
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return { at: null } as never;
+      return layout as never;
+    });
     renderWithProviders(<OperatorPage />);
     expect(
       screen.getByRole('status', { name: 'Operator' }),
