@@ -184,14 +184,14 @@ export function OperatorPage() {
   }, [applyLiveTags]);
 
   /**
-   * HTTP backup for live tags. Host nginx often stalls Socket.IO in production
-   * (local Docker without that proxy looks fine); keep values moving via REST.
+   * HTTP tags only when Socket.IO has gone quiet (prod proxy stall).
+   * When WS is healthy — same path as local — do not poll REST.
    */
   useEffect(() => {
     let cancelled = false;
     const pull = async () => {
       const socket = getRealtimeSocket();
-      if (socket.connected && Date.now() - lastWsTagAt.current < 2_500) {
+      if (socket.connected && Date.now() - lastWsTagAt.current < 4_000) {
         return;
       }
       if (tagsPullInFlight.current) return;
@@ -209,7 +209,7 @@ export function OperatorPage() {
       }
     };
     void pull();
-    const id = window.setInterval(pull, 750);
+    const id = window.setInterval(pull, 1000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -257,26 +257,15 @@ export function OperatorPage() {
     };
   }, []);
 
+  // Match the local working hold path: WS deadman pulse only (no HTTP flood).
   useEffect(() => {
     const socket = getRealtimeSocket();
     if (!holdingCellId) return;
-    const cellId = holdingCellId;
-    let ticks = 0;
     const pulse = () => {
-      ticks += 1;
       socket.emit('deadman.pulse');
-      void apiPost('/safety/deadman/pulse').catch(() => undefined);
-      // Re-assert coil every other pulse — every tick flooded Modbus in prod.
-      if (ticks === 1 || ticks % 2 === 0) {
-        void apiPost(`/hmi/cells/${cellId}/activate`, {
-          value: true,
-          speed: jogSpeedRef.current,
-          refresh: true,
-        }).catch(() => undefined);
-      }
     };
     pulse();
-    const id = window.setInterval(pulse, 800);
+    const id = window.setInterval(pulse, 400);
     return () => window.clearInterval(id);
   }, [holdingCellId]);
 

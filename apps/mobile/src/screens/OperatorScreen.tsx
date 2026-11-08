@@ -189,15 +189,12 @@ export function OperatorScreen({ token }: { token: string }) {
     };
   }, [token, applyControl, applyLiveTags]);
 
-  /** HTTP backup when Socket.IO stalls behind a host reverse proxy (prod). */
+  /** HTTP tags only when Socket.IO has gone quiet (prod proxy stall). */
   useEffect(() => {
     let cancelled = false;
     const pull = async () => {
       const socket = socketRef.current;
-      if (
-        socket?.connected &&
-        Date.now() - lastWsTagAt.current < 2_500
-      ) {
+      if (socket?.connected && Date.now() - lastWsTagAt.current < 4_000) {
         return;
       }
       if (tagsPullInFlight.current) return;
@@ -216,7 +213,7 @@ export function OperatorScreen({ token }: { token: string }) {
       }
     };
     void pull();
-    const id = setInterval(pull, 750);
+    const id = setInterval(pull, 1000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -313,29 +310,16 @@ export function OperatorScreen({ token }: { token: string }) {
     [dropMotionCoil, releaseDeadman],
   );
 
+  // Match the local working hold path: WS deadman pulse only (no HTTP flood).
   useEffect(() => {
     if (!holdingId) return;
-    const cellId = holdingId;
-    let ticks = 0;
     const pulse = () => {
-      ticks += 1;
       socketRef.current?.emit('deadman.pulse');
-      void apiPost('/safety/deadman/pulse', undefined, token).catch(
-        () => undefined,
-      );
-      // Re-assert coil every other pulse — every tick flooded Modbus in prod.
-      if (ticks === 1 || ticks % 2 === 0) {
-        void apiPost(
-          `/hmi/cells/${cellId}/activate`,
-          { value: true, speed: jogSpeedRef.current, refresh: true },
-          token,
-        ).catch(() => undefined);
-      }
     };
     pulse();
-    const id = setInterval(pulse, 800);
+    const id = setInterval(pulse, 400);
     return () => clearInterval(id);
-  }, [holdingId, token]);
+  }, [holdingId]);
 
   const pressCell = async (cell: Cell) => {
     const pressGen = holdGen.current;
