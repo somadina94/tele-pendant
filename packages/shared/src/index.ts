@@ -24,6 +24,8 @@ export type { Locale } from './i18n';
 export {
   formatOverlay,
   isClusterMetricRegister,
+  nextLiveTagsCursor,
+  shouldApplyLiveTags,
   tagValueForRegister,
 } from './tags';
 export { isOperatorScreenReady, operatorNeedsLiveTags } from './operator-ready';

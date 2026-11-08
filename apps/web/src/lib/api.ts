@@ -213,5 +213,7 @@ export interface LiveTags {
   fault: boolean;
   commsOk: boolean;
   values?: Record<string, number | boolean>;
+  /** Server poll sequence; newer snapshots only. */
+  seq?: number;
   at: string;
 }

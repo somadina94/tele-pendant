@@ -9,6 +9,9 @@ export interface TagSnapshot {
   fault?: boolean;
   commsOk?: boolean;
   values?: Record<string, number | boolean>;
+  /** Monotonic poll sequence — prefer over `at` when merging WS + HTTP. */
+  seq?: number;
+  at?: string;
 }
 
 export function formatOverlay(
@@ -27,6 +30,35 @@ export function isClusterMetricRegister(registerName?: string | null): boolean {
     registerName.includes('trolleyPosition') ||
     registerName.includes('motorRunning')
   );
+}
+
+export function shouldApplyLiveTags(
+  lastSeq: number,
+  lastAt: string | null | undefined,
+  incoming: Pick<TagSnapshot, 'seq' | 'at'>,
+): boolean {
+  if (incoming.seq != null) {
+    return incoming.seq > lastSeq;
+  }
+  if (!incoming.at) return true;
+  if (!lastAt) return true;
+  return incoming.at > lastAt;
+}
+
+export function nextLiveTagsCursor(
+  prev: { lastSeq: number; lastAt: string | null },
+  incoming: Pick<TagSnapshot, 'seq' | 'at'>,
+): { lastSeq: number; lastAt: string | null } {
+  return {
+    lastSeq:
+      incoming.seq != null
+        ? Math.max(prev.lastSeq, incoming.seq)
+        : prev.lastSeq,
+    lastAt:
+      incoming.at != null && (prev.lastAt == null || incoming.at >= prev.lastAt)
+        ? incoming.at
+        : prev.lastAt,
+  };
 }
 
 export function tagValueForRegister(

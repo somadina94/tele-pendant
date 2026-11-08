@@ -18,6 +18,8 @@ import {
   MATRIX_CELL_STATE_I18N,
   operatorNeedsLiveTags,
   resolveMatrixCellUiState,
+  nextLiveTagsCursor,
+  shouldApplyLiveTags,
   tagValueForRegister,
   type TagSnapshot,
 } from '@tele-pendant/shared';
@@ -132,15 +134,24 @@ export function OperatorScreen({ token }: { token: string }) {
   const activatingId = useRef<string | null>(null);
   /** Release arrived while activate(true) was still in flight — finish after pressCell. */
   const releaseAfterActivate = useRef<string | null>(null);
-  /** Drop out-of-order HTTP/WS snapshots so height never jumps backwards. */
-  const lastTagsAtRef = useRef<string | null>(null);
+  const tagOrderRef = useRef<{ lastSeq: number; lastAt: string | null }>({
+    lastSeq: 0,
+    lastAt: null,
+  });
+  const tagsPullInFlight = useRef(false);
+  const lastWsTagAt = useRef(0);
 
   const applyLiveTags = useCallback((payload: TagSnapshot & { at?: string }) => {
-    if (payload.at) {
-      const prev = lastTagsAtRef.current;
-      if (prev && payload.at < prev) return;
-      lastTagsAtRef.current = payload.at;
+    if (
+      !shouldApplyLiveTags(
+        tagOrderRef.current.lastSeq,
+        tagOrderRef.current.lastAt,
+        payload,
+      )
+    ) {
+      return;
     }
+    tagOrderRef.current = nextLiveTagsCursor(tagOrderRef.current, payload);
     if (typeof payload.hoistHeightMm === 'number') {
       setHeight(payload.hoistHeightMm);
     }
@@ -168,6 +179,7 @@ export function OperatorScreen({ token }: { token: string }) {
       }
     });
     socket.on('tags.update', (payload: TagSnapshot) => {
+      lastWsTagAt.current = Date.now();
       applyLiveTags(payload);
     });
     return () => {
@@ -181,6 +193,15 @@ export function OperatorScreen({ token }: { token: string }) {
   useEffect(() => {
     let cancelled = false;
     const pull = async () => {
+      const socket = socketRef.current;
+      if (
+        socket?.connected &&
+        Date.now() - lastWsTagAt.current < 2_500
+      ) {
+        return;
+      }
+      if (tagsPullInFlight.current) return;
+      tagsPullInFlight.current = true;
       try {
         const payload = await apiGet<TagSnapshot & { at: string | null }>(
           '/realtime/tags',
@@ -190,10 +211,12 @@ export function OperatorScreen({ token }: { token: string }) {
         applyLiveTags(payload);
       } catch {
         // ignore
+      } finally {
+        tagsPullInFlight.current = false;
       }
     };
     void pull();
-    const id = setInterval(pull, 500);
+    const id = setInterval(pull, 750);
     return () => {
       cancelled = true;
       clearInterval(id);

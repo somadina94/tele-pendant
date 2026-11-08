@@ -23,6 +23,7 @@ import {
   resolveMatrixCellUiState,
   type MatrixCellUiState,
 } from '@tele-pendant/shared';
+import { applyLiveTagsState, shouldApplyLiveTags } from '../lib/live-tags';
 import { getRealtimeSocket } from '../lib/realtime';
 import { HelpTip } from '../lib/tour';
 import { CraneMimic } from '@/components/crane-mimic';
@@ -124,15 +125,24 @@ export function OperatorPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [photoOk, setPhotoOk] = useState(true);
   const [liveFallback, setLiveFallback] = useState(false);
-  /** Drop out-of-order HTTP/WS snapshots so height/trolley never jump backwards. */
-  const lastTagsAtRef = useRef<string | null>(null);
+  const tagOrderRef = useRef<{ lastSeq: number; lastAt: string | null }>({
+    lastSeq: 0,
+    lastAt: null,
+  });
+  const tagsPullInFlight = useRef(false);
+  const lastWsTagAt = useRef(0);
 
   const applyLiveTags = useCallback((payload: LiveTags) => {
-    if (payload.at) {
-      const prev = lastTagsAtRef.current;
-      if (prev && payload.at < prev) return;
-      lastTagsAtRef.current = payload.at;
+    if (
+      !shouldApplyLiveTags(
+        tagOrderRef.current.lastSeq,
+        tagOrderRef.current.lastAt,
+        payload,
+      )
+    ) {
+      return;
     }
+    tagOrderRef.current = applyLiveTagsState(tagOrderRef.current, payload);
     setTags((prev) => ({
       ...prev,
       ...payload,
@@ -155,7 +165,10 @@ export function OperatorPage() {
 
   useEffect(() => {
     const socket = getRealtimeSocket();
-    const onTags = (payload: LiveTags) => applyLiveTags(payload);
+    const onTags = (payload: LiveTags) => {
+      lastWsTagAt.current = Date.now();
+      applyLiveTags(payload);
+    };
     const onSafety = (payload: HmiLayout['safety']) => {
       setSafety(payload);
       if (payload.control) {
@@ -177,6 +190,12 @@ export function OperatorPage() {
   useEffect(() => {
     let cancelled = false;
     const pull = async () => {
+      const socket = getRealtimeSocket();
+      if (socket.connected && Date.now() - lastWsTagAt.current < 2_500) {
+        return;
+      }
+      if (tagsPullInFlight.current) return;
+      tagsPullInFlight.current = true;
       try {
         const payload = await apiGet<LiveTags & { at: string | null }>(
           '/realtime/tags',
@@ -185,10 +204,12 @@ export function OperatorPage() {
         applyLiveTags(payload);
       } catch {
         // ignore transient errors
+      } finally {
+        tagsPullInFlight.current = false;
       }
     };
     void pull();
-    const id = window.setInterval(pull, 500);
+    const id = window.setInterval(pull, 750);
     return () => {
       cancelled = true;
       window.clearInterval(id);

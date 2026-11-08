@@ -22,6 +22,8 @@ export type LiveTagSnapshot = {
   fault: boolean;
   commsOk: boolean;
   values: Record<string, number | boolean>;
+  /** Increments every successful poll (strict ordering for Operator merge). */
+  seq: number;
   at: string;
 };
 
@@ -30,6 +32,7 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TagPollerService.name);
   private timer: NodeJS.Timeout | null = null;
   private tick = 0;
+  private seq = 0;
   /** Skip overlapping polls — prod Modbus RTT otherwise stacks reads and stalls live tags. */
   private inFlight = false;
   private lastTags: LiveTagSnapshot | null = null;
@@ -73,7 +76,7 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
       const driver = this.plcService.getDriver();
       if (!driver.isConnected()) return;
 
-      const heightAddr = await this.plcService.addressFor(
+      const hoistAddr = await this.plcService.addressFor(
         'holding.hoistHeightMm',
         DEMO_CRANE_MAP.holdings.hoistHeightMm,
       );
@@ -101,27 +104,74 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
         'discrete.commsOk',
         DEMO_CRANE_MAP.discretes.commsOk,
       );
-      const [height] = await driver.readHoldingRegisters(heightAddr, 1);
-      const [loadKg] = await driver.readHoldingRegisters(loadAddr, 1);
-      const [speed] = await driver.readHoldingRegisters(speedAddr, 1);
-      const [trolleyPosition] = await driver.readHoldingRegisters(
+      // Batch-read contiguous demo map blocks so serialized Modbus keeps up
+      // with the 250ms poll (per-register reads were freezing then jumping).
+      const holdingBase = Math.min(
+        hoistAddr,
+        loadAddr,
+        speedAddr,
         trolleyAddr,
-        1,
       );
-      const [motorRunning] = await driver.readDiscreteInputs(motorAddr, 1);
-      const [fault] = await driver.readDiscreteInputs(faultAddr, 1);
-      const [commsOk] = await driver.readDiscreteInputs(commsAddr, 1);
-      const values = await this.plcService.readNamedValues();
+      const holdingTop = Math.max(
+        hoistAddr,
+        loadAddr,
+        speedAddr,
+        trolleyAddr,
+      );
+      const holdingBlock = await driver.readHoldingRegisters(
+        holdingBase,
+        holdingTop - holdingBase + 1,
+      );
+      const pickHolding = (addr: number) =>
+        holdingBlock[addr - holdingBase] ?? 0;
+      const height = pickHolding(hoistAddr);
+      const loadKg = pickHolding(loadAddr);
+      const speed = pickHolding(speedAddr);
+      const trolleyPosition = pickHolding(trolleyAddr);
+      const discreteBase = Math.min(motorAddr, faultAddr, commsAddr);
+      const discreteTop = Math.max(motorAddr, faultAddr, commsAddr);
+      const discreteBlock = await driver.readDiscreteInputs(
+        discreteBase,
+        discreteTop - discreteBase + 1,
+      );
+      const pickDiscrete = (addr: number) =>
+        Boolean(discreteBlock[addr - discreteBase]);
+      const motorRunning = pickDiscrete(motorAddr);
+      const fault = pickDiscrete(faultAddr);
+      const commsOk = pickDiscrete(commsAddr);
 
+      const coreValues: Record<string, number | boolean> = {
+        'holding.hoistHeightMm': height ?? 0,
+        'holding.loadKg': loadKg ?? 0,
+        'holding.speedPct': speed ?? 0,
+        'holding.trolleyPosition': trolleyPosition ?? 0,
+        'discrete.motorRunning': motorRunning,
+        'discrete.fault': fault,
+        'discrete.commsOk': commsOk,
+      };
+      let values = {
+        ...this.lastTags?.values,
+        ...coreValues,
+      };
+      if (this.tick === 0 || this.tick % 8 === 0) {
+        try {
+          values = { ...values, ...(await this.plcService.readNamedValues()) };
+        } catch {
+          // keep coreValues-only snapshot
+        }
+      }
+
+      this.seq += 1;
       const snapshot: LiveTagSnapshot = {
         hoistHeightMm: height ?? 0,
         loadKg: loadKg ?? 0,
         speedPct: speed ?? 0,
         trolleyPositionMm: trolleyPosition ?? 0,
-        motorRunning: Boolean(motorRunning),
-        fault: Boolean(fault),
-        commsOk: Boolean(commsOk),
+        motorRunning,
+        fault,
+        commsOk,
         values,
+        seq: this.seq,
         at: new Date().toISOString(),
       };
       this.lastTags = snapshot;
