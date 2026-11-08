@@ -1,7 +1,7 @@
 # Optional OPC UA crane simulator. Not started by docker:dev.
 FROM node:26-bookworm-slim
 
-RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
+RUN npm install -g pnpm@12.18.0
 
 WORKDIR /app
 

@@ -6,7 +6,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
+RUN npm install -g pnpm@12.18.0
 
 WORKDIR /app
 
@@ -40,7 +40,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends gosu python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
+RUN npm install -g pnpm@12.18.0
 
 WORKDIR /app
 
@@ -86,7 +86,7 @@ CMD ["node", "dist/main.js"]
 # ---- Modbus sim runtime ----
 FROM node:26-bookworm-slim AS modbus-sim
 
-RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
+RUN npm install -g pnpm@12.18.0
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
