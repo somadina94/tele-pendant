@@ -272,20 +272,18 @@ describe('MediaPage', () => {
       onend: (() => void) | null;
     };
     const instances: Rec[] = [];
-    window.SpeechRecognition = vi.fn(() => {
-      const rec: Rec = {
-        continuous: false,
-        interimResults: false,
-        lang: 'en-US',
-        maxAlternatives: 1,
-        start: vi.fn(),
-        stop: vi.fn(),
-        onresult: null,
-        onerror: null,
-        onend: null,
-      };
-      instances.push(rec);
-      return rec;
+    // Vitest 5 requires a real constructor when the app uses `new Ctor()`.
+    window.SpeechRecognition = vi.fn(function SpeechRecognition(this: Rec) {
+      this.continuous = false;
+      this.interimResults = false;
+      this.lang = 'en-US';
+      this.maxAlternatives = 1;
+      this.start = vi.fn();
+      this.stop = vi.fn();
+      this.onresult = null;
+      this.onerror = null;
+      this.onend = null;
+      instances.push(this);
     }) as unknown as typeof window.SpeechRecognition;
     const instance = () => instances[instances.length - 1]!;
 
@@ -469,20 +467,17 @@ describe('MediaPage', () => {
       onend: (() => void) | null;
     };
     const instances: Rec[] = [];
-    window.SpeechRecognition = vi.fn(() => {
-      const rec: Rec = {
-        continuous: false,
-        interimResults: false,
-        lang: 'en-US',
-        maxAlternatives: 1,
-        start: vi.fn(),
-        stop: vi.fn(),
-        onresult: null,
-        onerror: null,
-        onend: null,
-      };
-      instances.push(rec);
-      return rec;
+    window.SpeechRecognition = vi.fn(function SpeechRecognition(this: Rec) {
+      this.continuous = false;
+      this.interimResults = false;
+      this.lang = 'en-US';
+      this.maxAlternatives = 1;
+      this.start = vi.fn();
+      this.stop = vi.fn();
+      this.onresult = null;
+      this.onerror = null;
+      this.onend = null;
+      instances.push(this);
     }) as unknown as typeof window.SpeechRecognition;
 
     vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {

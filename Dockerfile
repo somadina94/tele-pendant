@@ -1,12 +1,12 @@
 # Production multi-stage build for Tele-Pendant API (+ workspace packages).
 # better-sqlite3 needs native toolchain.
-FROM node:22-bookworm-slim AS builder
+FROM node:26-bookworm-slim AS builder
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
 
 WORKDIR /app
 
@@ -34,13 +34,13 @@ RUN pnpm --filter @tele-pendant/shared build \
   && pnpm --filter @tele-pendant/modbus-sim build
 
 # ---- API runtime ----
-FROM node:22-bookworm-slim AS api
+FROM node:26-bookworm-slim AS api
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends gosu python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
 
 WORKDIR /app
 
@@ -84,9 +84,9 @@ ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "dist/main.js"]
 
 # ---- Modbus sim runtime ----
-FROM node:22-bookworm-slim AS modbus-sim
+FROM node:26-bookworm-slim AS modbus-sim
 
-RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@12.18.0 --activate
 WORKDIR /app
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
@@ -106,7 +106,7 @@ EXPOSE 1502
 CMD ["node", "dist/main.js"]
 
 # ---- Web (nginx) ----
-FROM nginx:1.27-alpine AS web
+FROM nginx:1.31-alpine AS web
 
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html

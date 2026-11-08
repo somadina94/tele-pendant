@@ -1,3 +1,28 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+# Migrated from .npmrc for pnpm 12 (non-auth settings live here).
+autoInstallPeers: true
+strictPeerDependencies: false
+publicHoistPattern:
+  - '*@babel/*'
+  - '*babel-preset-expo*'
+  - '*babel-plugin*'
+  - '*metro*'
+  - '*expo*'
+
+# Allow latest packages during intentional upgrades; keep CI/install reproducible.
+minimumReleaseAge: 0
+
+# Native modules / postinstall scripts used by the workspace.
+allowBuilds:
+  better-sqlite3: true
+  bcrypt: true
+  esbuild: true
+  '@nestjs/core': true
+  unrs-resolver: true
+  '@compodoc/compodoc': true
+  '@parcel/watcher': true
+  '@scarf/scarf': true
+  protobufjs: true

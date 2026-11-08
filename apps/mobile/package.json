@@ -20,24 +20,24 @@
     "test:cov": "jest --watchman=false --coverage --passWithNoTests"
   },
   "dependencies": {
-    "@babel/core": "^7.26.0",
-    "@babel/plugin-transform-react-jsx": "^7.26.0",
-    "@babel/runtime": "^7.26.0",
-    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@babel/core": "^7.29.13",
+    "@babel/plugin-transform-react-jsx": "^7.29.7",
+    "@babel/runtime": "^7.29.13",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.21.0",
     "@react-navigation/drawer": "^7.14.4",
     "@react-navigation/native": "^7.5.1",
-    "@tanstack/react-query": "^5.66.0",
+    "@tanstack/react-query": "^5.107.1",
     "@tele-pendant/shared": "workspace:*",
     "expo": "~58.0.23",
     "expo-camera": "~58.0.14",
     "expo-constants": "^58.0.15",
     "expo-haptics": "~58.0.7",
     "expo-secure-store": "~58.0.2",
-    "expo-speech-recognition": "^3.0.1",
+    "expo-speech-recognition": "^58.0.1",
     "expo-status-bar": "~58.0.4",
     "expo-updates": "^58.0.21",
-    "lucide-react-native": "^1.67.0",
+    "lucide-react-native": "^1.70.0",
     "nativewind": "^4.2.7",
     "react": "19.3.0",
     "react-native": "0.88.1",
@@ -50,15 +50,15 @@
     "react-native-svg": "15.16.0",
     "react-native-worklets": "0.13.0",
     "socket.io-client": "^4.8.4",
-    "tailwindcss": "^3.4.17"
+    "tailwindcss": "^3.4.19"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/react": "~19.3.0",
-    "babel-preset-expo": "~58.0.23",
+    "babel-preset-expo": "~58.0.24",
     "jest": "^30.5.2",
-    "prettier": "^3.4.2",
-    "typescript": "^6.0.3"
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3"
   },
   "jest": {
     "moduleFileExtensions": [

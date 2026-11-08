@@ -1,7 +1,7 @@
 {
   "name": "tele-pendant",
   "private": true,
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@12.18.0",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
@@ -24,8 +24,8 @@
     "handover:mobile:signing-zip": "pnpm --filter @tele-pendant/mobile signing:zip"
   },
   "devDependencies": {
-    "prettier": "^3.4.2",
-    "turbo": "^2.5.4",
-    "typescript": "^5.7.3"
+    "prettier": "^3.9.10",
+    "turbo": "^2.11.10",
+    "typescript": "~6.0.3"
   }
 }
