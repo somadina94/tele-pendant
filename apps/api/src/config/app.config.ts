@@ -28,4 +28,11 @@ export default registerAs('appConfig', () => ({
     model: process.env.CURSOR_MODEL?.trim() || 'composer-2.5',
   },
   faceTemplateKey: process.env.FACE_TEMPLATE_KEY?.trim() || '',
+  mail: {
+    host: process.env.MAIL_HOST?.trim() || '',
+    port: parseInt(process.env.MAIL_PORT ?? '587', 10),
+    username: process.env.SMTP_USERNAME?.trim() || '',
+    password: process.env.SMTP_PASSWORD?.trim() || '',
+    from: process.env.MAIL_FROM?.trim() || '',
+  },
 }));

@@ -66,6 +66,8 @@ describe('AuthService', () => {
     faceTemplate: null as string | null,
     suspended: false,
     tokenVersion: 0,
+    twoFactorEnabled: false,
+    safeActionPinHash: null as string | null,
   };
 
   const usersRepository = {
@@ -89,6 +91,19 @@ describe('AuthService', () => {
     plantPinFallback: jest.fn(() => ''),
     changePin: jest.fn().mockResolvedValue(undefined),
   };
+  const mailService = {
+    isConfigured: jest.fn(() => true),
+    sendOtp: jest.fn().mockResolvedValue(undefined),
+  };
+  const otpChallenges = {
+    create: jest.fn().mockResolvedValue({
+      challengeId: 'chal-1',
+      code: '123456',
+    }),
+    peek: jest.fn(),
+    verify: jest.fn(),
+    consume: jest.fn(),
+  };
 
   let service: AuthService;
 
@@ -108,14 +123,23 @@ describe('AuthService', () => {
     user.suspended = false;
     user.tokenVersion = 0;
     user.passwordHash = 'hash';
+    user.twoFactorEnabled = false;
     configService.get.mockImplementation(defaultConfig);
     safeActionPin.plantPinFallback.mockReturnValue('');
+    mailService.isConfigured.mockReturnValue(true);
+    mailService.sendOtp.mockResolvedValue(undefined);
+    otpChallenges.create.mockResolvedValue({
+      challengeId: 'chal-1',
+      code: '123456',
+    });
     service = new AuthService(
       usersRepository as never,
       jwtService as never,
       configService as never,
       auditService as never,
       safeActionPin as never,
+      mailService as never,
+      otpChallenges as never,
     );
   });
 
@@ -192,12 +216,292 @@ describe('AuthService', () => {
       password: 'change-me-admin-password',
     });
 
-    expect(result.accessToken).toBe('token');
+    expect('accessToken' in result && result.accessToken).toBe('token');
+    if (!('accessToken' in result)) throw new Error('expected token');
     expect(result.user.displayName).toBeNull();
     expect(result.user.hasFaceTemplate).toBe(false);
+    expect(result.user.twoFactorEnabled).toBe(false);
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'auth.login', result: 'success' }),
     );
+  });
+
+  it('challenges login with email OTP when 2FA is on', async () => {
+    usersRepository.findOne.mockResolvedValue({
+      ...user,
+      twoFactorEnabled: true,
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    const result = await service.login({
+      email: user.email,
+      password: 'change-me-admin-password',
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        requiresTwoFactor: true,
+        challengeId: 'chal-1',
+        emailHint: 'ad***@example.com',
+      }),
+    );
+    expect(mailService.sendOtp).toHaveBeenCalledWith(
+      user.email,
+      '123456',
+      'login',
+    );
+    expect(jwtService.signAsync).not.toHaveBeenCalled();
+  });
+
+  it('refuses password-grant when 2FA is on', async () => {
+    usersRepository.findOne.mockResolvedValue({
+      ...user,
+      twoFactorEnabled: true,
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    await expect(
+      service.loginPasswordGrant({
+        email: user.email,
+        password: 'change-me-admin-password',
+      }),
+    ).rejects.toThrow(/Email 2FA/i);
+  });
+
+  it('password-grant returns token when 2FA is off', async () => {
+    usersRepository.findOne.mockResolvedValue({ ...user });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    const result = await service.loginPasswordGrant({
+      email: user.email,
+      password: 'change-me-admin-password',
+    });
+    expect(result.accessToken).toBe('token');
+  });
+
+  it('completes login after OTP verify', async () => {
+    otpChallenges.verify.mockResolvedValue({
+      userId: user.id,
+      email: user.email,
+    });
+    usersRepository.findOne.mockResolvedValue({
+      ...user,
+      displayName: null,
+    });
+    const result = await service.verifyLoginOtp('chal-1', '123456', '1.1.1.1');
+    expect(result.accessToken).toBe('token');
+    expect(result.user.displayName).toBeNull();
+    expect(otpChallenges.verify).toHaveBeenCalledWith(
+      'chal-1',
+      '123456',
+      'login',
+    );
+  });
+
+  it('rejects OTP verify for missing or suspended users', async () => {
+    otpChallenges.verify.mockResolvedValue({
+      userId: user.id,
+      email: user.email,
+    });
+    usersRepository.findOne.mockResolvedValue(null);
+    await expect(
+      service.verifyLoginOtp('chal-1', '123456'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    usersRepository.findOne.mockResolvedValue({ ...user, suspended: true });
+    await expect(
+      service.verifyLoginOtp('chal-1', '123456'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('resends login OTP from an existing challenge', async () => {
+    otpChallenges.peek.mockReturnValue({
+      userId: user.id,
+      email: user.email,
+      purpose: 'login',
+      codeHash: 'x',
+      expiresAt: Date.now() + 60_000,
+      attempts: 0,
+    });
+    usersRepository.findOne.mockResolvedValue({
+      ...user,
+      twoFactorEnabled: true,
+    });
+    const result = await service.resendLoginOtp('chal-old');
+    expect(otpChallenges.consume).toHaveBeenCalledWith('chal-old');
+    expect(result.challengeId).toBe('chal-1');
+  });
+
+  it('rejects resend when challenge is missing', async () => {
+    otpChallenges.peek.mockReturnValue(null);
+    await expect(service.resendLoginOtp('gone')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejects resend when user is gone or suspended', async () => {
+    otpChallenges.peek.mockReturnValue({
+      userId: user.id,
+      email: user.email,
+      purpose: 'login',
+      codeHash: 'x',
+      expiresAt: Date.now() + 60_000,
+      attempts: 0,
+    });
+    usersRepository.findOne.mockResolvedValue(null);
+    await expect(service.resendLoginOtp('chal-old')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    usersRepository.findOne.mockResolvedValue({ ...user, suspended: true });
+    await expect(service.resendLoginOtp('chal-old')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('enables 2FA after confirm OTP and disables immediately', async () => {
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      twoFactorEnabled: false,
+    });
+    const begin = await service.beginEnableTwoFactor(user.id);
+    expect(begin.requiresTwoFactor).toBe(true);
+    expect(mailService.sendOtp).toHaveBeenCalledWith(
+      user.email,
+      '123456',
+      'enable',
+    );
+
+    otpChallenges.verify.mockResolvedValue({
+      userId: user.id,
+      email: user.email,
+    });
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      twoFactorEnabled: false,
+    });
+    await expect(
+      service.confirmEnableTwoFactor(user.id, 'chal-1', '123456'),
+    ).resolves.toEqual(
+      expect.objectContaining({ ok: true, twoFactorEnabled: true }),
+    );
+
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      twoFactorEnabled: true,
+    });
+    await expect(service.disableTwoFactor(user.id)).resolves.toEqual(
+      expect.objectContaining({ ok: true, twoFactorEnabled: false }),
+    );
+  });
+
+  it('refuses enable when already on or SMTP missing', async () => {
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      twoFactorEnabled: true,
+    });
+    await expect(service.beginEnableTwoFactor(user.id)).rejects.toThrow(
+      /already enabled/i,
+    );
+
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      twoFactorEnabled: false,
+    });
+    mailService.isConfigured.mockReturnValue(false);
+    await expect(service.beginEnableTwoFactor(user.id)).rejects.toThrow(
+      /SMTP/i,
+    );
+  });
+
+  it('consumes challenge when mail send fails', async () => {
+    usersRepository.findOne.mockResolvedValue({
+      ...user,
+      twoFactorEnabled: true,
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    mailService.sendOtp.mockRejectedValue(new Error('smtp down'));
+    await expect(
+      service.login({ email: user.email, password: 'x' }),
+    ).rejects.toThrow(/smtp down/i);
+    expect(otpChallenges.consume).toHaveBeenCalledWith('chal-1');
+  });
+
+  it('handles non-Error mail failures and short email hints', async () => {
+    usersRepository.findOne.mockResolvedValue({
+      ...user,
+      email: 'ab@x.com',
+      twoFactorEnabled: true,
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    const okHint = await service.login({
+      email: 'ab@x.com',
+      password: 'x',
+    });
+    expect(okHint).toEqual(
+      expect.objectContaining({ emailHint: 'a***@x.com' }),
+    );
+
+    usersRepository.findOne.mockResolvedValue({
+      ...user,
+      email: '@orphan.tld',
+      displayName: null,
+      twoFactorEnabled: true,
+    });
+    const blankLocal = await service.login({
+      email: '@orphan.tld',
+      password: 'x',
+    });
+    expect(blankLocal).toEqual(expect.objectContaining({ emailHint: '***' }));
+
+    usersRepository.findOneByOrFail.mockResolvedValue({
+      ...user,
+      displayName: undefined,
+      twoFactorEnabled: false,
+    });
+    mailService.sendOtp.mockRejectedValueOnce('boom');
+    await expect(service.beginEnableTwoFactor(user.id)).rejects.toThrow(
+      /Could not send verification email/i,
+    );
+
+    otpChallenges.verify.mockRejectedValueOnce('bad');
+    await expect(service.verifyLoginOtp('chal-1', '000000')).rejects.toBe(
+      'bad',
+    );
+  });
+
+  it('confirm and disable 2FA with null displayName', async () => {
+    otpChallenges.verify.mockResolvedValue({
+      userId: user.id,
+      email: user.email,
+    });
+    const row = {
+      ...user,
+      displayName: null,
+      twoFactorEnabled: false,
+    };
+    usersRepository.findOneByOrFail.mockResolvedValue(row);
+    await expect(
+      service.confirmEnableTwoFactor(user.id, 'chal-1', '123456'),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        twoFactorEnabled: true,
+        user: expect.objectContaining({ displayName: null }),
+      }),
+    );
+    row.twoFactorEnabled = true;
+    await expect(service.disableTwoFactor(user.id, '9.9.9.9')).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        twoFactorEnabled: false,
+      }),
+    );
+  });
+
+  it('rejects confirm enable for another user challenge', async () => {
+    otpChallenges.verify.mockResolvedValue({
+      userId: 'other',
+      email: 'o@x.com',
+    });
+    await expect(
+      service.confirmEnableTwoFactor(user.id, 'chal-1', '123456'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects suspended accounts on login and me', async () => {
@@ -517,6 +821,22 @@ describe('AuthService', () => {
         result: 'success',
       }),
     );
+  });
+
+  it('face login challenges OTP when 2FA is on', async () => {
+    const frames = challengeFrames();
+    const enrolled = serializeDescriptor(descriptorFromChallengeFrames(frames));
+    usersRepository.find.mockResolvedValue([
+      { ...user, twoFactorEnabled: true, faceTemplate: enrolled },
+    ]);
+    const result = await service.loginWithFace({ frames });
+    expect(result).toEqual(
+      expect.objectContaining({
+        requiresTwoFactor: true,
+        challengeId: 'chal-1',
+      }),
+    );
+    expect(jwtService.signAsync).not.toHaveBeenCalled();
   });
 
   it('rejects single still imageDataUrl and empty capture (TP-45)', async () => {

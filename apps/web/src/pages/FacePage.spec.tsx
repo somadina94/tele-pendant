@@ -128,6 +128,99 @@ describe('FacePage', () => {
     ).toBeInTheDocument();
   });
 
+  it('continues face login with email OTP when 2FA is on', async () => {
+    const challenge = {
+      requiresTwoFactor: true as const,
+      challengeId: 'chal-face',
+      emailHint: 'a***@b.com',
+    };
+    const post = vi
+      .spyOn(api, 'apiPost')
+      .mockResolvedValueOnce(challenge)
+      .mockResolvedValueOnce(challenge)
+      .mockResolvedValueOnce({
+        accessToken: 'otp-face',
+        user: {
+          id: '1',
+          email: 'a@b.com',
+          role: 'admin',
+          displayName: 'Admin',
+          locale: 'en',
+          twoFactorEnabled: true,
+        },
+      });
+    renderWithProviders(<FacePage skipCamera />);
+    fireEvent.change(screen.getByLabelText(/Email hint/), {
+      target: { value: 'a@b.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
+    await captureAllPoses();
+    expect(
+      await screen.findByLabelText('Verification code'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to password' }));
+    expect(screen.getByRole('button', { name: loginName })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
+    await captureAllPoses();
+    expect(
+      await screen.findByLabelText('Verification code'),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Verification code'), {
+      target: { value: '654321' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify and sign in' }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/auth/login/otp', {
+        challengeId: 'chal-face',
+        code: '654321',
+      }),
+    );
+    expect(localStorage.getItem('accessToken')).toBe('otp-face');
+  });
+
+  it('surfaces face OTP verify failures', async () => {
+    vi.spyOn(api, 'apiPost')
+      .mockResolvedValueOnce({
+        requiresTwoFactor: true,
+        challengeId: 'chal-face',
+        emailHint: 'a***@b.com',
+      })
+      .mockRejectedValueOnce(new Error('bad otp'))
+      .mockRejectedValueOnce('otp string');
+    renderWithProviders(<FacePage skipCamera />);
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
+    await captureAllPoses();
+    expect(
+      await screen.findByLabelText('Verification code'),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Verification code'), {
+      target: { value: '000000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify and sign in' }));
+    expect(await screen.findByText('bad otp')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Verify and sign in' }));
+    expect(
+      await screen.findByText('Face match failed — use password login'),
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to typed email when face OTP has no emailHint', async () => {
+    vi.spyOn(api, 'apiPost').mockResolvedValueOnce({
+      requiresTwoFactor: true,
+      challengeId: 'chal-no-hint',
+    });
+    renderWithProviders(<FacePage skipCamera />);
+    fireEvent.change(screen.getByLabelText(/Email hint/), {
+      target: { value: 'fallback@b.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
+    await captureAllPoses();
+    expect(
+      await screen.findByText(/Enter the 6-digit code sent to fallback@b.com/i),
+    ).toBeInTheDocument();
+  });
+
   it('completes a skip-camera challenge with placeholder frames', async () => {
     localStorage.setItem('accessToken', 'tok');
     const post = vi

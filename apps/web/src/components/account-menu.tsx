@@ -2,15 +2,17 @@ import { FormEvent, useState } from 'react';
 import {
   ChevronDown,
   KeyRound,
+  Mail,
   Shield,
   User,
   UserPlus,
   Users,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { apiPatch } from '@/lib/api';
+import { apiPatch, apiPost } from '@/lib/api';
 import { toastErr, toastOk } from '@/lib/toast';
 import { getStoredUser } from '@/lib/user-session';
+import { useT } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -38,9 +40,16 @@ function goToUsers(navigate: ReturnType<typeof useNavigate>, role?: string) {
 
 export function AccountMenu() {
   const navigate = useNavigate();
+  const { t } = useT();
   const user = getStoredUser();
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [resetPinOpen, setResetPinOpen] = useState(false);
+  const [twoFactorOpen, setTwoFactorOpen] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(
+    () => getStoredUser()?.twoFactorEnabled === true,
+  );
+  const [otpChallengeId, setOtpChallengeId] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -50,7 +59,10 @@ export function AccountMenu() {
 
   if (!user) return null;
 
-  function patchStoredUser(patch: { hasSafeActionPin?: boolean }) {
+  function patchStoredUser(patch: {
+    hasSafeActionPin?: boolean;
+    twoFactorEnabled?: boolean;
+  }) {
     try {
       const raw = localStorage.getItem('user');
       if (!raw) return;
@@ -58,6 +70,57 @@ export function AccountMenu() {
       localStorage.setItem('user', JSON.stringify({ ...parsed, ...patch }));
     } catch {
       // ignore
+    }
+  }
+
+  async function beginEnableTwoFactor() {
+    try {
+      const data = await apiPost<{
+        requiresTwoFactor: true;
+        challengeId: string;
+      }>('/auth/two-factor/enable');
+      setOtpChallengeId(data.challengeId);
+      setOtpCode('');
+      toastOk(t('otpSent'));
+    } catch (err) {
+      toastErr(err instanceof Error ? err.message : t('loginFailed'));
+    }
+  }
+
+  async function confirmEnableTwoFactor(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const data = await apiPost<{
+        ok: boolean;
+        twoFactorEnabled: boolean;
+      }>('/auth/two-factor/confirm', {
+        challengeId: otpChallengeId,
+        code: otpCode.trim(),
+      });
+      setTwoFactorEnabled(data.twoFactorEnabled);
+      patchStoredUser({ twoFactorEnabled: data.twoFactorEnabled });
+      setOtpChallengeId(null);
+      setOtpCode('');
+      toastOk(t('twoFactorEnabledToast'));
+      setTwoFactorOpen(false);
+    } catch (err) {
+      toastErr(err instanceof Error ? err.message : t('loginFailed'));
+    }
+  }
+
+  async function disableTwoFactor() {
+    try {
+      const data = await apiPost<{
+        ok: boolean;
+        twoFactorEnabled: boolean;
+      }>('/auth/two-factor/disable');
+      setTwoFactorEnabled(false);
+      patchStoredUser({ twoFactorEnabled: false });
+      toastOk(t('twoFactorDisabledToast'));
+      setTwoFactorOpen(false);
+      void data;
+    } catch (err) {
+      toastErr(err instanceof Error ? err.message : t('loginFailed'));
     }
   }
 
@@ -143,6 +206,17 @@ export function AccountMenu() {
           <DropdownMenuItem onClick={() => setResetPinOpen(true)}>
             <Shield className="size-4" />
             {user.hasSafeActionPin ? 'Change reset PIN' : 'Set reset PIN'}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              setOtpChallengeId(null);
+              setOtpCode('');
+              setTwoFactorEnabled(getStoredUser()?.twoFactorEnabled === true);
+              setTwoFactorOpen(true);
+            }}
+          >
+            <Mail className="size-4" />
+            {t('twoFactor')}
           </DropdownMenuItem>
           {user.role === 'admin' ? (
             <>
@@ -280,6 +354,53 @@ export function AccountMenu() {
             </div>
             <Button type="submit">Save password</Button>
           </form>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={twoFactorOpen} onOpenChange={setTwoFactorOpen}>
+        <SheetContent side="right" className="overflow-y-auto sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>{t('twoFactor')}</SheetTitle>
+            <SheetDescription>{t('twoFactorLede')}</SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 grid gap-4">
+            <p className="text-sm text-muted-foreground">
+              {twoFactorEnabled ? t('twoFactorOn') : t('twoFactorOff')}
+            </p>
+            {twoFactorEnabled ? (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void disableTwoFactor()}
+              >
+                {t('twoFactorDisable')}
+              </Button>
+            ) : otpChallengeId ? (
+              <form
+                className="grid gap-4"
+                onSubmit={(e) => void confirmEnableTwoFactor(e)}
+              >
+                <div className="grid gap-2">
+                  <Label htmlFor="account-2fa-otp">{t('otpCode')}</Label>
+                  <Input
+                    id="account-2fa-otp"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="\d{6}"
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    required
+                  />
+                </div>
+                <Button type="submit">{t('twoFactorConfirm')}</Button>
+              </form>
+            ) : (
+              <Button type="button" onClick={() => void beginEnableTwoFactor()}>
+                {t('twoFactorEnable')}
+              </Button>
+            )}
+          </div>
         </SheetContent>
       </Sheet>
     </>

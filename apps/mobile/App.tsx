@@ -54,23 +54,65 @@ function LoginScreen({
   const { t, setLocale, locale } = useLocale();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [otpChallengeId, setOtpChallengeId] = useState<string | null>(null);
+  const [otpEmailHint, setOtpEmailHint] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const [mode, setMode] = useState<'password' | 'face'>('password');
+
+  const finish = async (accessToken: string, user: StoredUser) => {
+    await setAccessToken(accessToken);
+    await persistUser(user);
+    onLoggedIn(accessToken, isUserRole(user.role) ? user.role : null);
+  };
 
   const login = async () => {
     try {
-      const data = await apiPost<{ accessToken: string; user: StoredUser }>(
-        '/auth/login',
-        {
-          email,
-          password,
-        },
-      );
-      await setAccessToken(data.accessToken);
-      await persistUser(data.user);
-      onLoggedIn(
-        data.accessToken,
-        isUserRole(data.user.role) ? data.user.role : null,
-      );
+      if (otpChallengeId) {
+        const data = await apiPost<{
+          accessToken: string;
+          user: StoredUser;
+        }>('/auth/login/otp', {
+          challengeId: otpChallengeId,
+          code: otpCode.trim(),
+        });
+        await finish(data.accessToken, data.user);
+        return;
+      }
+      const data = await apiPost<{
+        accessToken?: string;
+        user?: StoredUser;
+        requiresTwoFactor?: true;
+        challengeId?: string;
+        emailHint?: string;
+      }>('/auth/login', {
+        email,
+        password,
+      });
+      if (data.requiresTwoFactor && data.challengeId) {
+        setOtpChallengeId(data.challengeId);
+        setOtpEmailHint(data.emailHint ?? email);
+        setOtpCode('');
+        return;
+      }
+      if (!data.accessToken || !data.user) {
+        throw new Error(t('loginFailed'));
+      }
+      await finish(data.accessToken, data.user);
+    } catch (err) {
+      showErrorFrom(err, 'Login failed', t('signIn'));
+    }
+  };
+
+  const resendOtp = async () => {
+    if (!otpChallengeId) return;
+    try {
+      const data = await apiPost<{
+        challengeId: string;
+        emailHint: string;
+      }>('/auth/login/otp/resend', { challengeId: otpChallengeId });
+      setOtpChallengeId(data.challengeId);
+      setOtpEmailHint(data.emailHint);
+      setOtpCode('');
     } catch (err) {
       showErrorFrom(err, 'Login failed', t('signIn'));
     }
@@ -93,7 +135,35 @@ function LoginScreen({
         <Subtitle>Expo handheld · sign in to the configured API</Subtitle>
         <TourBar screen="login" />
 
-        {mode === 'face' ? (
+        {otpChallengeId ? (
+          <>
+            <Hint>{t('otpLede').replace('{email}', otpEmailHint)}</Hint>
+            <Field
+              label={t('otpCode')}
+              value={otpCode}
+              onChangeText={setOtpCode}
+              keyboardType="number-pad"
+              maxLength={6}
+              autoComplete="one-time-code"
+              textContentType="oneTimeCode"
+            />
+            <Btn onPress={() => void login()}>
+              <LogIn size={16} color="#041018" />
+              <BtnText>{t('otpVerify')}</BtnText>
+            </Btn>
+            <Btn onPress={() => void resendOtp()}>
+              <BtnText>{t('otpResend')}</BtnText>
+            </Btn>
+            <Btn
+              onPress={() => {
+                setOtpChallengeId(null);
+                setOtpCode('');
+              }}
+            >
+              <BtnText>{t('otpBack')}</BtnText>
+            </Btn>
+          </>
+        ) : mode === 'face' ? (
           <>
             <Hint>
               Local face login (3 poses). Not ISO-certified. Fail closed to
@@ -117,6 +187,12 @@ function LoginScreen({
                     onLoggedIn(accessToken, null);
                   }
                 })();
+              }}
+              onOtpChallenge={(challengeId, emailHint) => {
+                setOtpChallengeId(challengeId);
+                setOtpEmailHint(emailHint);
+                setOtpCode('');
+                setMode('password');
               }}
               active
               allowEnroll={false}

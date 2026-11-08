@@ -366,4 +366,146 @@ describe('AccountMenu', () => {
       expect(toastOk).toHaveBeenCalledWith('Reset PIN updated.'),
     );
   });
+
+  it('enables email 2FA after OTP confirm and can disable it', async () => {
+    const user = userEvent.setup();
+    const post = vi
+      .spyOn(api, 'apiPost')
+      .mockResolvedValueOnce({
+        requiresTwoFactor: true,
+        challengeId: 'chal-en',
+        emailHint: 'op***@plant.local',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        twoFactorEnabled: true,
+        user: {
+          id: 'u-test',
+          email: 'test@example.com',
+          role: 'operator',
+          displayName: 'Test User',
+          locale: 'en',
+          twoFactorEnabled: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        twoFactorEnabled: false,
+        user: {
+          id: 'u-test',
+          email: 'test@example.com',
+          role: 'operator',
+          displayName: 'Test User',
+          locale: 'en',
+          twoFactorEnabled: false,
+        },
+      });
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Email 2FA'));
+    await user.click(screen.getByRole('button', { name: 'Enable email 2FA' }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/auth/two-factor/enable'),
+    );
+    fireEvent.change(screen.getByLabelText('Verification code'), {
+      target: { value: '111222' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Confirm code' }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/auth/two-factor/confirm', {
+        challengeId: 'chal-en',
+        code: '111222',
+      }),
+    );
+    const { toastOk } = await import('@/lib/toast');
+    expect(toastOk).toHaveBeenCalledWith('Email 2FA enabled.');
+
+    localStorage.setItem(
+      'user',
+      JSON.stringify({
+        id: 'u-test',
+        email: 'test@example.com',
+        displayName: 'Test User',
+        role: 'operator',
+        twoFactorEnabled: true,
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Email 2FA'));
+    await user.click(screen.getByRole('button', { name: 'Disable email 2FA' }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/auth/two-factor/disable'),
+    );
+    expect(toastOk).toHaveBeenCalledWith('Email 2FA disabled.');
+  });
+
+  it('surfaces email 2FA enable errors', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, 'apiPost')
+      .mockRejectedValueOnce(new Error('smtp missing'))
+      .mockRejectedValueOnce('smtp string');
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Email 2FA'));
+    await user.click(screen.getByRole('button', { name: 'Enable email 2FA' }));
+    const { toastErr } = await import('@/lib/toast');
+    await waitFor(() => expect(toastErr).toHaveBeenCalledWith('smtp missing'));
+    await user.click(screen.getByRole('button', { name: 'Enable email 2FA' }));
+    await waitFor(() => expect(toastErr).toHaveBeenCalledWith('Login failed'));
+  });
+
+  it('surfaces email 2FA confirm failures', async () => {
+    const user = userEvent.setup();
+    const post = vi
+      .spyOn(api, 'apiPost')
+      .mockResolvedValueOnce({
+        requiresTwoFactor: true,
+        challengeId: 'chal-fail',
+        emailHint: 'op***@plant.local',
+      })
+      .mockRejectedValueOnce(new Error('bad confirm'))
+      .mockRejectedValueOnce('confirm string');
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Email 2FA'));
+    await user.click(screen.getByRole('button', { name: 'Enable email 2FA' }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/auth/two-factor/enable'),
+    );
+    fireEvent.change(screen.getByLabelText('Verification code'), {
+      target: { value: '000000' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Confirm code' }));
+    const { toastErr } = await import('@/lib/toast');
+    await waitFor(() => expect(toastErr).toHaveBeenCalledWith('bad confirm'));
+    await user.click(screen.getByRole('button', { name: 'Confirm code' }));
+    await waitFor(() => expect(toastErr).toHaveBeenCalledWith('Login failed'));
+  });
+
+  it('surfaces email 2FA disable failures', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, 'apiPost')
+      .mockRejectedValueOnce(new Error('disable failed'))
+      .mockRejectedValueOnce('disable string');
+    renderWithProviders(<AccountMenu />, { role: 'operator' });
+    localStorage.setItem(
+      'user',
+      JSON.stringify({
+        id: 'u-test',
+        email: 'test@example.com',
+        displayName: 'Test User',
+        role: 'operator',
+        twoFactorEnabled: true,
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.click(screen.getByText('Email 2FA'));
+    await user.click(screen.getByRole('button', { name: 'Disable email 2FA' }));
+    const { toastErr } = await import('@/lib/toast');
+    await waitFor(() =>
+      expect(toastErr).toHaveBeenCalledWith('disable failed'),
+    );
+    await user.click(screen.getByRole('button', { name: 'Disable email 2FA' }));
+    await waitFor(() => expect(toastErr).toHaveBeenCalledWith('Login failed'));
+  });
 });

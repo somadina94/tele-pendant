@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Camera, ScanFace, UserPlus } from 'lucide-react';
 import { apiPost, type PublicUser } from '../lib/api';
@@ -41,6 +41,9 @@ export function FacePage({
   const [step, setStep] = useState(0);
   const [frames, setFrames] = useState<string[]>([]);
   const [email, setEmail] = useState('');
+  const [otpChallengeId, setOtpChallengeId] = useState<string | null>(null);
+  const [otpEmailHint, setOtpEmailHint] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const loggedIn = Boolean(localStorage.getItem('accessToken'));
   const deviceCamera = useDeviceCamera({
     enabled: !skipCamera,
@@ -65,6 +68,29 @@ export function FacePage({
     setMode(next);
     setStep(0);
     setFrames([]);
+  }
+
+  async function verifyFaceOtp(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setFailed(false);
+    try {
+      const data = await apiPost<{ accessToken: string; user: PublicUser }>(
+        '/auth/login/otp',
+        { challengeId: otpChallengeId, code: otpCode.trim() },
+      );
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      toastOk(t('faceSignedIn'));
+      navigate('/operator', { replace: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('err.face');
+      setFailed(true);
+      setMsg(message);
+      toastErr(message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function captureStep(active: 'enroll' | 'login') {
@@ -98,10 +124,22 @@ export function FacePage({
         return;
       }
       const res = await apiPost<{
-        accessToken: string;
+        accessToken?: string;
         user?: PublicUser;
-        limitation: string;
+        limitation?: string;
+        requiresTwoFactor?: true;
+        challengeId?: string;
+        emailHint?: string;
       }>('/auth/face/login', { frames: nextFrames, email });
+      if (res.requiresTwoFactor && res.challengeId) {
+        setOtpChallengeId(res.challengeId);
+        setOtpEmailHint(res.emailHint ?? email);
+        setOtpCode('');
+        setMsg(t('otpSent'));
+        toastOk(t('otpSent'));
+        resetChallenge();
+        return;
+      }
       if (!res.accessToken) {
         throw new Error(t('err.face'));
       }
@@ -181,7 +219,45 @@ export function FacePage({
               />
             )
           ) : null}
-          {inChallenge ? (
+          {otpChallengeId ? (
+            <form
+              className="grid gap-4"
+              onSubmit={(e) => void verifyFaceOtp(e)}
+            >
+              <Alert>
+                <AlertDescription>
+                  {t('otpLede').replace('{email}', otpEmailHint)}
+                </AlertDescription>
+              </Alert>
+              <div className="grid gap-2">
+                <Label htmlFor="face-otp">{t('otpCode')}</Label>
+                <Input
+                  id="face-otp"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="\d{6}"
+                  maxLength={6}
+                  required
+                />
+              </div>
+              <Button type="submit" disabled={busy} className="w-full">
+                {busy ? t('signingIn') : t('otpVerify')}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => {
+                  setOtpChallengeId(null);
+                  setOtpCode('');
+                }}
+              >
+                {t('otpBack')}
+              </Button>
+            </form>
+          ) : inChallenge ? (
             <>
               <Alert>
                 <AlertDescription>

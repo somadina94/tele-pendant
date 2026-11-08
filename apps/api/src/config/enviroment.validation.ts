@@ -71,4 +71,11 @@ export default Joi.object({
   CURSOR_API_KEY: Joi.string().allow('').optional(),
   CURSOR_AGENT_CWD: Joi.string().allow('').optional(),
   CURSOR_MODEL: Joi.string().default('composer-2.5'),
+
+  /** Zoho (or other) SMTP for optional per-user email OTP 2FA. All optional. */
+  MAIL_HOST: Joi.string().allow('').optional(),
+  MAIL_PORT: Joi.number().port().optional(),
+  SMTP_USERNAME: Joi.string().allow('').optional(),
+  SMTP_PASSWORD: Joi.string().allow('').optional(),
+  MAIL_FROM: Joi.string().allow('').optional(),
 }).custom(rejectProductionDemoSecrets);

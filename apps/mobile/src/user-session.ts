@@ -8,6 +8,8 @@ export type StoredUser = {
   role: string;
   displayName: string | null;
   locale: string;
+  twoFactorEnabled?: boolean;
+  hasSafeActionPin?: boolean;
 };
 
 const USER_KEY = 'user';

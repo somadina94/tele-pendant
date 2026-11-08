@@ -28,6 +28,107 @@ describe('LoginPage', () => {
     expect(localStorage.getItem('accessToken')).toBe('tok');
   });
 
+  it('prompts for OTP when 2FA is required then verifies', async () => {
+    const post = vi
+      .spyOn(api, 'apiPost')
+      .mockResolvedValueOnce({
+        requiresTwoFactor: true,
+        challengeId: 'chal-1',
+        emailHint: 'ad***@example.com',
+      })
+      .mockResolvedValueOnce({
+        challengeId: 'chal-2',
+        emailHint: 'ad***@example.com',
+        requiresTwoFactor: true,
+      })
+      .mockResolvedValueOnce({
+        accessToken: 'tok2',
+        user: {
+          id: '1',
+          email: 'admin@example.com',
+          role: 'admin',
+          displayName: 'Admin',
+          locale: 'en',
+          twoFactorEnabled: true,
+        },
+      });
+    renderWithProviders(<LoginPage />);
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'change-me-admin-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(
+      await screen.findByLabelText('Verification code'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/auth/login/otp/resend', {
+        challengeId: 'chal-1',
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('Verification code'), {
+      target: { value: '123456' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify and sign in' }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/auth/login/otp', {
+        challengeId: 'chal-2',
+        code: '123456',
+      }),
+    );
+    expect(localStorage.getItem('accessToken')).toBe('tok2');
+  });
+
+  it('returns from OTP step to password form', async () => {
+    vi.spyOn(api, 'apiPost').mockResolvedValueOnce({
+      requiresTwoFactor: true,
+      challengeId: 'chal-1',
+      emailHint: 'ad***@example.com',
+    });
+    renderWithProviders(<LoginPage />);
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'change-me-admin-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(
+      await screen.findByRole('button', { name: 'Back to password' }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to password' }));
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+  });
+
+  it('shows OTP resend errors', async () => {
+    vi.spyOn(api, 'apiPost')
+      .mockResolvedValueOnce({
+        requiresTwoFactor: true,
+        challengeId: 'chal-1',
+        emailHint: 'ad***@example.com',
+      })
+      .mockRejectedValueOnce(new Error('resend blocked'))
+      .mockRejectedValueOnce('resend string');
+    renderWithProviders(<LoginPage />);
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'change-me-admin-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(
+      await screen.findByRole('button', { name: 'Resend code' }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
+    expect(await screen.findByText('resend blocked')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
+    expect(await screen.findByText('Login failed')).toBeInTheDocument();
+  });
+
   it('shows error message on failure', async () => {
     vi.spyOn(api, 'apiPost').mockRejectedValue(new Error('bad creds'));
     renderWithProviders(<LoginPage />);

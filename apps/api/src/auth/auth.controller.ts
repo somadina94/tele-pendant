@@ -22,25 +22,48 @@ import { OAuthTokenDto } from './dtos/oauth-token.dto';
 import { ChangePasswordDto } from './dtos/change-password.dto';
 import { ChangeSafeActionPinDto } from './dtos/change-safe-action-pin.dto';
 import { UpdateLocaleDto } from './dtos/update-locale.dto';
-import { AuthService, JwtPayload } from './providers/auth.service';
+import { ConfirmTwoFactorDto } from './dtos/confirm-two-factor.dto';
+import { ResendOtpDto, VerifyOtpDto } from './dtos/verify-otp.dto';
+import {
+  AuthService,
+  JwtPayload,
+  type LoginOtpChallenge,
+  type LoginSuccess,
+} from './providers/auth.service';
 import { JwtAuthGuard } from './providers/jwt-auth.guard';
 
 /**
- * Authentication endpoints (login, logout, session).
+ * Authentication endpoints (login, logout, session, optional email OTP 2FA).
  */
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
+  private setSessionCookie(res: Response, accessToken: string) {
+    res.cookie(
+      ACCESS_TOKEN_COOKIE,
+      accessToken,
+      this.authService.getCookieOptions(),
+    );
+  }
+
+  private isOtpChallenge(
+    result: LoginSuccess | LoginOtpChallenge,
+  ): result is LoginOtpChallenge {
+    return 'requiresTwoFactor' in result && result.requiresTwoFactor === true;
+  }
+
   /**
    * Validate credentials and set httpOnly JWT cookie. Also returns Bearer token.
+   * When the user has email 2FA on, returns a challenge instead of a token.
    */
   @Post('login')
   @HttpCode(200)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @ApiOperation({
-    summary: 'Login (sets access_token cookie + returns Bearer)',
+    summary:
+      'Login (sets access_token cookie + Bearer, or email OTP challenge when 2FA on)',
   })
   async login(
     @Body() dto: LoginDto,
@@ -48,17 +71,42 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(dto, req.ip);
-    res.cookie(
-      ACCESS_TOKEN_COOKIE,
-      result.accessToken,
-      this.authService.getCookieOptions(),
-    );
+    if (!this.isOtpChallenge(result)) {
+      this.setSessionCookie(res, result.accessToken);
+    }
     return result;
+  }
+
+  @Post('login/otp')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Complete login with email OTP (when 2FA on)' })
+  async verifyLoginOtp(
+    @Body() dto: VerifyOtpDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.verifyLoginOtp(
+      dto.challengeId,
+      dto.code,
+      req.ip,
+    );
+    this.setSessionCookie(res, result.accessToken);
+    return result;
+  }
+
+  @Post('login/otp/resend')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Resend login email OTP' })
+  resendLoginOtp(@Body() dto: ResendOtpDto, @Req() req: Request) {
+    return this.authService.resendLoginOtp(dto.challengeId, req.ip);
   }
 
   /**
    * OAuth2 password-grant token for Swagger Authorize (username = email).
    * Returns a raw `{ access_token, token_type }` body (not the usual API envelope).
+   * Refuses when the account has email 2FA enabled.
    */
   @Post('token')
   @HttpCode(200)
@@ -67,10 +115,10 @@ export class AuthController {
   @ApiOperation({
     summary: 'OAuth2 password token (Swagger Authorize)',
     description:
-      'Form or JSON: username (email) + password. Used by Swagger UI oauth2 password flow.',
+      'Form or JSON: username (email) + password. Used by Swagger UI oauth2 password flow. Not available when email 2FA is on.',
   })
   async token(@Body() dto: OAuthTokenDto, @Req() req: Request) {
-    const result = await this.authService.login(
+    const result = await this.authService.loginPasswordGrant(
       { email: dto.username, password: dto.password },
       req.ip,
     );
@@ -162,6 +210,46 @@ export class AuthController {
     );
   }
 
+  @Post('two-factor/enable')
+  @UseGuards(JwtAuthGuard)
+  @ApiAuth()
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Start enabling email 2FA (sends OTP to the signed-in user)',
+  })
+  beginEnableTwoFactor(@Req() req: Request & { user: JwtPayload }) {
+    return this.authService.beginEnableTwoFactor(req.user.sub, req.ip);
+  }
+
+  @Post('two-factor/confirm')
+  @UseGuards(JwtAuthGuard)
+  @ApiAuth()
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Confirm email 2FA enable with OTP' })
+  confirmEnableTwoFactor(
+    @Body() body: ConfirmTwoFactorDto,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.authService.confirmEnableTwoFactor(
+      req.user.sub,
+      body.challengeId,
+      body.code,
+      req.ip,
+    );
+  }
+
+  @Post('two-factor/disable')
+  @UseGuards(JwtAuthGuard)
+  @ApiAuth()
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Disable email 2FA for the signed-in user' })
+  disableTwoFactor(@Req() req: Request & { user: JwtPayload }) {
+    return this.authService.disableTwoFactor(req.user.sub, req.ip);
+  }
+
   /**
    * Enroll local face template (challenge frames required — TP-45). Not ISO-certified.
    */
@@ -187,6 +275,7 @@ export class AuthController {
 
   /**
    * Face login — fails closed to password when match is weak.
+   * When the matched user has email 2FA on, returns an OTP challenge instead of a token.
    */
   @Post('face/login')
   @HttpCode(200)
@@ -205,11 +294,9 @@ export class AuthController {
       dto.email,
       req.ip,
     );
-    res.cookie(
-      ACCESS_TOKEN_COOKIE,
-      result.accessToken,
-      this.authService.getCookieOptions(),
-    );
+    if (!this.isOtpChallenge(result)) {
+      this.setSessionCookie(res, result.accessToken);
+    }
     return result;
   }
 }

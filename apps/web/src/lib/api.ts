@@ -15,6 +15,8 @@ function authHeaders(json = true): HeadersInit {
 function isAuthBootstrapPath(path: string): boolean {
   return (
     path === '/auth/login' ||
+    path === '/auth/login/otp' ||
+    path === '/auth/login/otp/resend' ||
     path === '/auth/face/login' ||
     path.startsWith('/auth/face/login?')
   );
@@ -122,6 +124,7 @@ export interface PublicUser {
   localePinned?: boolean;
   hasFaceTemplate?: boolean;
   hasSafeActionPin?: boolean;
+  twoFactorEnabled?: boolean;
   suspended?: boolean;
 }
 

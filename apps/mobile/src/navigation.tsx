@@ -13,6 +13,7 @@ import {
   KeyRound,
   Shield,
   LogOut,
+  Mail,
   Menu,
   ScanFace,
   Settings2,
@@ -38,6 +39,7 @@ import { ConfigScreen } from './screens/ConfigScreen';
 import { AuditScreen } from './screens/AuditScreen';
 import { ChangePasswordScreen } from './screens/ChangePasswordScreen';
 import { ChangeResetPinScreen } from './screens/ChangeResetPinScreen';
+import { TwoFactorScreen } from './screens/TwoFactorScreen';
 import type { ScreenName } from './types';
 
 export type RootDrawerParamList = {
@@ -47,6 +49,7 @@ export type RootDrawerParamList = {
   audit: undefined;
   changePassword: undefined;
   changeResetPin: undefined;
+  twoFactor: undefined;
 };
 
 export type MainTabParamList = {
@@ -184,6 +187,17 @@ function DrawerItems({
         >
           <Shield size={18} color={iconColor(false, dark)} />
           <Text className="text-sm text-muted-foreground">Reset PIN</Text>
+        </Pressable>
+        <Pressable
+          className="flex-row items-center gap-3 rounded-lg px-3 py-3"
+          onPress={() =>
+            (props.navigation.navigate as (name: string) => void)('twoFactor')
+          }
+        >
+          <Mail size={18} color={iconColor(false, dark)} />
+          <Text className="text-sm text-muted-foreground">
+            {t('twoFactor')}
+          </Text>
         </Pressable>
         <Pressable
           className="flex-row items-center gap-3 rounded-lg px-3 py-3"
@@ -359,6 +373,14 @@ export function AppShell({
       <Drawer.Screen name="changeResetPin" options={{ title: 'Reset PIN' }}>
         {({ navigation }) => (
           <ChangeResetPinScreen
+            token={token}
+            onClose={() => navigation.navigate('MainTabs')}
+          />
+        )}
+      </Drawer.Screen>
+      <Drawer.Screen name="twoFactor" options={{ title: t('twoFactor') }}>
+        {({ navigation }) => (
+          <TwoFactorScreen
             token={token}
             onClose={() => navigation.navigate('MainTabs')}
           />

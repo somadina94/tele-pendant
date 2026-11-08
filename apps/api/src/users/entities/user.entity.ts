@@ -43,6 +43,10 @@ export class User {
   @Column({ name: 'safe_action_pin_hash', type: 'varchar', nullable: true })
   safeActionPinHash?: string | null;
 
+  /** Per-user email OTP 2FA (default off). STOP/motion never wait on OTP. */
+  @Column({ name: 'two_factor_enabled', type: 'boolean', default: false })
+  twoFactorEnabled!: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

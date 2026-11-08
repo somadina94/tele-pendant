@@ -52,6 +52,7 @@ export class UsersService implements OnModuleInit {
       localePinned: user.localePinned === true,
       hasFaceTemplate: Boolean(user.faceTemplate),
       hasSafeActionPin: Boolean(user.safeActionPinHash),
+      twoFactorEnabled: user.twoFactorEnabled === true,
       suspended: user.suspended === true,
     };
   }

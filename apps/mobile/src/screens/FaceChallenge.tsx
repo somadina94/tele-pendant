@@ -36,6 +36,7 @@ const previewStyle = StyleSheet.create({
 export function FaceChallenge({
   token,
   onToken,
+  onOtpChallenge,
   active = true,
   allowEnroll = true,
   allowLogin = true,
@@ -46,6 +47,8 @@ export function FaceChallenge({
 }: {
   token: string;
   onToken: (token: string) => void;
+  /** When face match succeeds but email 2FA is on. */
+  onOtpChallenge?: (challengeId: string, emailHint: string) => void;
   /** Keep camera mounted/active (false when screen blurred). */
   active?: boolean;
   allowEnroll?: boolean;
@@ -159,9 +162,17 @@ export function FaceChallenge({
       }
 
       const res = await apiPost<{
-        accessToken: string;
-        limitation: string;
+        accessToken?: string;
+        limitation?: string;
+        requiresTwoFactor?: true;
+        challengeId?: string;
+        emailHint?: string;
       }>('/auth/face/login', { frames: nextFrames, email });
+      if (res.requiresTwoFactor && res.challengeId) {
+        resetChallenge();
+        onOtpChallenge?.(res.challengeId, res.emailHint ?? email ?? '***');
+        return;
+      }
       if (!res.accessToken) {
         showError(t('err.face'));
         resetChallenge();
@@ -174,7 +185,7 @@ export function FaceChallenge({
       Alert.alert(t('faceAuthOk'), ok, [
         {
           text: 'OK',
-          onPress: () => onToken(res.accessToken),
+          onPress: () => onToken(res.accessToken!),
         },
       ]);
     } catch (error) {

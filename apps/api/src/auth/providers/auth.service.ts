@@ -24,6 +24,8 @@ import {
   sealTemplate,
   serializeDescriptor,
 } from './face.util';
+import { MailService } from './mail.service';
+import { OtpChallengeService } from './otp-challenge.service';
 
 export type FaceCaptureInput = {
   imageDataUrl?: string;
@@ -39,8 +41,22 @@ export interface JwtPayload {
   tv?: number;
 }
 
+export type LoginSuccess = {
+  accessToken: string;
+  user: ReturnType<AuthService['toPublicUser']>;
+  matchScore?: number;
+  limitation?: string;
+};
+
+export type LoginOtpChallenge = {
+  requiresTwoFactor: true;
+  challengeId: string;
+  emailHint: string;
+};
+
 /**
  * Authentication: bootstrap admin, password login, JWT cookie/bearer.
+ * Optional per-user email OTP 2FA (STOP/motion never wait on OTP).
  */
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -49,6 +65,8 @@ export class AuthService implements OnModuleInit {
   private readonly configService: ConfigService;
   private readonly auditService: AuditService;
   private readonly safeActionPin: SafeActionPinService;
+  private readonly mailService: MailService;
+  private readonly otpChallenges: OtpChallengeService;
 
   constructor(
     @InjectRepository(User)
@@ -57,12 +75,16 @@ export class AuthService implements OnModuleInit {
     @Inject(ConfigService) configService: ConfigService,
     @Inject(AuditService) auditService: AuditService,
     @Inject(SafeActionPinService) safeActionPin: SafeActionPinService,
+    @Inject(MailService) mailService: MailService,
+    @Inject(OtpChallengeService) otpChallenges: OtpChallengeService,
   ) {
     this.usersRepository = usersRepository;
     this.jwtService = jwtService;
     this.configService = configService;
     this.auditService = auditService;
     this.safeActionPin = safeActionPin;
+    this.mailService = mailService;
+    this.otpChallenges = otpChallenges;
   }
 
   async onModuleInit(): Promise<void> {
@@ -109,8 +131,89 @@ export class AuthService implements OnModuleInit {
       localePinned: user.localePinned === true,
       hasFaceTemplate: Boolean(user.faceTemplate),
       hasSafeActionPin: Boolean(user.safeActionPinHash),
+      twoFactorEnabled: user.twoFactorEnabled === true,
       suspended: user.suspended === true,
     };
+  }
+
+  private emailHint(email: string): string {
+    const [local, domain] = email.split('@');
+    if (!domain || !local) return '***';
+    const keep = local.length <= 2 ? 1 : 2;
+    return `${local.slice(0, keep)}***@${domain}`;
+  }
+
+  private async issueOtpChallenge(
+    user: User,
+    purpose: 'login' | 'enable',
+    ip?: string,
+  ): Promise<LoginOtpChallenge> {
+    if (!this.mailService.isConfigured()) {
+      throw new BadRequestException(
+        'Email 2FA requires SMTP. Set MAIL_HOST, MAIL_PORT, SMTP_USERNAME, SMTP_PASSWORD, and MAIL_FROM.',
+      );
+    }
+    const { challengeId, code } = await this.otpChallenges.create(
+      user.id,
+      user.email,
+      purpose,
+    );
+    try {
+      await this.mailService.sendOtp(user.email, code, purpose);
+    } catch (err) {
+      this.otpChallenges.consume(challengeId);
+      await this.auditService.write({
+        userId: user.id,
+        userEmail: user.email,
+        userDisplayName: user.displayName ?? null,
+        action:
+          purpose === 'enable' ? 'auth.two_factor_enable' : 'auth.login_otp',
+        ip,
+        result: 'failure',
+        details: err instanceof Error ? err.message : 'mail send failed',
+      });
+      throw new BadRequestException(
+        err instanceof Error
+          ? err.message
+          : 'Could not send verification email',
+      );
+    }
+    await this.auditService.write({
+      userId: user.id,
+      userEmail: user.email,
+      userDisplayName: user.displayName ?? null,
+      action:
+        purpose === 'enable' ? 'auth.two_factor_enable' : 'auth.login_otp',
+      ip,
+      result: 'success',
+      details: 'otp_sent',
+    });
+    return {
+      requiresTwoFactor: true,
+      challengeId,
+      emailHint: this.emailHint(user.email),
+    };
+  }
+
+  private async completeLogin(
+    user: User,
+    ip?: string,
+    extras?: Partial<LoginSuccess>,
+  ) {
+    const accessToken = await this.signAccessToken(user);
+    await this.auditService.write({
+      userId: user.id,
+      userEmail: user.email,
+      userDisplayName: user.displayName ?? null,
+      action: 'auth.login',
+      ip,
+      result: 'success',
+    });
+    return {
+      accessToken,
+      user: this.toPublicUser(user),
+      ...extras,
+    } satisfies LoginSuccess;
   }
 
   private async signAccessToken(user: User): Promise<string> {
@@ -242,22 +345,16 @@ export class AuthService implements OnModuleInit {
     return { ok: true, hasSafeActionPin: true };
   }
 
-  async login(dto: LoginDto, ip?: string) {
+  async login(
+    dto: LoginDto,
+    ip?: string,
+  ): Promise<LoginSuccess | LoginOtpChallenge> {
     try {
       const user = await this.validateUser(dto.email, dto.password);
-      const accessToken = await this.signAccessToken(user);
-      await this.auditService.write({
-        userId: user.id,
-        userEmail: user.email,
-        userDisplayName: user.displayName ?? null,
-        action: 'auth.login',
-        ip,
-        result: 'success',
-      });
-      return {
-        accessToken,
-        user: this.toPublicUser(user),
-      };
+      if (user.twoFactorEnabled) {
+        return this.issueOtpChallenge(user, 'login', ip);
+      }
+      return this.completeLogin(user, ip);
     } catch (err) {
       await this.auditService.write({
         userEmail: dto.email,
@@ -268,6 +365,130 @@ export class AuthService implements OnModuleInit {
       });
       throw err;
     }
+  }
+
+  /**
+   * Swagger OAuth password grant — refuse when 2FA is on (no silent bypass).
+   */
+  async loginPasswordGrant(dto: LoginDto, ip?: string): Promise<LoginSuccess> {
+    const result = await this.login(dto, ip);
+    if ('requiresTwoFactor' in result) {
+      throw new UnauthorizedException(
+        'Email 2FA is enabled for this account. Complete POST /auth/login then POST /auth/login/otp.',
+      );
+    }
+    return result;
+  }
+
+  async verifyLoginOtp(
+    challengeId: string,
+    code: string,
+    ip?: string,
+  ): Promise<LoginSuccess> {
+    try {
+      const verified = await this.otpChallenges.verify(
+        challengeId,
+        code,
+        'login',
+      );
+      const user = await this.usersRepository.findOne({
+        where: { id: verified.userId },
+      });
+      if (!user || user.suspended) {
+        throw new UnauthorizedException('Invalid or expired code');
+      }
+      await this.auditService.write({
+        userId: user.id,
+        userEmail: user.email,
+        userDisplayName: user.displayName ?? null,
+        action: 'auth.login_otp',
+        ip,
+        result: 'success',
+        details: 'otp_verified',
+      });
+      return this.completeLogin(user, ip);
+    } catch (err) {
+      await this.auditService.write({
+        action: 'auth.login_otp',
+        ip,
+        result: 'failure',
+        details: err instanceof Error ? err.message : 'otp failed',
+      });
+      throw err;
+    }
+  }
+
+  async resendLoginOtp(
+    challengeId: string,
+    ip?: string,
+  ): Promise<LoginOtpChallenge> {
+    const existing = this.otpChallenges.peek(challengeId);
+    if (!existing || existing.purpose !== 'login') {
+      throw new UnauthorizedException('Invalid or expired code');
+    }
+    const user = await this.usersRepository.findOne({
+      where: { id: existing.userId },
+    });
+    if (!user || user.suspended) {
+      throw new UnauthorizedException('Invalid or expired code');
+    }
+    this.otpChallenges.consume(challengeId);
+    return this.issueOtpChallenge(user, 'login', ip);
+  }
+
+  async beginEnableTwoFactor(
+    userId: string,
+    ip?: string,
+  ): Promise<LoginOtpChallenge> {
+    const user = await this.usersRepository.findOneByOrFail({ id: userId });
+    if (user.twoFactorEnabled) {
+      throw new BadRequestException('Email 2FA is already enabled');
+    }
+    return this.issueOtpChallenge(user, 'enable', ip);
+  }
+
+  async confirmEnableTwoFactor(
+    userId: string,
+    challengeId: string,
+    code: string,
+    ip?: string,
+  ) {
+    const verified = await this.otpChallenges.verify(
+      challengeId,
+      code,
+      'enable',
+    );
+    if (verified.userId !== userId) {
+      throw new UnauthorizedException('Invalid or expired code');
+    }
+    const user = await this.usersRepository.findOneByOrFail({ id: userId });
+    user.twoFactorEnabled = true;
+    await this.usersRepository.save(user);
+    await this.auditService.write({
+      userId: user.id,
+      userEmail: user.email,
+      userDisplayName: user.displayName ?? null,
+      action: 'auth.two_factor_enable',
+      ip,
+      result: 'success',
+      details: 'enabled',
+    });
+    return { ok: true, twoFactorEnabled: true, user: this.toPublicUser(user) };
+  }
+
+  async disableTwoFactor(userId: string, ip?: string) {
+    const user = await this.usersRepository.findOneByOrFail({ id: userId });
+    user.twoFactorEnabled = false;
+    await this.usersRepository.save(user);
+    await this.auditService.write({
+      userId: user.id,
+      userEmail: user.email,
+      userDisplayName: user.displayName ?? null,
+      action: 'auth.two_factor_disable',
+      ip,
+      result: 'success',
+    });
+    return { ok: true, twoFactorEnabled: false, user: this.toPublicUser(user) };
   }
 
   async me(payload: JwtPayload) {
@@ -354,7 +575,6 @@ export class AuthService implements OnModuleInit {
         );
       }
 
-      const accessToken = await this.signAccessToken(best.user);
       await this.auditService.write({
         userId: best.user.id,
         userEmail: best.user.email,
@@ -364,6 +584,10 @@ export class AuthService implements OnModuleInit {
         ip,
         result: 'success',
       });
+      if (best.user.twoFactorEnabled) {
+        return this.issueOtpChallenge(best.user, 'login', ip);
+      }
+      const accessToken = await this.signAccessToken(best.user);
       return {
         accessToken,
         user: this.toPublicUser(best.user),

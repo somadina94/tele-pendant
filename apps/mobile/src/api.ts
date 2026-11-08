@@ -16,7 +16,12 @@ export function getApiBase(): string {
 }
 
 function isAuthBootstrapPath(path: string): boolean {
-  return path === '/auth/login' || path === '/auth/face/login';
+  return (
+    path === '/auth/login' ||
+    path === '/auth/login/otp' ||
+    path === '/auth/login/otp/resend' ||
+    path === '/auth/face/login'
+  );
 }
 
 async function apiSend<T>(
