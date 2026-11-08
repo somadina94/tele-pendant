@@ -487,18 +487,19 @@ describe('SafetyStateService', () => {
     expect(driver.writeCoil).toHaveBeenCalledWith(expect.any(Number), false);
   });
 
-  it('keeps deadman through a socket flap within grace', async () => {
+  it('unbinds socket on flap; deadman expires on pulse timeout', async () => {
     jest.useFakeTimers();
     const now = Date.now();
     jest.setSystemTime(now);
     claimAs('u1', 'Alice');
     service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
     service.noteSocketDisconnect('sock-a');
-    // Would have expired under the old 1.5–2.5s timeout.
-    jest.setSystemTime(now + 3500);
+    jest.setSystemTime(now + 2000);
     await service.tick();
     expect(service.snapshot().deadmanActive).toBe(true);
-    expect(service.canIssueMotion('u1')).toBe(true);
+    jest.setSystemTime(now + 2600);
+    await service.tick();
+    expect(service.snapshot().deadmanActive).toBe(false);
   });
 
   it('enters comms_lost only after consecutive tick read failures', async () => {

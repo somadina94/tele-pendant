@@ -77,8 +77,7 @@ export class RealtimeGateway
 
   /**
    * Link flap mid-hold: unbind this socket only. Do not clear motion coils —
-   * HTTP deadman pulses + deadmanTimeoutMs cover a true drop (avoids prod stutter
-   * when Socket.IO reconnects through the proxy).
+   * deadmanTimeoutMs covers a true drop if pulses stop.
    */
   handleDisconnect(client: Socket) {
     const snap = this.safetyState.snapshot();

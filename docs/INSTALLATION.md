@@ -147,12 +147,7 @@ sudo certbot --nginx -d hmi.example.com -d api.example.com
 
 Or two separate server blocks, each with its own cert, each `proxy_pass` to the matching localhost port from `.env`.
 
-The SPA calls `/api/v1` on the **same origin** as the web page. Either:
-
-1. Proxy `/api/` and `/socket.io/` on the web vhost to the API (the web container nginx already does this to `http://api:3010` on the Docker network), or
-2. Proxy those paths on the host nginx for `hmi.example.com` to `127.0.0.1:$PORT`.
-
-**Host nginx WebSocket (required for smooth live values):** the Ubuntu TLS terminator must forward `/socket.io/` with `Upgrade`, `Connection "upgrade"`, `proxy_read_timeout` / `proxy_send_timeout` ≥ 3600s, and `proxy_buffering off`. See [`deploy/host-nginx-hmi.example.conf`](../deploy/host-nginx-hmi.example.conf). Without that, Socket.IO falls back to laggy long-polling and Operator height/trolley updates stutter in production (local Docker without a host proxy looks fine). Operator also polls `GET /api/v1/realtime/tags` as an HTTP backup.
+The SPA calls `/api/v1` and Socket.IO on the **same origin** as the web page. The web container nginx already proxies `/api/` and `/socket.io/` to `http://api:3010` on the Docker network, so the host TLS vhost only needs to forward to `$WEB_PORT` (see [`deploy/host-nginx-hmi.example.conf`](../deploy/host-nginx-hmi.example.conf)). Keep `Upgrade` / `Connection` headers so WebSocket upgrades work through the terminator.
 
 Set in server `.env`:
 

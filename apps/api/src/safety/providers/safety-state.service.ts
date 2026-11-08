@@ -53,14 +53,8 @@ export class SafetyStateService {
   /** Motion coils asserted via activate — clear only these on release (not every cell). */
   private assertedMotionCoils = new Set<number>();
   private readonly watchdogTimeoutMs = 2000;
-  /**
-   * Allow Socket.IO flaps + missed HTTP pulses under prod proxy RTT before
-   * clearing motion (was 1.5s / 2.5s — too tight; values jumped mid-hold).
-   */
-  private readonly deadmanTimeoutMs = 6000;
-  /** Extra grace after a holder socket disconnect while deadman is still active. */
-  private readonly socketFlapGraceMs = 4000;
-  private socketFlapGraceUntil = 0;
+  /** Missed client pulses before motion drop (tight; WS pulse every 400ms). */
+  private readonly deadmanTimeoutMs = 2500;
   /**
    * Transient Modbus timeouts must not clear motion coils (that freezes live
    * height/trolley until the next press). Require consecutive tick failures.
@@ -347,16 +341,7 @@ export class SafetyStateService {
     const id = socketId?.trim();
     if (!id || this.deadmanHolderSocketId !== id) return;
     this.deadmanHolderSocketId = null;
-    // Do not start the deadman clock from a proxy flap — give reconnect time.
-    if (this.deadmanActive) {
-      this.socketFlapGraceUntil = Date.now() + this.socketFlapGraceMs;
-      this.lastClientPulseAt = new Date();
-      motionDebug('deadman.socket-flap-grace', {
-        socketId: id,
-        graceMs: this.socketFlapGraceMs,
-        until: this.socketFlapGraceUntil,
-      });
-    }
+    motionDebug('deadman.socket-unbound', { socketId: id });
   }
 
   /**
@@ -414,7 +399,6 @@ export class SafetyStateService {
     this.lastClientPulseAt = null;
     this.deadmanHolderUserId = null;
     this.deadmanHolderSocketId = null;
-    this.socketFlapGraceUntil = 0;
     this.deadmanCoilHigh = false;
   }
 
@@ -520,11 +504,9 @@ export class SafetyStateService {
       this.consecutiveCommsFails = 0;
 
       // Deadman expiry (lost pulses) or pending drop after explicit release.
-      // Socket flaps set socketFlapGraceUntil so a brief reconnect does not drop.
       if (
         this.deadmanActive &&
         this.lastClientPulseAt &&
-        Date.now() >= this.socketFlapGraceUntil &&
         Date.now() - this.lastClientPulseAt.getTime() > this.deadmanTimeoutMs
       ) {
         const ageMs = Date.now() - this.lastClientPulseAt.getTime();
