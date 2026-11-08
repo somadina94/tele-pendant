@@ -132,6 +132,20 @@ export function OperatorScreen({ token }: { token: string }) {
   const activatingId = useRef<string | null>(null);
   /** Release arrived while activate(true) was still in flight — finish after pressCell. */
   const releaseAfterActivate = useRef<string | null>(null);
+  /** Drop out-of-order HTTP/WS snapshots so height never jumps backwards. */
+  const lastTagsAtRef = useRef<string | null>(null);
+
+  const applyLiveTags = useCallback((payload: TagSnapshot & { at?: string }) => {
+    if (payload.at) {
+      const prev = lastTagsAtRef.current;
+      if (prev && payload.at < prev) return;
+      lastTagsAtRef.current = payload.at;
+    }
+    if (typeof payload.hoistHeightMm === 'number') {
+      setHeight(payload.hoistHeightMm);
+    }
+    setTags(payload);
+  }, []);
 
   useEffect(() => {
     let socket: Socket | null = null;
@@ -154,17 +168,14 @@ export function OperatorScreen({ token }: { token: string }) {
       }
     });
     socket.on('tags.update', (payload: TagSnapshot) => {
-      if (typeof payload.hoistHeightMm === 'number') {
-        setHeight(payload.hoistHeightMm);
-      }
-      setTags(payload);
+      applyLiveTags(payload);
     });
     return () => {
       closed = true;
       socket?.disconnect();
       socketRef.current = null;
     };
-  }, [token, applyControl]);
+  }, [token, applyControl, applyLiveTags]);
 
   /** HTTP backup when Socket.IO stalls behind a host reverse proxy (prod). */
   useEffect(() => {
@@ -176,10 +187,7 @@ export function OperatorScreen({ token }: { token: string }) {
           token,
         );
         if (cancelled || payload.at == null) return;
-        if (typeof payload.hoistHeightMm === 'number') {
-          setHeight(payload.hoistHeightMm);
-        }
-        setTags(payload);
+        applyLiveTags(payload);
       } catch {
         // ignore
       }
@@ -190,7 +198,7 @@ export function OperatorScreen({ token }: { token: string }) {
       cancelled = true;
       clearInterval(id);
     };
-  }, [token]);
+  }, [token, applyLiveTags]);
 
   /** FEAT-A5: exclusive control claim + heartbeat while Operator is open. */
   useEffect(() => {
@@ -285,17 +293,21 @@ export function OperatorScreen({ token }: { token: string }) {
   useEffect(() => {
     if (!holdingId) return;
     const cellId = holdingId;
+    let ticks = 0;
     const pulse = () => {
+      ticks += 1;
       socketRef.current?.emit('deadman.pulse');
       void apiPost('/safety/deadman/pulse', undefined, token).catch(
         () => undefined,
       );
-      // Re-assert motion coil so a brief PLC glitch does not freeze live values mid-hold.
-      void apiPost(
-        `/hmi/cells/${cellId}/activate`,
-        { value: true, speed: jogSpeedRef.current, refresh: true },
-        token,
-      ).catch(() => undefined);
+      // Re-assert coil every other pulse — every tick flooded Modbus in prod.
+      if (ticks === 1 || ticks % 2 === 0) {
+        void apiPost(
+          `/hmi/cells/${cellId}/activate`,
+          { value: true, speed: jogSpeedRef.current, refresh: true },
+          token,
+        ).catch(() => undefined);
+      }
     };
     pulse();
     const id = setInterval(pulse, 800);

@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Inject, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiAuth } from '../common/swagger/api-auth.decorator';
@@ -23,6 +23,10 @@ export class RealtimeController {
 
   @Get('tags')
   @SkipThrottle()
+  // Express ETag + 304 lets the browser re-apply an older snapshot when polls
+  // overlap (prod RTT) — live height/trolley then jump backwards.
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+  @Header('Pragma', 'no-cache')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({
     summary: 'Latest live tag snapshot (HTTP backup for tags.update WS)',

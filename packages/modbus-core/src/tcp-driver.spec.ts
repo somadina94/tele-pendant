@@ -225,4 +225,34 @@ describe('TcpModbusDriver (TP-41)', () => {
     await driver.writeRegister(5, 12);
     await driver.writeRegisters(6, [1, 2]);
   });
+
+  it('serializes overlapping reads so the second waits for the first', async () => {
+    const driver = new TcpModbusDriver();
+    await driver.connect({ host: '127.0.0.1', port: 1502, unitId: 1 });
+    const client = lastClient();
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const order: string[] = [];
+    client.readHoldingRegisters.mockImplementationOnce(async () => {
+      order.push('first-start');
+      await firstGate;
+      order.push('first-end');
+      return { response: { body: { valuesAsArray: [1] } } };
+    });
+    client.readHoldingRegisters.mockImplementationOnce(async () => {
+      order.push('second');
+      return { response: { body: { valuesAsArray: [2] } } };
+    });
+
+    const a = driver.readHoldingRegisters(0, 1);
+    const b = driver.readHoldingRegisters(1, 1);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(order).toEqual(['first-start']);
+    releaseFirst();
+    await expect(a).resolves.toEqual([1]);
+    await expect(b).resolves.toEqual([2]);
+    expect(order).toEqual(['first-start', 'first-end', 'second']);
+  });
 });

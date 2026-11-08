@@ -38,6 +38,8 @@ async function apiSend<T>(
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+    // Live tags must not reuse a conditional/304 cache entry (prod jump).
+    cache: 'no-store',
   });
   if (!res.ok) {
     if (res.status === 401 && !isAuthBootstrapPath(path)) {

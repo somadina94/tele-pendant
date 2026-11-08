@@ -46,7 +46,11 @@ async function handleFailedResponse(
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: authHeaders(),
+    // Operator live tags + control must not reuse a conditional/304 cache entry.
+    cache: 'no-store',
+  });
   if (!res.ok) await handleFailedResponse(res, path);
   const body = (await res.json()) as ApiEnvelope<T>;
   return body.data;

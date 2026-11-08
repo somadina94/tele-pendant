@@ -13,6 +13,21 @@ export class TcpModbusDriver implements ModbusDriver {
   private client: InstanceType<typeof Modbus.client.TCP> | null = null;
   private connected = false;
   private generation = 0;
+  /**
+   * Serialize all TCP transactions. Concurrent jsmodbus calls on one socket
+   * can mis-pair responses under load (prod hold pulses + tag poll) and make
+   * live values jump backwards.
+   */
+  private chain: Promise<unknown> = Promise.resolve();
+
+  private enqueue<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.chain.then(op, op);
+    this.chain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
 
   async connect(options: ModbusConnectionOptions): Promise<void> {
     await this.disconnect();
@@ -109,43 +124,63 @@ export class TcpModbusDriver implements ModbusDriver {
   }
 
   async readCoils(address: number, length: number): Promise<boolean[]> {
-    const resp = await this.assertClient().readCoils(address, length);
-    return resp.response.body.valuesAsArray.slice(0, length).map(Boolean);
+    return this.enqueue(async () => {
+      const resp = await this.assertClient().readCoils(address, length);
+      return resp.response.body.valuesAsArray.slice(0, length).map(Boolean);
+    });
   }
 
   async readDiscreteInputs(
     address: number,
     length: number,
   ): Promise<boolean[]> {
-    const resp = await this.assertClient().readDiscreteInputs(address, length);
-    return resp.response.body.valuesAsArray.slice(0, length).map(Boolean);
+    return this.enqueue(async () => {
+      const resp = await this.assertClient().readDiscreteInputs(
+        address,
+        length,
+      );
+      return resp.response.body.valuesAsArray.slice(0, length).map(Boolean);
+    });
   }
 
   async readHoldingRegisters(
     address: number,
     length: number,
   ): Promise<number[]> {
-    const resp = await this.assertClient().readHoldingRegisters(
-      address,
-      length,
-    );
-    return Array.from(resp.response.body.valuesAsArray.slice(0, length));
+    return this.enqueue(async () => {
+      const resp = await this.assertClient().readHoldingRegisters(
+        address,
+        length,
+      );
+      return Array.from(resp.response.body.valuesAsArray.slice(0, length));
+    });
   }
 
   async readInputRegisters(address: number, length: number): Promise<number[]> {
-    const resp = await this.assertClient().readInputRegisters(address, length);
-    return Array.from(resp.response.body.valuesAsArray.slice(0, length));
+    return this.enqueue(async () => {
+      const resp = await this.assertClient().readInputRegisters(
+        address,
+        length,
+      );
+      return Array.from(resp.response.body.valuesAsArray.slice(0, length));
+    });
   }
 
   async writeCoil(address: number, value: boolean): Promise<void> {
-    await this.assertClient().writeSingleCoil(address, value);
+    await this.enqueue(async () => {
+      await this.assertClient().writeSingleCoil(address, value);
+    });
   }
 
   async writeRegister(address: number, value: number): Promise<void> {
-    await this.assertClient().writeSingleRegister(address, value);
+    await this.enqueue(async () => {
+      await this.assertClient().writeSingleRegister(address, value);
+    });
   }
 
   async writeRegisters(address: number, values: number[]): Promise<void> {
-    await this.assertClient().writeMultipleRegisters(address, values);
+    await this.enqueue(async () => {
+      await this.assertClient().writeMultipleRegisters(address, values);
+    });
   }
 }

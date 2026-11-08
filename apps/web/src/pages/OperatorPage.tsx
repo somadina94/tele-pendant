@@ -124,6 +124,21 @@ export function OperatorPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [photoOk, setPhotoOk] = useState(true);
   const [liveFallback, setLiveFallback] = useState(false);
+  /** Drop out-of-order HTTP/WS snapshots so height/trolley never jump backwards. */
+  const lastTagsAtRef = useRef<string | null>(null);
+
+  const applyLiveTags = useCallback((payload: LiveTags) => {
+    if (payload.at) {
+      const prev = lastTagsAtRef.current;
+      if (prev && payload.at < prev) return;
+      lastTagsAtRef.current = payload.at;
+    }
+    setTags((prev) => ({
+      ...prev,
+      ...payload,
+      values: { ...prev?.values, ...payload.values },
+    }));
+  }, []);
 
   useEffect(() => {
     controlRef.current = control;
@@ -140,12 +155,7 @@ export function OperatorPage() {
 
   useEffect(() => {
     const socket = getRealtimeSocket();
-    const onTags = (payload: LiveTags) =>
-      setTags((prev) => ({
-        ...prev,
-        ...payload,
-        values: { ...prev?.values, ...payload.values },
-      }));
+    const onTags = (payload: LiveTags) => applyLiveTags(payload);
     const onSafety = (payload: HmiLayout['safety']) => {
       setSafety(payload);
       if (payload.control) {
@@ -158,7 +168,7 @@ export function OperatorPage() {
       socket.off('tags.update', onTags);
       socket.off('safety.state', onSafety);
     };
-  }, []);
+  }, [applyLiveTags]);
 
   /**
    * HTTP backup for live tags. Host nginx often stalls Socket.IO in production
@@ -172,11 +182,7 @@ export function OperatorPage() {
           '/realtime/tags',
         );
         if (cancelled || payload.at == null) return;
-        setTags((prev) => ({
-          ...prev,
-          ...payload,
-          values: { ...prev?.values, ...payload.values },
-        }));
+        applyLiveTags(payload);
       } catch {
         // ignore transient errors
       }
@@ -187,7 +193,7 @@ export function OperatorPage() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, []);
+  }, [applyLiveTags]);
 
   /** FEAT-A5: claim exclusive control; heartbeat while this Operator is open. */
   useEffect(() => {
@@ -234,15 +240,19 @@ export function OperatorPage() {
     const socket = getRealtimeSocket();
     if (!holdingCellId) return;
     const cellId = holdingCellId;
+    let ticks = 0;
     const pulse = () => {
+      ticks += 1;
       socket.emit('deadman.pulse');
       void apiPost('/safety/deadman/pulse').catch(() => undefined);
-      // Re-assert motion coil so a brief PLC glitch does not freeze live values mid-hold.
-      void apiPost(`/hmi/cells/${cellId}/activate`, {
-        value: true,
-        speed: jogSpeedRef.current,
-        refresh: true,
-      }).catch(() => undefined);
+      // Re-assert coil every other pulse — every tick flooded Modbus in prod.
+      if (ticks === 1 || ticks % 2 === 0) {
+        void apiPost(`/hmi/cells/${cellId}/activate`, {
+          value: true,
+          speed: jogSpeedRef.current,
+          refresh: true,
+        }).catch(() => undefined);
+      }
     };
     pulse();
     const id = window.setInterval(pulse, 800);
