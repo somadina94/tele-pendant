@@ -6,8 +6,8 @@ import {
 } from '@tele-pendant/shared';
 
 export function readLocale(): Locale {
-  let pinned = false;
-  let saved: string | null = null;
+  let pinned: boolean;
+  let saved: string | null;
   try {
     pinned = localStorage.getItem('localePinned') === '1';
     saved = localStorage.getItem('localeOverride');

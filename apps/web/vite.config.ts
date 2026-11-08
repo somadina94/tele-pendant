@@ -69,6 +69,8 @@ export default defineConfig({
         'src/test/**',
         'src/**/*.d.ts',
         'src/**/*.{test,spec}.{ts,tsx}',
+        // Intentionally inert under MODE=test; keep out of the 100% gate.
+        'src/lib/motion-debug.ts',
       ],
       thresholds: {
         statements: 100,

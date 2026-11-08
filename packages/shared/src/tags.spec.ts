@@ -74,10 +74,7 @@ describe('shouldApplyLiveTags', () => {
 
   it('advances cursor', () => {
     expect(
-      nextLiveTagsCursor(
-        { lastSeq: 2, lastAt: 'a' },
-        { seq: 5, at: 'b' },
-      ),
+      nextLiveTagsCursor({ lastSeq: 2, lastAt: 'a' }, { seq: 5, at: 'b' }),
     ).toEqual({ lastSeq: 5, lastAt: 'b' });
   });
 });

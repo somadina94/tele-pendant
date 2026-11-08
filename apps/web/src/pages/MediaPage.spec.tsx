@@ -258,6 +258,119 @@ describe('MediaPage', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('ignores deadman release failures when voice stops', async () => {
+    type Rec = {
+      start: () => void;
+      stop: () => void;
+      onend: (() => void) | null;
+    };
+    const instances: Rec[] = [];
+    window.SpeechRecognition = vi.fn(function SpeechRecognition(this: Rec) {
+      this.start = vi.fn();
+      this.stop = vi.fn();
+      this.onend = null;
+      instances.push(this);
+    }) as unknown as typeof window.SpeechRecognition;
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/deadman/release') throw new Error('release failed');
+      if (typeof path === 'string' && path.startsWith('/safety/')) return {};
+      return { ok: false };
+    });
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    instances[0]!.onend?.();
+    await Promise.resolve();
+  });
+
+  it('reuses an active deadman interval when voice is restarted', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    window.SpeechRecognition = vi.fn(function SpeechRecognition(this: {
+      start: () => void;
+      stop: () => void;
+      onresult: null;
+    }) {
+      this.start = vi.fn();
+      this.stop = vi.fn();
+      this.onresult = null;
+    }) as unknown as typeof window.SpeechRecognition;
+    vi.spyOn(api, 'apiPost').mockResolvedValue({});
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    await vi.advanceTimersByTimeAsync(500);
+    vi.useRealTimers();
+  });
+
+  it('executes interim up/down voice commands', async () => {
+    type Rec = {
+      start: () => void;
+      stop: () => void;
+      onresult: ((e: unknown) => void) | null;
+    };
+    const instances: Rec[] = [];
+    window.SpeechRecognition = vi.fn(function SpeechRecognition(this: Rec) {
+      this.start = vi.fn();
+      this.stop = vi.fn();
+      this.onresult = null;
+      instances.push(this);
+    }) as unknown as typeof window.SpeechRecognition;
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (typeof path === 'string' && path.startsWith('/safety/')) return {};
+      if (path === '/media/voice') {
+        return { ok: true, label: 'Hoist Up', message: 'Hoist Up moved' };
+      }
+      return {} as never;
+    });
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    const instance = instances[0]!;
+    instance.onresult?.({
+      results: [[{ transcript: 'crane up now', isFinal: true }]],
+    });
+    await waitFor(() => expect(toastMocks.ok).toHaveBeenCalledWith('Hoist Up'));
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    instance.onresult?.({
+      results: [[{ transcript: 'again up', isFinal: true }]],
+    });
+    expect(instance.stop).toHaveBeenCalled();
+  });
+
+  it('starts voice listen even when safety posts fail', async () => {
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (path === '/safety/control/claim') throw new Error('no claim');
+      if (path === '/safety/deadman/pulse') throw new Error('no pulse');
+      return { ok: true } as never;
+    });
+    window.SpeechRecognition = vi.fn(function SpeechRecognition(this: {
+      continuous: boolean;
+      interimResults: boolean;
+      lang: string;
+      maxAlternatives: number;
+      start: () => void;
+      stop: () => void;
+      onresult: null;
+      onerror: null;
+      onend: null;
+    }) {
+      this.continuous = false;
+      this.interimResults = false;
+      this.lang = 'en-US';
+      this.maxAlternatives = 1;
+      this.start = vi.fn();
+      this.stop = vi.fn();
+      this.onresult = null;
+      this.onerror = null;
+      this.onend = null;
+    }) as unknown as typeof window.SpeechRecognition;
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    fireEvent.click(screen.getByRole('button', { name: /Listen/ }));
+    expect(socket.emit).toHaveBeenCalledWith('deadman.pulse');
+  });
+
   it('runs speech recognition success and error paths', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     type Rec = {

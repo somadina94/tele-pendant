@@ -39,6 +39,7 @@
   "logout": "Abmelden",
   "safety": "Sicherheit",
   "deadmanHold": "Totmann AKTIV",
+  "deadmanIdle": "Totmann inaktiv",
   "controlYou": "Sie haben die Kontrolle",
   "controlFree": "Kontrolle frei — beanspruchen zum Fahren",
   "controlHeldBy": "Kontrolle bei",

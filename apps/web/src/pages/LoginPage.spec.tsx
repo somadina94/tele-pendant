@@ -5,6 +5,22 @@ import { renderWithProviders } from '../test/render';
 import * as api from '../lib/api';
 
 describe('LoginPage', () => {
+  it('ignores password login responses with neither OTP nor token', async () => {
+    vi.spyOn(api, 'apiPost').mockResolvedValueOnce({ limitation: 'noop' });
+    renderWithProviders(<LoginPage />);
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'admin@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'change-me-admin-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled(),
+    );
+    expect(localStorage.getItem('accessToken')).toBeNull();
+  });
+
   it('logs in and navigates', async () => {
     const post = vi.spyOn(api, 'apiPost').mockResolvedValue({
       accessToken: 'tok',
@@ -80,6 +96,44 @@ describe('LoginPage', () => {
       }),
     );
     expect(localStorage.getItem('accessToken')).toBe('tok2');
+  });
+
+  it('ignores a resolved session redirect after unmount', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    let resolve!: (value: unknown) => void;
+    vi.spyOn(api, 'apiGet').mockImplementationOnce(
+      () =>
+        new Promise((res) => {
+          resolve = res;
+        }),
+    );
+    const view = renderWithProviders(<LoginPage />);
+    view.unmount();
+    resolve({
+      id: '1',
+      email: 'a@b.com',
+      role: 'admin',
+      displayName: 'A',
+      locale: 'en',
+    });
+    await Promise.resolve();
+    expect(localStorage.getItem('accessToken')).toBe('tok');
+  });
+
+  it('ignores a stale session probe after unmount', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    let reject!: (err: Error) => void;
+    vi.spyOn(api, 'apiGet').mockImplementationOnce(
+      () =>
+        new Promise((_, rej) => {
+          reject = rej;
+        }),
+    );
+    const view = renderWithProviders(<LoginPage />);
+    view.unmount();
+    reject(new Error('late'));
+    await Promise.resolve();
+    expect(localStorage.getItem('accessToken')).toBe('tok');
   });
 
   it('returns from OTP step to password form', async () => {

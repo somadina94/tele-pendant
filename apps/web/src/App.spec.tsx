@@ -111,6 +111,23 @@ describe('App', () => {
     expect(localStorage.getItem('accessToken')).toBeNull();
   });
 
+  it('ignores a late session check after unmount', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    const apiMod = await import('./lib/api');
+    let reject!: (err: Error) => void;
+    vi.mocked(apiMod.apiGet).mockImplementationOnce(
+      () =>
+        new Promise((_, rej) => {
+          reject = rej;
+        }),
+    );
+    const view = renderWithProviders(<App />, { route: '/operator' });
+    view.unmount();
+    reject(new Error('late'));
+    await Promise.resolve();
+    expect(localStorage.getItem('accessToken')).toBe('tok');
+  });
+
   it('renders other protected pages', async () => {
     localStorage.setItem('accessToken', 'tok');
     for (const route of [

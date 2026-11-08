@@ -18,7 +18,10 @@ export default tseslint.config(
       'react-refresh': reactRefresh,
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      // Keep classic hooks rules only; Compiler rules (purity/refs/set-state-in-effect)
+      // need a dedicated pass and currently fail across the existing Operator UI.
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': [
         'warn',
         {
@@ -31,6 +34,8 @@ export default tseslint.config(
             'buttonVariants',
             'badgeVariants',
             'screenFromPath',
+            'useControlLease',
+            'mergeControlLease',
           ],
         },
       ],

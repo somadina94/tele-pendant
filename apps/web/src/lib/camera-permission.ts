@@ -21,8 +21,10 @@ export function watchCameraPermission(
   let removeListener: (() => void) | null = null;
 
   void (async () => {
+    await Promise.resolve();
+    if (cancelled) return;
     if (!navigator.permissions?.query) {
-      if (!cancelled) onChange('unsupported');
+      onChange('unsupported');
       return;
     }
     try {

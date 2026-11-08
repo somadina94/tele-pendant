@@ -125,18 +125,8 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
       );
       // Batch-read contiguous demo map blocks so serialized Modbus keeps up
       // with the 250ms poll (per-register reads were freezing then jumping).
-      const holdingBase = Math.min(
-        hoistAddr,
-        loadAddr,
-        speedAddr,
-        trolleyAddr,
-      );
-      const holdingTop = Math.max(
-        hoistAddr,
-        loadAddr,
-        speedAddr,
-        trolleyAddr,
-      );
+      const holdingBase = Math.min(hoistAddr, loadAddr, speedAddr, trolleyAddr);
+      const holdingTop = Math.max(hoistAddr, loadAddr, speedAddr, trolleyAddr);
       const holdingBlock = await driver.readHoldingRegisters(
         holdingBase,
         holdingTop - holdingBase + 1,
@@ -201,9 +191,7 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
           hoistHeightMm: snapshot.hoistHeightMm,
           trolleyPositionMm: snapshot.trolleyPositionMm,
           speedPct: snapshot.speedPct,
-          heightDelta: prev
-            ? snapshot.hoistHeightMm - prev.hoistHeightMm
-            : 0,
+          heightDelta: prev ? snapshot.hoistHeightMm - prev.hoistHeightMm : 0,
           trolleyDelta: prev
             ? snapshot.trolleyPositionMm - prev.trolleyPositionMm
             : 0,

@@ -7,6 +7,72 @@ describe('captureDataUrl', () => {
     vi.restoreAllMocks();
   });
 
+  it('captures immediately when the preview already has frames', async () => {
+    const video = {
+      videoWidth: 640,
+      videoHeight: 480,
+      paused: false,
+      play: vi.fn().mockResolvedValue(undefined),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLVideoElement;
+    const toDataURL = vi.fn().mockReturnValue('data:image/jpeg;base64,fast');
+    vi.spyOn(document, 'createElement').mockReturnValue({
+      width: 0,
+      height: 0,
+      getContext: () => ({
+        drawImage: vi.fn(),
+        translate: vi.fn(),
+        scale: vi.fn(),
+      }),
+      toDataURL,
+    } as unknown as HTMLCanvasElement);
+
+    await expect(captureDataUrl(video)).resolves.toBe(
+      'data:image/jpeg;base64,fast',
+    );
+    expect(video.play).not.toHaveBeenCalled();
+  });
+
+  it('ignores play failures while waiting for a frame', async () => {
+    let width = 0;
+    let height = 0;
+    const listeners: Record<string, Array<() => void>> = {};
+    const video = {
+      get videoWidth() {
+        return width;
+      },
+      get videoHeight() {
+        return height;
+      },
+      paused: true,
+      play: vi.fn().mockRejectedValue(new Error('autoplay blocked')),
+      addEventListener: (event: string, fn: () => void) => {
+        listeners[event] = listeners[event] ?? [];
+        listeners[event].push(fn);
+      },
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLVideoElement;
+    const toDataURL = vi.fn().mockReturnValue('data:image/jpeg;base64,play');
+    vi.spyOn(document, 'createElement').mockReturnValue({
+      width: 0,
+      height: 0,
+      getContext: () => ({
+        drawImage: vi.fn(),
+        translate: vi.fn(),
+        scale: vi.fn(),
+      }),
+      toDataURL,
+    } as unknown as HTMLCanvasElement);
+
+    const pending = captureDataUrl(video);
+    width = 320;
+    height = 240;
+    for (const fn of listeners.loadeddata ?? []) fn();
+    await expect(pending).resolves.toBe('data:image/jpeg;base64,play');
+    expect(video.play).toHaveBeenCalled();
+  });
+
   it('captures a downscaled mirrored jpeg when the preview is live', async () => {
     const video = {
       videoWidth: 640,

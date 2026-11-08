@@ -27,6 +27,10 @@ import {
   type UserRole,
 } from '@tele-pendant/shared';
 import { AccessDeniedScreen } from './access-denied';
+import {
+  ControlLeaseHeaderControls,
+  ControlLeaseProvider,
+} from './control-lease';
 import { useLocale } from './locale';
 import { HelpTip, TourBar } from './tour';
 import { ThemeToggle, useTheme } from './theme';
@@ -291,102 +295,105 @@ export function AppShell({
   const dark = theme === 'dark';
 
   return (
-    <Drawer.Navigator
-      screenOptions={({ navigation, route }) => {
-        const tabState = navigation
-          .getState()
-          .routes.find((r) => r.name === 'MainTabs')?.state;
-        const tabName =
-          tabState && 'routes' in tabState
-            ? tabState.routes[tabState.index ?? 0]?.name
-            : 'operator';
-        const title = screenTitle(route.name, tabName, t);
-        const tourScreen = tourScreenFor(route.name, tabName);
-        return {
-          headerStyle: {
-            backgroundColor: dark ? '#0F1419' : '#F4F7FB',
-          },
-          headerTintColor: dark ? '#E8EEF4' : '#0F1419',
-          headerTitle: title,
-          headerLeft: () => (
-            <Pressable
-              className="ml-2 mr-1 h-9 w-9 items-center justify-center"
-              onPress={() => navigation.toggleDrawer()}
-              accessibilityLabel="Open menu"
-            >
-              <Menu size={20} color={dark ? '#E8EEF4' : '#0F1419'} />
-            </Pressable>
-          ),
-          headerRight: () => (
-            <View className="mr-2 flex-row items-center gap-1">
-              <TourBar screen={tourScreen} compact />
-              <ThemeToggle />
-            </View>
-          ),
-          drawerStyle: {
-            backgroundColor: dark ? '#0F1419' : '#F4F7FB',
-            width: 280,
-          },
-          sceneContainerStyle: {
-            backgroundColor: dark ? '#0F1419' : '#F4F7FB',
-          },
-        };
-      }}
-      drawerContent={(props) => (
-        <DrawerItems props={props} onLogout={onLogout} userRole={userRole} />
-      )}
-    >
-      <Drawer.Screen name="MainTabs" options={{ title: t('operator') }}>
-        {() => <MainTabs token={token} userRole={userRole} />}
-      </Drawer.Screen>
-      <Drawer.Screen name="face" options={{ title: t('face') }}>
-        {() => <FaceScreen token={token} onToken={onToken} />}
-      </Drawer.Screen>
-      <Drawer.Screen name="config" options={{ title: t('config') }}>
-        {() =>
-          userRole && canAccessAppRoute(userRole, 'config') ? (
-            <ConfigScreen token={token} />
-          ) : (
-            <AccessDeniedScreen detail="Config is for supervisors and administrators." />
-          )
-        }
-      </Drawer.Screen>
-      <Drawer.Screen name="audit" options={{ title: t('audit') }}>
-        {() =>
-          userRole && canAccessAppRoute(userRole, 'audit') ? (
-            <AuditScreen token={token} />
-          ) : (
-            <AccessDeniedScreen detail="The audit log is limited to supervisors and administrators." />
-          )
-        }
-      </Drawer.Screen>
-      <Drawer.Screen
-        name="changePassword"
-        options={{ title: 'Change password' }}
+    <ControlLeaseProvider token={token}>
+      <Drawer.Navigator
+        screenOptions={({ navigation, route }) => {
+          const tabState = navigation
+            .getState()
+            .routes.find((r) => r.name === 'MainTabs')?.state;
+          const tabName =
+            tabState && 'routes' in tabState
+              ? tabState.routes[tabState.index ?? 0]?.name
+              : 'operator';
+          const title = screenTitle(route.name, tabName, t);
+          const tourScreen = tourScreenFor(route.name, tabName);
+          return {
+            headerStyle: {
+              backgroundColor: dark ? '#0F1419' : '#F4F7FB',
+            },
+            headerTintColor: dark ? '#E8EEF4' : '#0F1419',
+            headerTitle: title,
+            headerLeft: () => (
+              <Pressable
+                className="ml-2 mr-1 h-9 w-9 items-center justify-center"
+                onPress={() => navigation.toggleDrawer()}
+                accessibilityLabel="Open menu"
+              >
+                <Menu size={20} color={dark ? '#E8EEF4' : '#0F1419'} />
+              </Pressable>
+            ),
+            headerRight: () => (
+              <View className="mr-2 flex-row items-center gap-1">
+                <ControlLeaseHeaderControls dark={dark} />
+                <TourBar screen={tourScreen} compact />
+                <ThemeToggle />
+              </View>
+            ),
+            drawerStyle: {
+              backgroundColor: dark ? '#0F1419' : '#F4F7FB',
+              width: 280,
+            },
+            sceneContainerStyle: {
+              backgroundColor: dark ? '#0F1419' : '#F4F7FB',
+            },
+          };
+        }}
+        drawerContent={(props) => (
+          <DrawerItems props={props} onLogout={onLogout} userRole={userRole} />
+        )}
       >
-        {({ navigation }) => (
-          <ChangePasswordScreen
-            token={token}
-            onClose={() => navigation.navigate('MainTabs')}
-          />
-        )}
-      </Drawer.Screen>
-      <Drawer.Screen name="changeResetPin" options={{ title: 'Reset PIN' }}>
-        {({ navigation }) => (
-          <ChangeResetPinScreen
-            token={token}
-            onClose={() => navigation.navigate('MainTabs')}
-          />
-        )}
-      </Drawer.Screen>
-      <Drawer.Screen name="twoFactor" options={{ title: t('twoFactor') }}>
-        {({ navigation }) => (
-          <TwoFactorScreen
-            token={token}
-            onClose={() => navigation.navigate('MainTabs')}
-          />
-        )}
-      </Drawer.Screen>
-    </Drawer.Navigator>
+        <Drawer.Screen name="MainTabs" options={{ title: t('operator') }}>
+          {() => <MainTabs token={token} userRole={userRole} />}
+        </Drawer.Screen>
+        <Drawer.Screen name="face" options={{ title: t('face') }}>
+          {() => <FaceScreen token={token} onToken={onToken} />}
+        </Drawer.Screen>
+        <Drawer.Screen name="config" options={{ title: t('config') }}>
+          {() =>
+            userRole && canAccessAppRoute(userRole, 'config') ? (
+              <ConfigScreen token={token} />
+            ) : (
+              <AccessDeniedScreen detail="Config is for supervisors and administrators." />
+            )
+          }
+        </Drawer.Screen>
+        <Drawer.Screen name="audit" options={{ title: t('audit') }}>
+          {() =>
+            userRole && canAccessAppRoute(userRole, 'audit') ? (
+              <AuditScreen token={token} />
+            ) : (
+              <AccessDeniedScreen detail="The audit log is limited to supervisors and administrators." />
+            )
+          }
+        </Drawer.Screen>
+        <Drawer.Screen
+          name="changePassword"
+          options={{ title: 'Change password' }}
+        >
+          {({ navigation }) => (
+            <ChangePasswordScreen
+              token={token}
+              onClose={() => navigation.navigate('MainTabs')}
+            />
+          )}
+        </Drawer.Screen>
+        <Drawer.Screen name="changeResetPin" options={{ title: 'Reset PIN' }}>
+          {({ navigation }) => (
+            <ChangeResetPinScreen
+              token={token}
+              onClose={() => navigation.navigate('MainTabs')}
+            />
+          )}
+        </Drawer.Screen>
+        <Drawer.Screen name="twoFactor" options={{ title: t('twoFactor') }}>
+          {({ navigation }) => (
+            <TwoFactorScreen
+              token={token}
+              onClose={() => navigation.navigate('MainTabs')}
+            />
+          )}
+        </Drawer.Screen>
+      </Drawer.Navigator>
+    </ControlLeaseProvider>
   );
 }

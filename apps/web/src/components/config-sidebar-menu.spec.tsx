@@ -30,4 +30,23 @@ describe('ConfigSidebarMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: /PLC connections/i }));
     expect(screen.getByText('Config body')).toBeInTheDocument();
   });
+
+  it('toggles config submenu without re-navigating when already there', () => {
+    renderWithProviders(
+      <SidebarProvider>
+        <Sidebar>
+          <SidebarContent>
+            <ConfigSidebarMenu />
+          </SidebarContent>
+        </Sidebar>
+        <Routes>
+          <Route path="/admin" element={<div>On admin</div>} />
+        </Routes>
+      </SidebarProvider>,
+      { route: '/admin?section=plc', role: 'admin' },
+    );
+    expect(screen.getByText('On admin')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Config'));
+    expect(screen.getByText('On admin')).toBeInTheDocument();
+  });
 });

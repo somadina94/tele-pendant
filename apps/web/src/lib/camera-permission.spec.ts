@@ -61,6 +61,127 @@ describe('camera permission API', () => {
     expect(status.removeEventListener).toHaveBeenCalled();
   });
 
+  it('skips permission callbacks after watch teardown', async () => {
+    const onChange = vi.fn();
+    let fulfill!: (value: {
+      state: string;
+      addEventListener: ReturnType<typeof vi.fn>;
+      removeEventListener: ReturnType<typeof vi.fn>;
+    }) => void;
+    const status = {
+      state: 'granted',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    vi.stubGlobal('navigator', {
+      permissions: {
+        query: vi.fn(
+          () =>
+            new Promise((res) => {
+              fulfill = res;
+            }),
+        ),
+      },
+    });
+    const stop = watchCameraPermission(onChange);
+    await Promise.resolve();
+    stop();
+    fulfill(status);
+    await Promise.resolve();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('does not notify after watch is cancelled early', async () => {
+    const onChange = vi.fn();
+    vi.stubGlobal('navigator', {
+      permissions: {
+        query: vi.fn(
+          () =>
+            new Promise<{ state: string; addEventListener: typeof vi.fn }>(
+              () => {},
+            ),
+        ),
+      },
+    });
+    const stop = watchCameraPermission(onChange);
+    stop();
+    await Promise.resolve();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('reports unsupported when permissions API is missing', async () => {
+    const onChange = vi.fn();
+    vi.stubGlobal('navigator', {});
+    watchCameraPermission(onChange);
+    await vi.waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith('unsupported'),
+    );
+    onChange.mockClear();
+    watchCameraPermission(onChange);
+    await vi.waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith('unsupported'),
+    );
+  });
+
+  it('skips unsupported callbacks after teardown on query failure', async () => {
+    const onChange = vi.fn();
+    let fail!: (err: Error) => void;
+    vi.stubGlobal('navigator', {
+      permissions: {
+        query: vi.fn(
+          () =>
+            new Promise((_, rej) => {
+              fail = rej;
+            }),
+        ),
+      },
+    });
+    const stop = watchCameraPermission(onChange);
+    await Promise.resolve();
+    stop();
+    fail(new Error('nope'));
+    await Promise.resolve();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('aborts the probe when cancelled after the first microtask', async () => {
+    const onChange = vi.fn();
+    let fulfill!: (value: {
+      state: string;
+      addEventListener: ReturnType<typeof vi.fn>;
+      removeEventListener: ReturnType<typeof vi.fn>;
+    }) => void;
+    vi.stubGlobal('navigator', {
+      permissions: {
+        query: vi.fn(
+          () =>
+            new Promise((res) => {
+              fulfill = res;
+            }),
+        ),
+      },
+    });
+    const stop = watchCameraPermission(onChange);
+    await Promise.resolve();
+    stop();
+    fulfill({
+      state: 'granted',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    await Promise.resolve();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('does not emit unsupported when watch stops before the probe runs', async () => {
+    const onChange = vi.fn();
+    vi.stubGlobal('navigator', {});
+    const stop = watchCameraPermission(onChange);
+    stop();
+    await Promise.resolve();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('reports unsupported when watch setup fails', async () => {
     const onChange = vi.fn();
     vi.stubGlobal('navigator', {

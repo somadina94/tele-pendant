@@ -166,6 +166,31 @@ describe('HmiService', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('runs motion writes through driver.runExclusive when present', async () => {
+    safetyState.canIssueMotion.mockReturnValue(true);
+    const runExclusive = jest.fn(async (fn: () => Promise<void>) => fn());
+    plcService.getDriver.mockReturnValue({ runExclusive });
+    await service.activateCell('c1', true, {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+    });
+    expect(runExclusive).toHaveBeenCalled();
+    expect(plcService.writeCoil).toHaveBeenCalledWith(0, true);
+  });
+
+  it('swallows audit failures on activate', async () => {
+    safetyState.canIssueMotion.mockReturnValue(true);
+    auditService.write.mockRejectedValueOnce(new Error('audit down'));
+    await expect(
+      service.activateCell('c1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+        userEmail: 'op@example.com',
+      }),
+    ).resolves.toEqual(expect.objectContaining({ ok: true }));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+
   it('skips audit on hold refresh activates', async () => {
     safetyState.canIssueMotion.mockReturnValue(true);
     auditService.write.mockClear();
@@ -268,6 +293,14 @@ describe('HmiService', () => {
       speed: 'slow',
     });
     expect(plcService.writeHolding).toHaveBeenCalledWith(2, 30);
+
+    // Same jog target as last write — skip the holding rewrite.
+    plcService.writeHolding.mockClear();
+    await service.activateCell('c1', true, {
+      role: UserRole.OPERATOR,
+      speed: 'slow',
+    });
+    expect(plcService.writeHolding).not.toHaveBeenCalled();
 
     // Skip speed writes when cell opts out.
     cells.findOne.mockResolvedValue({
@@ -751,7 +784,7 @@ describe('HmiService', () => {
       active: false,
     });
     backgrounds.save.mockImplementation(async (row) => {
-      const one = Array.isArray(row) ? row[0]! : row;
+      const one = Array.isArray(row) ? row[0] : row;
       return { ...one, id: one.id ?? 'bg2' };
     });
     const created = await service.createBackground({ name: ' yard ' });

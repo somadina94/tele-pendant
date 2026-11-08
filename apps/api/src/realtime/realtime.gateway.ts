@@ -112,9 +112,8 @@ export class RealtimeGateway
       userId: user.sub,
       deadmanActive: snap.deadmanActive,
       lastClientPulseAt: snap.lastClientPulseAt,
-      transport: (
-        client.conn as { transport?: { name?: string } } | undefined
-      )?.transport?.name,
+      transport: (client.conn as { transport?: { name?: string } } | undefined)
+        ?.transport?.name,
     });
     return snap;
   }

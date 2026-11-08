@@ -39,6 +39,7 @@
   "logout": "Salir",
   "safety": "Seguridad",
   "deadmanHold": "hombre muerto ACTIVO",
+  "deadmanIdle": "Hombre muerto inactivo",
   "controlYou": "Usted tiene el control",
   "controlFree": "Control libre — reclame para mover",
   "controlHeldBy": "Control en manos de",

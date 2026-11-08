@@ -359,14 +359,14 @@ export class SafetyStateService {
     this.assertedMotionCoils.delete(address);
   }
 
-  async releaseDeadman(opts?: {
+  releaseDeadman(opts?: {
     userId?: string | null;
     socketId?: string | null;
     force?: boolean;
   }): Promise<SafetySnapshot> {
     // WS + HTTP both call release — second call must not re-run a 6+ coil drop.
     if (!this.deadmanActive && !opts?.force) {
-      return this.snapshot();
+      return Promise.resolve(this.snapshot());
     }
     if (!opts?.force && this.deadmanActive) {
       const bySocket =
@@ -378,7 +378,7 @@ export class SafetyStateService {
         this.deadmanHolderUserId &&
         opts.userId === this.deadmanHolderUserId;
       if (!bySocket && !byUser) {
-        return this.snapshot();
+        return Promise.resolve(this.snapshot());
       }
     }
     motionDebug('deadman.release', {
@@ -391,7 +391,7 @@ export class SafetyStateService {
     this.needsMotionDrop = true;
     // Do not block the WS/HTTP response on the full Modbus drop — tick retries.
     void this.dropMotionAndDeadmanCoil();
-    return this.snapshot();
+    return Promise.resolve(this.snapshot());
   }
 
   private clearDeadmanHolder(): void {

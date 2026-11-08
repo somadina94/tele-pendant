@@ -91,6 +91,49 @@ describe('FacePage', () => {
     );
   });
 
+  it('captures with the live camera between challenge steps', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    vi.spyOn(api, 'apiPost').mockResolvedValueOnce({
+      ok: true,
+      limitation: 'none',
+    });
+    renderWithProviders(<FacePage />);
+    fireEvent.click(screen.getByRole('button', { name: enrollName }));
+    await captureAllPoses();
+    expect(api.apiPost).toHaveBeenCalledWith(
+      '/auth/face/enroll',
+      expect.objectContaining({ frames: expect.any(Array) }),
+    );
+  });
+
+  it('submits skip-camera placeholders on the final pose', async () => {
+    vi.spyOn(api, 'apiPost').mockResolvedValueOnce({ accessToken: 'skip' });
+    renderWithProviders(<FacePage skipCamera />);
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
+    await captureAllPoses();
+    expect(localStorage.getItem('accessToken')).toBe('skip');
+  });
+
+  it('shows capture progress before the final challenge frame', async () => {
+    renderWithProviders(<FacePage skipCamera />);
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
+    fireEvent.click(screen.getByRole('button', { name: 'Capture pose 1/3' }));
+    expect(
+      await screen.findByText(/Captured 1\/3\. Pose for the next step/i),
+    ).toBeInTheDocument();
+  });
+
+  it('stores only the access token when user is omitted', async () => {
+    vi.spyOn(api, 'apiPost').mockResolvedValueOnce({
+      accessToken: 'token-only',
+    });
+    renderWithProviders(<FacePage skipCamera />);
+    fireEvent.click(screen.getByRole('button', { name: loginName }));
+    await captureAllPoses();
+    expect(localStorage.getItem('accessToken')).toBe('token-only');
+    expect(localStorage.getItem('user')).toBeNull();
+  });
+
   it('face-logs in from the logged-out face screen', async () => {
     const post = vi.spyOn(api, 'apiPost').mockResolvedValueOnce({
       accessToken: 'face',

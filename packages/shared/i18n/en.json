@@ -39,6 +39,7 @@
   "logout": "Logout",
   "safety": "Safety",
   "deadmanHold": "deadman HOLD",
+  "deadmanIdle": "Deadman idle",
   "controlYou": "You have control",
   "controlFree": "Control free — claim to move",
   "controlHeldBy": "Control held by",

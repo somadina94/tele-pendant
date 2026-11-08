@@ -13,4 +13,12 @@ describe('LanguageSelect', () => {
     expect(screen.getByLabelText('Idioma')).toBeInTheDocument();
     expect(localStorage.getItem('accessToken')).toBeNull();
   });
+
+  it('ignores unknown locale values', () => {
+    renderWithProviders(<LanguageSelect />);
+    fireEvent.change(screen.getByLabelText('Language'), {
+      target: { value: 'not-a-locale' },
+    });
+    expect(screen.getByLabelText('Language')).toHaveValue('en');
+  });
 });

@@ -104,6 +104,7 @@ describe('sidebar extra coverage', () => {
     fireEvent.click(screen.getByText('force-open'));
     fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
     fireEvent.keyDown(window, { key: 'b', metaKey: true });
+    fireEvent.keyDown(window, { key: 'b' });
     unmount();
 
     function ForceToggle() {

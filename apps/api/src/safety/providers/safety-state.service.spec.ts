@@ -171,6 +171,8 @@ describe('SafetyStateService', () => {
     service.pulseDeadman({ userId: 'u1' });
     expect(service.snapshot().deadmanActive).toBe(false);
     expect(service.canIssueMotion('u1')).toBe(false);
+    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    expect(service.snapshot().deadmanActive).toBe(false);
     claimAs('u1', 'Alice');
     service.pulseDeadman({ userId: 'u1' });
     expect(service.canIssueMotion('u1')).toBe(true);
@@ -342,6 +344,20 @@ describe('SafetyStateService', () => {
     expect(driver.writeCoil).toHaveBeenCalledWith(10, false);
     expect(driver.writeCoil).toHaveBeenCalledWith(7, false);
     expect(driver.writeCoil).not.toHaveBeenCalledWith(8, false);
+  });
+
+  it('clears asserted motion coils on release without scanning all cells', async () => {
+    cells.find.mockClear();
+    pulseHeld();
+    service.noteMotionCoilAsserted(42);
+    service.noteMotionCoilAsserted(Number.NaN);
+    service.noteMotionCoilCleared(999);
+    driver.writeCoil.mockClear();
+    await service.releaseDeadman({ userId: 'u1' });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(driver.writeCoil).toHaveBeenCalledWith(10, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(42, false);
+    expect(cells.find).not.toHaveBeenCalled();
   });
 
   it('retries PLC drop on next tick if release write failed', async () => {

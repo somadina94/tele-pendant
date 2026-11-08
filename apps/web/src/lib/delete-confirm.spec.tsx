@@ -2,6 +2,32 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useDeleteConfirmDialog } from './delete-confirm';
 
+vi.mock('@/components/ui/alert-dialog', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/components/ui/alert-dialog')>();
+  return {
+    ...actual,
+    AlertDialog: ({
+      onOpenChange,
+      open,
+      children,
+    }: {
+      onOpenChange?: (open: boolean) => void;
+      open: boolean;
+      children: React.ReactNode;
+    }) => (
+      <actual.AlertDialog open={open} onOpenChange={onOpenChange}>
+        {children}
+        {open ? (
+          <button type="button" onClick={() => onOpenChange?.(true)}>
+            noop-open
+          </button>
+        ) : null}
+      </actual.AlertDialog>
+    ),
+  };
+});
+
 function Probe() {
   const { askDelete, deleteConfirmDialog } = useDeleteConfirmDialog();
   return (
@@ -38,6 +64,7 @@ describe('useDeleteConfirmDialog', () => {
     render(<Host />);
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
     expect(screen.getByRole('alertdialog')).toHaveTextContent('Delete widget?');
+    fireEvent.click(screen.getByText('noop-open'));
     fireEvent.click(
       within(screen.getByRole('alertdialog')).getByRole('button', {
         name: 'Cancel',

@@ -187,6 +187,80 @@ describe('tour helpers', () => {
     expect(neitherSideFits.top).toBe(8);
   });
 
+  it('remeasures tour cards after the scroll settle timer', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    localStorage.setItem('tourEnabled', '1');
+    const target = document.createElement('button');
+    target.dataset.tourId = 'tour.login.language';
+    Object.assign(target, { scrollIntoView: vi.fn() });
+    document.body.appendChild(target);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 200,
+      bottom: 280,
+      left: 40,
+      width: 200,
+      height: 80,
+      right: 240,
+      x: 40,
+      y: 200,
+      toJSON: () => ({}),
+    } as DOMRect);
+    const { unmount } = renderWithProviders(
+      <>
+        <PageTourBar screen="login" />
+        <HelpTip id="tour.login.language">
+          <span>lang</span>
+        </HelpTip>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Start tour' }));
+    await vi.advanceTimersByTimeAsync(200);
+    target.remove();
+    unmount();
+    vi.useRealTimers();
+  });
+
+  it('retries layout measurement for tiny tour targets', () => {
+    localStorage.setItem('tourEnabled', '1');
+    const queued: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      queued.push(cb);
+      return queued.length;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(
+      () => undefined,
+    );
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 10,
+      bottom: 10,
+      left: 10,
+      width: 0,
+      height: 0,
+      right: 10,
+      x: 10,
+      y: 10,
+      toJSON: () => ({}),
+    } as DOMRect);
+    const target = document.createElement('button');
+    target.dataset.tourId = 'tour.login.language';
+    document.body.appendChild(target);
+
+    const { unmount } = renderWithProviders(
+      <>
+        <PageTourBar screen="login" />
+        <HelpTip id="tour.login.language">
+          <span>lang</span>
+        </HelpTip>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Start tour' }));
+    for (let i = 0; i < 5 && queued.length; i += 1) {
+      queued.shift()?.(0);
+    }
+    target.remove();
+    unmount();
+  });
+
   it('positions walkthrough card via layout measurement (rAF + resize)', () => {
     localStorage.setItem('tourEnabled', '1');
     const offsetSpy = vi

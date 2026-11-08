@@ -134,6 +134,61 @@ describe('api helpers', () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it('returns raw text when JSON errors omit a message field', async () => {
+    vi.stubGlobal('location', { pathname: '/', assign: vi.fn() });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ code: 'ERR' }),
+      }),
+    );
+    await expect(apiGet('/health')).rejects.toThrow('{"code":"ERR"}');
+  });
+
+  it('falls back to raw text when error JSON is invalid', async () => {
+    vi.stubGlobal('location', { pathname: '/', assign: vi.fn() });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 418,
+        text: async () => 'plain-teapot',
+      }),
+    );
+    await expect(apiGet('/health')).rejects.toThrow('plain-teapot');
+  });
+
+  it('reads string messages from JSON errors', async () => {
+    vi.stubGlobal('location', { pathname: '/', assign: vi.fn() });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ message: 'Bad input' }),
+      }),
+    );
+    await expect(apiPost('/auth/login', {})).rejects.toThrow('Bad input');
+  });
+
+  it('joins array validation messages from JSON errors', async () => {
+    vi.stubGlobal('location', { pathname: '/operator', assign: vi.fn() });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 422,
+        text: async () =>
+          JSON.stringify({ message: ['Field required', 'Too short'] }),
+      }),
+    );
+    await expect(apiGet('/hmi/layout')).rejects.toThrow(
+      'Field required, Too short',
+    );
+  });
+
   it('falls back when the error body is empty', async () => {
     vi.stubGlobal('location', { pathname: '/', assign: vi.fn() });
     vi.stubGlobal(

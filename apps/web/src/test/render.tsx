@@ -4,7 +4,25 @@ import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { UserRole } from '@tele-pendant/shared';
 import { ThemeProvider } from '@/components/theme-provider';
+import {
+  ControlLeaseHeaderControls,
+  ControlLeaseProvider,
+} from '@/lib/control-lease';
 import { TourProvider } from '../lib/tour';
+
+/** Operator tests: header control chrome + session lease lifecycle. */
+export function renderOperator(
+  ui: ReactElement,
+  opts?: { route?: string; role?: UserRole; autoManage?: boolean },
+) {
+  return renderWithProviders(
+    <>
+      <ControlLeaseHeaderControls />
+      {ui}
+    </>,
+    { ...opts, autoManage: opts?.autoManage ?? true },
+  );
+}
 
 function seedTestUser(role?: UserRole) {
   if (!role) return;
@@ -21,7 +39,7 @@ function seedTestUser(role?: UserRole) {
 
 export function renderWithProviders(
   ui: ReactElement,
-  opts?: { route?: string; role?: UserRole },
+  opts?: { route?: string; role?: UserRole; autoManage?: boolean },
 ) {
   seedTestUser(opts?.role);
   const client = new QueryClient({
@@ -36,7 +54,11 @@ export function renderWithProviders(
       >
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[opts?.route ?? '/']}>
-            <TourProvider>{children}</TourProvider>
+            <TourProvider>
+              <ControlLeaseProvider autoManage={opts?.autoManage ?? false}>
+                {children}
+              </ControlLeaseProvider>
+            </TourProvider>
           </MemoryRouter>
         </QueryClientProvider>
       </ThemeProvider>

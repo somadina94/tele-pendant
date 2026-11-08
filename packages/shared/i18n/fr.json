@@ -39,6 +39,7 @@
   "logout": "Déconnexion",
   "safety": "Sécurité",
   "deadmanHold": "homme mort ACTIF",
+  "deadmanIdle": "Homme mort inactif",
   "controlYou": "Vous avez le contrôle",
   "controlFree": "Contrôle libre — revendiquer pour bouger",
   "controlHeldBy": "Contrôle détenu par",

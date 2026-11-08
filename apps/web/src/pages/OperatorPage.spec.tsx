@@ -1,9 +1,15 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { OperatorPage } from './OperatorPage';
-import { renderWithProviders } from '../test/render';
+import { renderOperator } from '../test/render';
 import * as api from '../lib/api';
 import type { ControlLease } from '../lib/api';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -13,6 +19,13 @@ const socket = {
   on: vi.fn(),
   off: vi.fn(),
   emit: vi.fn(),
+  connected: false,
+  id: 'sock-test',
+  io: {
+    on: vi.fn(),
+    off: vi.fn(),
+    engine: { transport: { name: 'websocket' } },
+  },
 };
 
 vi.mock('../lib/realtime', () => ({
@@ -181,6 +194,9 @@ describe('OperatorPage', () => {
     socket.on.mockClear();
     socket.off.mockClear();
     socket.emit.mockClear();
+    socket.connected = false;
+    socket.io.on.mockClear();
+    socket.io.off.mockClear();
     localStorage.setItem('user', JSON.stringify({ id: 'u1', email: 'op@x' }));
     socket.on.mockImplementation(
       (event: string, handler: (p: unknown) => void) => {
@@ -221,6 +237,14 @@ describe('OperatorPage', () => {
     });
   }
 
+  function emitSafety(payload: unknown) {
+    for (const [event, handler] of socket.on.mock.calls) {
+      if (event === 'safety.state') {
+        (handler as (p: unknown) => void)(payload);
+      }
+    }
+  }
+
   function mockGetWithControl(layoutValue: unknown = layout) {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
       if (path === '/safety/control') return heldControl as never;
@@ -229,13 +253,382 @@ describe('OperatorPage', () => {
     });
   }
 
+  it('skips HTTP tag polling while the websocket stream is healthy', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    socket.connected = true;
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === 'tags.update') handler(defaultTags);
+      },
+    );
+    const get = vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return defaultTags as never;
+      return layout as never;
+    });
+    renderOperator(<OperatorPage />);
+    expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
+    const before = get.mock.calls.filter(
+      ([p]) => p === '/realtime/tags',
+    ).length;
+    await vi.advanceTimersByTimeAsync(2500);
+    const after = get.mock.calls.filter(([p]) => p === '/realtime/tags').length;
+    expect(after).toBe(before);
+    vi.useRealTimers();
+  });
+
+  it('drops stale live tags from websocket updates', async () => {
+    const handlers: Record<string, (payload: unknown) => void> = {};
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        handlers[event] = handler;
+        if (event === 'tags.update') {
+          handler({
+            ...defaultTags,
+            seq: 5,
+            at: '2026-01-02T00:00:00.000Z',
+          });
+        }
+      },
+    );
+    renderOperator(<OperatorPage />);
+    await screen.findByText('Hoist Up');
+    handlers['tags.update']?.({
+      hoistHeightMm: 50,
+      values: {},
+      at: '2026-01-01T00:00:00.000Z',
+    });
+    // Stale seq without `at` covers payload.at ?? null on the drop path.
+    handlers['tags.update']?.({
+      hoistHeightMm: 51,
+      values: {},
+      seq: 1,
+    });
+    expect(screen.getByText('Hoist Up')).toBeInTheDocument();
+  });
+
+  it('applies live tags while holding motion and logs disconnect timing', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const handlers: Record<string, (payload?: unknown) => void> = {};
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        handlers[event] = handler;
+        if (event === 'tags.update') {
+          handler({
+            ...defaultTags,
+            seq: 1,
+            at: new Date().toISOString(),
+          });
+        }
+      },
+    );
+    renderOperator(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist);
+    handlers['tags.update']?.({
+      ...defaultTags,
+      seq: 2,
+      hoistHeightMm: 250,
+      at: new Date().toISOString(),
+    });
+    await vi.advanceTimersByTimeAsync(1100);
+    // Omit at/hoist/trolley so tags.apply ?? null fallbacks are hit.
+    handlers['tags.update']?.({
+      values: {},
+      seq: 3,
+    });
+    handlers['disconnect']?.('transport close');
+    fireEvent.pointerUp(hoist);
+    vi.useRealTimers();
+  });
+
+  it('ignores failed estop presses without disturbing hold state', async () => {
+    mockPostWithControl(async (path) => {
+      if (String(path).includes('/hmi/cells/s1/activate')) {
+        throw new Error('estop failed');
+      }
+      return heldControl;
+    });
+    renderOperator(<OperatorPage />);
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'STOP' }));
+    await Promise.resolve();
+  });
+
+  it('keeps holding hoist when pointer stays inside the cell', async () => {
+    const rect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        return {
+          top: 0,
+          bottom: 40,
+          left: 0,
+          right: 40,
+          width: 40,
+          height: 40,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+    renderOperator(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist, { pointerId: 2, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(hoist, { pointerId: 2, clientX: 12, clientY: 12 });
+    rect.mockRestore();
+  });
+
+  it('presses cells without pointer capture support', async () => {
+    const original = HTMLElement.prototype.setPointerCapture;
+    // @ts-expect-error test stub
+    delete HTMLElement.prototype.setPointerCapture;
+    renderOperator(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist, { pointerId: 1 });
+    fireEvent.pointerUp(hoist, { pointerId: 1 });
+    HTMLElement.prototype.setPointerCapture = original;
+  });
+
+  it('logs disconnect before any websocket tags arrive', async () => {
+    const handlers: Record<string, (payload?: unknown) => void> = {};
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        handlers[event] = handler;
+      },
+    );
+    renderOperator(<OperatorPage />);
+    await screen.findByText('Hoist Up');
+    handlers['disconnect']?.('io server disconnect');
+  });
+
+  it('pulses deadman on an active hold interval', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === 'safety.state') {
+          handler({
+            mode: 'normal',
+            deadmanActive: false,
+            eStopActive: false,
+            watchdogOk: true,
+          });
+        }
+      },
+    );
+    renderOperator(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist);
+    await vi.advanceTimersByTimeAsync(450);
+    fireEvent.pointerUp(hoist);
+    vi.useRealTimers();
+  });
+
+  it('throttles tag debug logs when not holding a cell', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const handlers: Record<string, (payload?: unknown) => void> = {};
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        handlers[event] = handler;
+      },
+    );
+    renderOperator(<OperatorPage />);
+    await screen.findByText('Hoist Up');
+    handlers['tags.update']?.({
+      hoistHeightMm: 1,
+      values: {},
+      seq: 20,
+      at: '2026-01-10T00:00:00.000Z',
+    });
+    await vi.advanceTimersByTimeAsync(1100);
+    handlers['tags.update']?.({
+      hoistHeightMm: 2,
+      values: {},
+      seq: 21,
+      at: '2026-01-10T00:00:01.000Z',
+    });
+    vi.useRealTimers();
+  });
+
+  it('handles socket connect, disconnect, and reconnect hooks', async () => {
+    const handlers: Record<string, (payload?: unknown) => void> = {};
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        handlers[event] = handler;
+        if (event === 'tags.update') handler(defaultTags);
+      },
+    );
+    socket.io.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === 'reconnect') handlers.reconnect = handler;
+      },
+    );
+    renderOperator(<OperatorPage />);
+    await screen.findByText('Hoist Up');
+    handlers.connect?.();
+    handlers.disconnect?.('transport close');
+    handlers.reconnect?.(2);
+    expect(handlers.connect).toBeDefined();
+  });
+
+  it('ignores overlapping HTTP tag pulls', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    socket.connected = false;
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === 'tags.update') handler(defaultTags);
+      },
+    );
+    let release!: () => void;
+    vi.spyOn(api, 'apiGet').mockImplementation((path) => {
+      if (path === '/realtime/tags') {
+        return new Promise((resolve) => {
+          release = () => resolve(defaultTags as never);
+        });
+      }
+      if (path === '/safety/control')
+        return Promise.resolve(heldControl as never);
+      return Promise.resolve(layout as never);
+    });
+    renderOperator(<OperatorPage />);
+    await screen.findByText('Hoist Up');
+    await vi.advanceTimersByTimeAsync(1000);
+    release();
+    await Promise.resolve();
+    vi.useRealTimers();
+  });
+
+  it('clears a failed motion press when activate-true rejects', async () => {
+    mockPostWithControl(async (path, body) => {
+      const value = (body as { value?: boolean } | undefined)?.value;
+      if (String(path).includes('/activate') && value === true) {
+        throw 'blocked-string';
+      }
+      return heldControl;
+    });
+    renderOperator(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(socket.emit).toHaveBeenCalledWith('deadman.release'),
+    );
+    await waitFor(() =>
+      expect(socket.emit).toHaveBeenCalledWith('deadman.release'),
+    );
+  });
+
+  it('logs activate-false failures that are not Error instances', async () => {
+    mockPostWithControl(async (path, body) => {
+      const value = (body as { value?: boolean } | undefined)?.value;
+      if (String(path).includes('/activate') && value === false) {
+        throw 'drop-string';
+      }
+      return heldControl;
+    });
+    renderOperator(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: true }),
+      ),
+    );
+    fireEvent.pointerUp(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: false }),
+      ),
+    );
+  });
+
+  it('finishes a drag when the pointer leaves the cell', async () => {
+    const rect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        return {
+          top: 0,
+          bottom: 40,
+          left: 0,
+          right: 40,
+          width: 40,
+          height: 40,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+    renderOperator(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist, { pointerId: 7, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(hoist, { pointerId: 7, clientX: 500, clientY: 500 });
+    fireEvent.lostPointerCapture(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: false }),
+      ),
+    );
+    rect.mockRestore();
+  });
+
+  it('ignores visibility changes while the page stays visible', async () => {
+    renderOperator(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist);
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(
+      vi.mocked(api.apiPost).mock.calls.filter((call) => {
+        const [path, body] = call;
+        return (
+          path === '/hmi/cells/m1/activate' &&
+          (body as { value?: boolean } | undefined)?.value === false
+        );
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('tolerates pointer release failures and ignored coil drops', async () => {
+    const release = vi
+      .spyOn(HTMLElement.prototype, 'releasePointerCapture')
+      .mockImplementation(() => {
+        throw new Error('release failed');
+      });
+    const has = vi
+      .spyOn(HTMLElement.prototype, 'hasPointerCapture')
+      .mockImplementation(() => true);
+    mockPostWithControl(async (path, body) => {
+      const value = (body as { value?: boolean } | undefined)?.value;
+      if (String(path).includes('/activate') && value === false) {
+        throw new Error('drop failed');
+      }
+      return heldControl;
+    });
+    renderOperator(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    fireEvent.pointerDown(hoist);
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/m1/activate',
+        expect.objectContaining({ value: true }),
+      ),
+    );
+    window.dispatchEvent(new Event('pagehide'));
+    fireEvent.pointerUp(hoist);
+    release.mockRestore();
+    has.mockRestore();
+  });
+
   it('applies HTTP live-tag backup and ignores empty/error polls', async () => {
     const get = vi.spyOn(api, 'apiGet').mockImplementation(async (path) => {
       if (path === '/safety/control') return heldControl as never;
       if (path === '/realtime/tags') return defaultTags as never;
       return layout as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
     await waitFor(() => {
       expect(get).toHaveBeenCalledWith('/realtime/tags');
@@ -260,7 +653,7 @@ describe('OperatorPage', () => {
   });
 
   it('renders matrix overlays and handles motion press/release', async () => {
-    const { container } = renderWithProviders(<OperatorPage />);
+    const { container } = renderOperator(<OperatorPage />);
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
     expect(screen.getByText('Bay')).toBeInTheDocument();
     expect(container.querySelector('[data-feat="hmi-mimic"]')).toBeTruthy();
@@ -384,7 +777,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true };
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     expect(hoist).toHaveTextContent('Hoist Up');
     expect(hoist).toHaveTextContent('IDLE');
@@ -417,13 +810,13 @@ describe('OperatorPage', () => {
 
   it('shows a layout error when the operator screen cannot load', async () => {
     vi.spyOn(api, 'apiGet').mockRejectedValue(new Error('offline'));
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(await screen.findByText('offline')).toBeInTheDocument();
   });
 
   it('shows a generic layout error when the failure is not an Error', async () => {
     vi.spyOn(api, 'apiGet').mockRejectedValue('nope');
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(
       await screen.findByText('Could not load operator screen'),
     ).toBeInTheDocument();
@@ -438,7 +831,7 @@ describe('OperatorPage', () => {
       if (path === '/realtime/tags') return { at: null } as never;
       return layout as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(
       screen.getByRole('status', { name: 'Operator' }),
     ).toBeInTheDocument();
@@ -455,7 +848,7 @@ describe('OperatorPage', () => {
       if (path === '/realtime/tags') return { at: null } as never;
       return layout as never;
     });
-    const view = renderWithProviders(<OperatorPage />);
+    const view = renderOperator(<OperatorPage />);
     expect(
       screen.getByRole('status', { name: 'Operator' }),
     ).toBeInTheDocument();
@@ -477,7 +870,7 @@ describe('OperatorPage', () => {
       if (path === '/realtime/tags') return { at: null } as never;
       return layout as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(
       screen.getByRole('status', { name: 'Operator' }),
     ).toBeInTheDocument();
@@ -496,7 +889,7 @@ describe('OperatorPage', () => {
         watchdogOk: true,
       },
     });
-    const { container } = renderWithProviders(<OperatorPage />);
+    const { container } = renderOperator(<OperatorPage />);
     await screen.findByText('Hoist Up');
     expect(
       container.querySelector('.plant-cluster-status-dot.warn'),
@@ -517,7 +910,7 @@ describe('OperatorPage', () => {
         watchdogOk: false,
       },
     });
-    const { container } = renderWithProviders(<OperatorPage />);
+    const { container } = renderOperator(<OperatorPage />);
     expect(await screen.findByText('Plant graphic')).toBeInTheDocument();
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
     await waitFor(() =>
@@ -528,7 +921,7 @@ describe('OperatorPage', () => {
   });
 
   it('still starts hold when setPointerCapture throws (TP-31)', async () => {
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     HTMLElement.prototype.setPointerCapture = vi.fn(() => {
       throw new DOMException('InvalidStateError');
@@ -556,7 +949,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true };
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     fireEvent.pointerDown(hoist);
     fireEvent.pointerUp(hoist);
@@ -571,7 +964,7 @@ describe('OperatorPage', () => {
 
   it('stops motion when the pointer leaves the button while captured', async () => {
     mockPostWithControl(async () => ({ ok: true }));
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     HTMLElement.prototype.setPointerCapture = vi.fn();
     HTMLElement.prototype.releasePointerCapture = vi.fn();
@@ -631,7 +1024,7 @@ describe('OperatorPage', () => {
 
   it('releases motion when pointer capture is lost', async () => {
     mockPostWithControl(async () => ({ ok: true }));
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     HTMLElement.prototype.setPointerCapture = vi.fn();
     fireEvent.pointerDown(hoist);
@@ -667,6 +1060,8 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
+    const { ControlLeaseProvider, ControlLeaseHeaderControls } =
+      await import('../lib/control-lease');
     render(
       <ThemeProvider
         attribute="class"
@@ -676,7 +1071,10 @@ describe('OperatorPage', () => {
         <QueryClientProvider client={client}>
           <MemoryRouter>
             <TourProvider>
-              <OperatorPage />
+              <ControlLeaseProvider autoManage>
+                <ControlLeaseHeaderControls />
+                <OperatorPage />
+              </ControlLeaseProvider>
             </TourProvider>
           </MemoryRouter>
         </QueryClientProvider>
@@ -727,7 +1125,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true };
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     fireEvent.pointerDown(hoist);
     fireEvent.pointerUp(hoist);
@@ -741,7 +1139,7 @@ describe('OperatorPage', () => {
   });
 
   it('docks STOP outside the matrix with ≥44px targets (FEAT-A3)', async () => {
-    const { container } = renderWithProviders(<OperatorPage />);
+    const { container } = renderOperator(<OperatorPage />);
     const stop = await screen.findByRole('button', { name: 'STOP' });
     const dock = container.querySelector('[data-feat="a3-stop-dock"]');
     expect(dock).toBeTruthy();
@@ -754,7 +1152,7 @@ describe('OperatorPage', () => {
   });
 
   it('sends slow vs fast speed on motion activate (FEAT-A2)', async () => {
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     expect(screen.getByRole('button', { name: 'Slow' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Slow' }));
@@ -785,7 +1183,7 @@ describe('OperatorPage', () => {
         cell.isMotion ? { ...cell, variableSpeed: false } : cell,
       ),
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(
       screen.queryByRole('button', { name: 'Slow' }),
     ).not.toBeInTheDocument();
@@ -817,7 +1215,7 @@ describe('OperatorPage', () => {
   });
 
   it('maps matrix cells through idle / running / blocked / fault (FEAT-A1)', async () => {
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     const stop = screen.getByRole('button', { name: 'STOP' });
     expect(hoist).toHaveAttribute('data-cell-state', 'idle');
@@ -875,7 +1273,7 @@ describe('OperatorPage', () => {
       if (path.startsWith('/safety/control')) return heldControl;
       return { ok: true };
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(
       await screen.findByRole('button', { name: 'Release control' }),
     ).toBeInTheDocument();
@@ -907,9 +1305,8 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(await screen.findByText(/Control held by/)).toBeInTheDocument();
-    expect(screen.getByText(/Enter your reset PIN/i)).toBeInTheDocument();
     const hoist = screen.getByRole('button', { name: 'Hoist Up' });
     expect(hoist).toBeDisabled();
     fireEvent.pointerDown(hoist);
@@ -921,10 +1318,15 @@ describe('OperatorPage', () => {
     expect(postCalls.some(([path]) => path.includes('/hmi/cells/'))).toBe(
       false,
     );
-    fireEvent.change(screen.getByLabelText(/Reset PIN/i), {
+    fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
+    fireEvent.change(await screen.findByLabelText('PIN'), {
       target: { value: '1234' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Take control',
+      }),
+    );
     expect(
       await screen.findByRole('button', { name: 'Release control' }),
     ).toBeInTheDocument();
@@ -951,7 +1353,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     const claimBtn = await screen.findByRole('button', {
       name: 'Claim control',
     });
@@ -1005,15 +1407,22 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     await screen.findByRole('button', { name: 'Take control' });
     fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
-    expect(await screen.findByText('PIN does not match')).toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText('PIN'), {
+      target: { value: '0000' },
+    });
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Take control',
+      }),
+    );
+    expect(
+      (await screen.findAllByText('PIN does not match')).length,
+    ).toBeGreaterThan(0);
 
-    const safetyHandler = socket.on.mock.calls.find(
-      (c) => c[0] === 'safety.state',
-    )?.[1] as (p: unknown) => void;
-    safetyHandler({
+    emitSafety({
       mode: 'normal',
       deadmanActive: false,
       eStopActive: false,
@@ -1035,7 +1444,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
-    const view = renderWithProviders(<OperatorPage />);
+    const view = renderOperator(<OperatorPage />);
     await screen.findByRole('button', { name: 'Release control' });
     await vi.advanceTimersByTimeAsync(4000);
     expect(heartbeat).toHaveBeenCalled();
@@ -1065,7 +1474,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
     expect(hoist).toBeDisabled();
     const controlGetsBefore = get.mock.calls.filter(
@@ -1084,7 +1493,7 @@ describe('OperatorPage', () => {
 
   it('tolerates a corrupt local user record when merging control (FEAT-A5)', async () => {
     localStorage.setItem('user', '{not-json');
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(
       await screen.findByRole('button', { name: 'Release control' }),
     ).toBeInTheDocument();
@@ -1092,11 +1501,11 @@ describe('OperatorPage', () => {
 
   it('reads empty and missing local user ids when merging control (FEAT-A5)', async () => {
     localStorage.removeItem('user');
-    const { unmount } = renderWithProviders(<OperatorPage />);
+    const { unmount } = renderOperator(<OperatorPage />);
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
     unmount();
     localStorage.setItem('user', JSON.stringify({ id: '   ' }));
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
   });
 
@@ -1113,7 +1522,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
-    const view = renderWithProviders(<OperatorPage />);
+    const view = renderOperator(<OperatorPage />);
     await screen.findByRole('status', { name: 'Operator' });
     view.unmount();
     finishClaim(heldControl);
@@ -1143,7 +1552,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(await screen.findByText(/Control held by/)).toBeInTheDocument();
     expect(screen.getByText(/u2/)).toBeInTheDocument();
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Hoist Up' }));
@@ -1151,7 +1560,17 @@ describe('OperatorPage', () => {
       (await screen.findAllByText(/Control held by u2/i)).length,
     ).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
-    expect(await screen.findByText('PIN does not match')).toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText('PIN'), {
+      target: { value: '0000' },
+    });
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Take control',
+      }),
+    );
+    expect(
+      (await screen.findAllByText('PIN does not match')).length,
+    ).toBeGreaterThan(0);
 
     mockPostWithControl(async (path) => {
       if (path === '/safety/control/release') {
@@ -1159,10 +1578,7 @@ describe('OperatorPage', () => {
       }
       return heldControl;
     });
-    const safetyHandler = socket.on.mock.calls.find(
-      (c) => c[0] === 'safety.state',
-    )?.[1] as (p: unknown) => void;
-    safetyHandler({
+    emitSafety({
       mode: 'normal',
       deadmanActive: false,
       eStopActive: false,
@@ -1196,7 +1612,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     fireEvent.click(
       await screen.findByRole('button', { name: 'Claim control' }),
     );
@@ -1224,7 +1640,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     fireEvent.click(
       await screen.findByRole('button', { name: 'Claim control' }),
     );
@@ -1258,7 +1674,7 @@ describe('OperatorPage', () => {
       }
       return { ok: true } as never;
     });
-    renderWithProviders(<OperatorPage />);
+    renderOperator(<OperatorPage />);
     expect(
       await screen.findByRole('img', { name: 'Plant background' }),
     ).toHaveAttribute('src', '/hmi-assets/plant.svg');

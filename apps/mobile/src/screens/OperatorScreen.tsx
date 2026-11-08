@@ -26,6 +26,7 @@ import {
 import { io, Socket } from 'socket.io-client';
 import { operatorApiError } from '../api-errors';
 import { apiGet, apiPost, getApiBase } from '../api';
+import { useControlLease } from '../control-lease';
 import type { Cell, ControlLease, Layout } from '../types';
 import { useLocale } from '../locale';
 import { HelpTip } from '../tour';
@@ -37,7 +38,6 @@ import {
 import { CraneMimic } from '../crane-mimic';
 import { ESTOP, matrixCellStatePalette } from '../hmi-styles';
 import { useTheme } from '../theme';
-import { getStoredUser } from '../user-session';
 import { Card, showErrorAlert } from '../ui';
 
 type SafetySnap = {
@@ -47,23 +47,6 @@ type SafetySnap = {
   watchdogOk?: boolean;
   control?: ControlLease;
 };
-
-function mergeControl(
-  incoming: ControlLease | null | undefined,
-  prev: ControlLease | null,
-  localUserId: string | null,
-): ControlLease | null {
-  if (!incoming) return prev;
-  return {
-    ...incoming,
-    youHold: Boolean(
-      incoming.youHold ||
-      (localUserId &&
-        incoming.holderUserId &&
-        localUserId === incoming.holderUserId),
-    ),
-  };
-}
 
 function statusTone(mode: string): 'ok' | 'warn' | 'danger' {
   if (mode === 'safe_state' || mode === 'estop' || mode === 'e_stop') {
@@ -87,25 +70,15 @@ export function OperatorScreen({ token }: { token: string }) {
   const { theme } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const statePalette = matrixCellStatePalette(theme === 'dark');
+  const { control, youHold, applyControl } = useControlLease();
+  const controlRef = useRef(control);
   const [pin, setPin] = useState('');
   const [holdingId, setHoldingId] = useState<string | null>(null);
   const [jogSpeed, setJogSpeed] = useState<'slow' | 'fast'>('fast');
   const jogSpeedRef = useRef<'slow' | 'fast'>('fast');
   const [safety, setSafety] = useState<SafetySnap>({ mode: 'unknown' });
-  const [control, setControl] = useState<ControlLease | null>(null);
-  const controlRef = useRef<ControlLease | null>(null);
-  const localUserIdRef = useRef<string | null>(null);
   const [height, setHeight] = useState<number | null>(null);
   const [tags, setTags] = useState<TagSnapshot | null>(null);
-
-  const applyControl = useCallback(
-    (
-      incoming: ControlLease | null | undefined,
-      prev: ControlLease | null,
-    ): ControlLease | null =>
-      mergeControl(incoming, prev, localUserIdRef.current),
-    [],
-  );
 
   useEffect(() => {
     controlRef.current = control;
@@ -114,16 +87,6 @@ export function OperatorScreen({ token }: { token: string }) {
   useEffect(() => {
     jogSpeedRef.current = jogSpeed;
   }, [jogSpeed]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getStoredUser().then((user) => {
-      if (!cancelled) localUserIdRef.current = user?.id?.trim() || null;
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
 
   const [photoOk, setPhotoOk] = useState(true);
   const [liveFallback, setLiveFallback] = useState(false);
@@ -141,22 +104,25 @@ export function OperatorScreen({ token }: { token: string }) {
   const tagsPullInFlight = useRef(false);
   const lastWsTagAt = useRef(0);
 
-  const applyLiveTags = useCallback((payload: TagSnapshot & { at?: string }) => {
-    if (
-      !shouldApplyLiveTags(
-        tagOrderRef.current.lastSeq,
-        tagOrderRef.current.lastAt,
-        payload,
-      )
-    ) {
-      return;
-    }
-    tagOrderRef.current = nextLiveTagsCursor(tagOrderRef.current, payload);
-    if (typeof payload.hoistHeightMm === 'number') {
-      setHeight(payload.hoistHeightMm);
-    }
-    setTags(payload);
-  }, []);
+  const applyLiveTags = useCallback(
+    (payload: TagSnapshot & { at?: string }) => {
+      if (
+        !shouldApplyLiveTags(
+          tagOrderRef.current.lastSeq,
+          tagOrderRef.current.lastAt,
+          payload,
+        )
+      ) {
+        return;
+      }
+      tagOrderRef.current = nextLiveTagsCursor(tagOrderRef.current, payload);
+      if (typeof payload.hoistHeightMm === 'number') {
+        setHeight(payload.hoistHeightMm);
+      }
+      setTags(payload);
+    },
+    [],
+  );
 
   useEffect(() => {
     let socket: Socket | null = null;
@@ -174,9 +140,7 @@ export function OperatorScreen({ token }: { token: string }) {
     socketRef.current = socket;
     socket.on('safety.state', (s: SafetySnap) => {
       setSafety(s);
-      if (s.control) {
-        setControl((prev) => applyControl(s.control, prev));
-      }
+      if (s.control) applyControl(s.control);
     });
     socket.on('tags.update', (payload: TagSnapshot) => {
       lastWsTagAt.current = Date.now();
@@ -219,54 +183,6 @@ export function OperatorScreen({ token }: { token: string }) {
       clearInterval(id);
     };
   }, [token, applyLiveTags]);
-
-  /** FEAT-A5: exclusive control claim + heartbeat while Operator is open. */
-  useEffect(() => {
-    let cancelled = false;
-    const apply = (next: ControlLease) => {
-      if (!cancelled) setControl((prev) => applyControl(next, prev));
-    };
-    const refresh = async () => {
-      try {
-        apply(await apiGet<ControlLease>('/safety/control', token));
-      } catch {
-        // ignore
-      }
-    };
-    void (async () => {
-      try {
-        apply(
-          await apiPost<ControlLease>(
-            '/safety/control/claim',
-            undefined,
-            token,
-          ),
-        );
-      } catch {
-        await refresh();
-      }
-    })();
-    const id = setInterval(() => {
-      if (controlRef.current?.youHold) {
-        void apiPost<ControlLease>(
-          '/safety/control/heartbeat',
-          undefined,
-          token,
-        )
-          .then(apply)
-          .catch(() => void refresh());
-      } else {
-        void refresh();
-      }
-    }, 4000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-      void apiPost('/safety/control/release', undefined, token).catch(
-        () => undefined,
-      );
-    };
-  }, [token, applyControl]);
 
   const layoutQuery = useQuery({
     queryKey: ['layout', token],
@@ -423,66 +339,6 @@ export function OperatorScreen({ token }: { token: string }) {
       showErrorAlert(operatorApiError(err, 'reset', terror));
     }
   };
-
-  const claimControl = async () => {
-    try {
-      setControl(
-        applyControl(
-          await apiPost<ControlLease>(
-            '/safety/control/claim',
-            undefined,
-            token,
-          ),
-          null,
-        ),
-      );
-    } catch (err) {
-      showErrorAlert(err instanceof Error ? err.message : t('err.control'));
-      try {
-        setControl(
-          applyControl(
-            await apiGet<ControlLease>('/safety/control', token),
-            null,
-          ),
-        );
-      } catch {
-        // ignore
-      }
-    }
-  };
-
-  const releaseControl = async () => {
-    try {
-      setControl(
-        applyControl(
-          await apiPost<ControlLease>(
-            '/safety/control/release',
-            undefined,
-            token,
-          ),
-          null,
-        ),
-      );
-    } catch (err) {
-      showErrorAlert(err instanceof Error ? err.message : 'Release failed');
-    }
-  };
-
-  const stealControl = async () => {
-    try {
-      setControl(
-        applyControl(
-          await apiPost<ControlLease>('/safety/control/steal', { pin }, token),
-          null,
-        ),
-      );
-    } catch (err) {
-      showErrorAlert(operatorApiError(err, 'reset', terror));
-    }
-  };
-
-  const youHold = Boolean(control?.youHold);
-  const controlHeldByOther = Boolean(control?.held && !youHold);
 
   const rawImageUrl = layoutQuery.data?.background?.imageUrl ?? '';
   const imageUrl = resolvePlantImageUrl(rawImageUrl);
@@ -686,15 +542,6 @@ export function OperatorScreen({ token }: { token: string }) {
             <Text className="text-sm text-foreground">
               {t('safety')}: <Text className="font-semibold">{safetyMode}</Text>
             </Text>
-            <View className="rounded-full border border-border bg-muted px-2 py-0.5">
-              <Text className="text-[10px] font-medium text-foreground">
-                {youHold
-                  ? t('controlYou')
-                  : controlHeldByOther
-                    ? `${t('controlHeldBy')} ${control?.holderDisplayName || control?.holderUserId}`
-                    : t('controlFree')}
-              </Text>
-            </View>
             {safety.deadmanActive || holdingId ? (
               <View className="rounded-full border border-border bg-muted px-2 py-0.5">
                 <Text className="text-[10px] font-medium text-foreground">
@@ -709,44 +556,8 @@ export function OperatorScreen({ token }: { token: string }) {
                 </Text>
               </View>
             ) : null}
-            {youHold ? (
-              <Pressable
-                accessibilityRole="button"
-                className="min-h-[32px] rounded-md px-2 py-1"
-                onPress={() => void releaseControl()}
-              >
-                <Text className="text-xs text-foreground">
-                  {t('releaseControl')}
-                </Text>
-              </Pressable>
-            ) : controlHeldByOther ? (
-              <Pressable
-                accessibilityRole="button"
-                className="min-h-[32px] rounded-md border border-border bg-card px-2 py-1"
-                onPress={() => void stealControl()}
-              >
-                <Text className="text-xs text-foreground">
-                  {t('stealControl')}
-                </Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                accessibilityRole="button"
-                className="min-h-[32px] rounded-md border border-border bg-card px-2 py-1"
-                onPress={() => void claimControl()}
-              >
-                <Text className="text-xs text-foreground">
-                  {t('claimControl')}
-                </Text>
-              </Pressable>
-            )}
           </View>
         </HelpTip>
-        {controlHeldByOther ? (
-          <Text className="text-[11px] text-muted-foreground">
-            {t('stealControlHint')}
-          </Text>
-        ) : null}
       </View>
 
       <View className="min-h-0 flex-1 gap-1.5 px-2 pb-1 pt-1.5">

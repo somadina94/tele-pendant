@@ -1110,6 +1110,81 @@ describe('AdminPage', () => {
     expect(screen.getByLabelText('alarm name')).toHaveValue('Lonely');
   });
 
+  it('keeps the alarm form when deleting a different row', async () => {
+    const del = vi.spyOn(api, 'apiDelete').mockResolvedValue({ ok: true });
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') return [];
+      if (path === '/alarms/definitions') {
+        return [
+          {
+            id: 'a-a',
+            name: 'Alpha',
+            register: { id: 'r2', name: 'load' },
+            compareOp: 'gt',
+            threshold: 1,
+            severity: 'major',
+            enabled: true,
+          },
+          {
+            id: 'a-b',
+            name: 'Beta',
+            register: { id: 'r2', name: 'load' },
+            compareOp: 'gt',
+            threshold: 2,
+            severity: 'minor',
+            enabled: true,
+          },
+        ];
+      }
+      if (path === '/hmi/layout') return layout;
+      if (path === '/safety/roles') return { roles: [] };
+      return [];
+    });
+    showAdminSection('alarms');
+    await screen.findByRole('button', { name: 'Edit Alpha' });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Alpha' }));
+    expect(screen.getByLabelText('alarm name')).toHaveValue('Alpha');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Beta' }));
+    confirmDeleteDialog();
+    await screen.findByText('Deleted alarm.');
+    expect(del).toHaveBeenCalledWith('/alarms/definitions/a-b');
+    expect(screen.getByLabelText('alarm name')).toHaveValue('Alpha');
+  });
+
+  it('clears the alarm form when deleting the row being edited', async () => {
+    const del = vi.spyOn(api, 'apiDelete').mockResolvedValue({ ok: true });
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') return [];
+      if (path === '/alarms/definitions') {
+        return [
+          {
+            id: 'a-edit',
+            name: 'Editing',
+            register: { id: 'r2', name: 'load' },
+            compareOp: 'gt',
+            threshold: 1,
+            severity: 'major',
+            enabled: true,
+          },
+        ];
+      }
+      if (path === '/hmi/layout') return layout;
+      if (path === '/safety/roles') return { roles: [] };
+      return [];
+    });
+    showAdminSection('alarms');
+    await screen.findByRole('button', { name: 'Edit Editing' });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Editing' }));
+    expect(screen.getByLabelText('alarm name')).toHaveValue('Editing');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Editing' }));
+    confirmDeleteDialog();
+    await screen.findByText('Deleted alarm.');
+    expect(del).toHaveBeenCalledWith('/alarms/definitions/a-edit');
+    expect(screen.getByLabelText('alarm name')).toHaveValue('');
+  });
+
   it('manages plant screens and uploads a graphic asset', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
       if (path === '/plc/health') return plcHealthMock;
