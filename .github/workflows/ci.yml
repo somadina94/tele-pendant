@@ -147,79 +147,34 @@ jobs:
       - name: Set lowercase image owner
         run: echo "IMAGE_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
-      # Avoid appleboy/ssh-action (downloads drone-ssh from GitHub Releases — flaky 504s).
       - name: Deploy to server
-        env:
-          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
-          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USERNAME: ${{ secrets.SERVER_USERNAME }}
-          SERVER_PORT: ${{ secrets.SERVER_PORT }}
-          SERVER_DEPLOY_PATH: ${{ secrets.SERVER_DEPLOY_PATH }}
-          GH_DEPLOY_TOKEN: ${{ github.token }}
-          GH_ACTOR: ${{ github.actor }}
-          GIT_REF: ${{ github.ref_name }}
-          IMAGE_OWNER: ${{ env.IMAGE_OWNER }}
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq openssh-client
-          PORT="${SERVER_PORT:-22}"
-          SSH_BASE=(
-            -o StrictHostKeyChecking=accept-new
-            -o ConnectTimeout=30
-            -o ServerAliveInterval=30
-            -o ServerAliveCountMax=10
-            -p "$PORT"
-          )
-          if [ -n "${SERVER_SSH_KEY:-}" ]; then
-            KEY_FILE="${RUNNER_TEMP}/deploy_key"
-            printf '%s\n' "$SERVER_SSH_KEY" > "$KEY_FILE"
-            chmod 600 "$KEY_FILE"
-            SSH=(ssh "${SSH_BASE[@]}" -o BatchMode=yes -i "$KEY_FILE" "${SERVER_USERNAME}@${SERVER_HOST}")
-          else
-            sudo apt-get install -y -qq sshpass
-            SSH=(sshpass -e ssh "${SSH_BASE[@]}" "${SERVER_USERNAME}@${SERVER_HOST}")
-          fi
-          deploy_once() {
-            "${SSH[@]}" env \
-              DEPLOY_PATH="${SERVER_DEPLOY_PATH:-}" \
-              GIT_REF="$GIT_REF" \
-              GH_DEPLOY_TOKEN="$GH_DEPLOY_TOKEN" \
-              GH_ACTOR="$GH_ACTOR" \
-              IMAGE_OWNER="$IMAGE_OWNER" \
-              bash -s <<'REMOTE'
-          set -euo pipefail
-          DEPLOY_PATH="${DEPLOY_PATH:-$HOME/tele-pendant}"
-          if [[ "$DEPLOY_PATH" != /* ]]; then
-            DEPLOY_PATH="$HOME/$DEPLOY_PATH"
-          fi
-          if [ ! -d "$DEPLOY_PATH" ]; then
-            echo "Deploy directory not found: $DEPLOY_PATH"
-            exit 1
-          fi
-          cd "$DEPLOY_PATH"
-          git fetch origin
-          git checkout "$GIT_REF"
-          git pull origin "$GIT_REF"
-          chmod +x ./deploy.sh ./docker-entrypoint.sh
-          echo "Logging in to ghcr.io for image pull..."
-          echo "$GH_DEPLOY_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
-          export DEPLOY_BUILD_LOCAL=0
-          export TELE_PENDANT_API_IMAGE="ghcr.io/${IMAGE_OWNER}/tele-pendant-api:latest"
-          export TELE_PENDANT_SIM_IMAGE="ghcr.io/${IMAGE_OWNER}/tele-pendant-sim:latest"
-          export TELE_PENDANT_WEB_IMAGE="ghcr.io/${IMAGE_OWNER}/tele-pendant-web:latest"
-          rm -f /tmp/tele-pendant-deploy.lock
-          ./deploy.sh
-          REMOTE
-          }
-          for attempt in 1 2 3 4 5; do
-            if deploy_once; then
-              echo "Deploy succeeded on attempt ${attempt}"
-              exit 0
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          command_timeout: 30m
+          script: |
+            set -e
+            DEPLOY_PATH="${{ secrets.SERVER_DEPLOY_PATH }}"
+            if [ -z "$DEPLOY_PATH" ]; then DEPLOY_PATH="$HOME/tele-pendant"; fi
+            if [ ! -d "$DEPLOY_PATH" ]; then
+              echo "Deploy directory not found: $DEPLOY_PATH"
+              exit 1
             fi
-            echo "Deploy attempt ${attempt}/5 failed; retrying in 15s..."
-            sleep 15
-          done
-          echo "Deploy failed after 5 attempts"
-          exit 1
+            cd "$DEPLOY_PATH"
+            git fetch origin
+            git checkout "${{ github.ref_name }}"
+            git pull origin "${{ github.ref_name }}"
+            chmod +x ./deploy.sh ./docker-entrypoint.sh
+            echo "Logging in to ghcr.io for image pull..."
+            echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            export DEPLOY_BUILD_LOCAL=0
+            export TELE_PENDANT_API_IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-api:latest"
+            export TELE_PENDANT_SIM_IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-sim:latest"
+            export TELE_PENDANT_WEB_IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/tele-pendant-web:latest"
+            # Host ports come from the server .env (PORT / WEB_PORT). Do not export
+            # them here — an exported value wins over .env inside deploy.sh.
+            ./deploy.sh
