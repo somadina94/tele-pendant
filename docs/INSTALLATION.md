@@ -147,7 +147,7 @@ sudo certbot --nginx -d hmi.example.com -d api.example.com
 
 Or two separate server blocks, each with its own cert, each `proxy_pass` to the matching localhost port from `.env`.
 
-The SPA calls `/api/v1` and Socket.IO on the **same origin** as the web page. The web container nginx already proxies `/api/` and `/socket.io/` to `http://api:3010` on the Docker network, so the host TLS vhost only needs to forward to `$WEB_PORT` (see [`deploy/host-nginx-hmi.example.conf`](../deploy/host-nginx-hmi.example.conf)). Keep `Upgrade` / `Connection` headers so WebSocket upgrades work through the terminator.
+The SPA calls `/api/v1` and Socket.IO on the **same origin** as the web page. The web container nginx already proxies `/api/` and `/socket.io/` to `http://api:3010` on the Docker network, so the host TLS vhost only needs to forward to `$WEB_PORT` with standard `Upgrade` / `Connection` headers.
 
 Set in server `.env`:
 
