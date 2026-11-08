@@ -301,11 +301,12 @@ export function OperatorScreen({ token }: { token: string }) {
   );
 
   const finishMotionRelease = useCallback(
-    async (cellId: string) => {
+    (cellId: string) => {
       releaseAfterActivate.current = null;
       setHoldingId((current) => (current === cellId ? null : current));
       releaseDeadman();
-      await dropMotionCoil(cellId);
+      // Fire-and-forget — awaiting coil-off stacked Modbus behind the next press.
+      void dropMotionCoil(cellId);
     },
     [dropMotionCoil, releaseDeadman],
   );
@@ -376,19 +377,19 @@ export function OperatorScreen({ token }: { token: string }) {
       }
     }
     if (cell.isMotion && releaseAfterActivate.current === cell.id) {
-      await finishMotionRelease(cell.id);
+      finishMotionRelease(cell.id);
       return;
     }
     if (
       cell.isMotion &&
       (heldId.current !== cell.id || holdGen.current !== pressGen)
     ) {
-      await dropMotionCoil(cell.id);
+      void dropMotionCoil(cell.id);
       if (heldId.current === null) releaseDeadman();
     }
   };
 
-  const releaseCell = async (cell: Cell) => {
+  const releaseCell = (cell: Cell) => {
     if (!cell.isMotion) return;
     const mine = heldId.current === cell.id;
     if (heldId.current === cell.id) heldId.current = null;
@@ -398,7 +399,7 @@ export function OperatorScreen({ token }: { token: string }) {
       releaseAfterActivate.current = cell.id;
       return;
     }
-    await finishMotionRelease(cell.id);
+    finishMotionRelease(cell.id);
   };
 
   useEffect(() => {

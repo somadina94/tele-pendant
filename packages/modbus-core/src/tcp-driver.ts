@@ -14,19 +14,47 @@ export class TcpModbusDriver implements ModbusDriver {
   private connected = false;
   private generation = 0;
   /**
-   * Serialize all TCP transactions. Concurrent jsmodbus calls on one socket
-   * can mis-pair responses under load (prod hold pulses + tag poll) and make
-   * live values jump backwards.
+   * Serialize all TCP transactions (jsmodbus mis-pairs concurrent calls).
+   * Writes jump ahead of queued reads so Operator activate/deadman is not
+   * stuck behind a long tag-poll/named-read backlog (prod stutter root cause).
    */
-  private chain: Promise<unknown> = Promise.resolve();
+  private highQueue: Array<() => Promise<void>> = [];
+  private normalQueue: Array<() => Promise<void>> = [];
+  private pumping = false;
 
-  private enqueue<T>(op: () => Promise<T>): Promise<T> {
-    const run = this.chain.then(op, op);
-    this.chain = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+  private enqueue<T>(
+    op: () => Promise<T>,
+    priority: 'high' | 'normal' = 'normal',
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const item = async () => {
+        try {
+          resolve(await op());
+        } catch (err) {
+          reject(err);
+        }
+      };
+      if (priority === 'high') this.highQueue.push(item);
+      else this.normalQueue.push(item);
+      void this.pump();
+    });
+  }
+
+  private async pump(): Promise<void> {
+    if (this.pumping) return;
+    this.pumping = true;
+    try {
+      while (this.highQueue.length > 0 || this.normalQueue.length > 0) {
+        const next = this.highQueue.shift() ?? this.normalQueue.shift();
+        if (!next) break;
+        await next();
+      }
+    } finally {
+      this.pumping = false;
+      if (this.highQueue.length > 0 || this.normalQueue.length > 0) {
+        void this.pump();
+      }
+    }
   }
 
   async connect(options: ModbusConnectionOptions): Promise<void> {
@@ -169,18 +197,18 @@ export class TcpModbusDriver implements ModbusDriver {
   async writeCoil(address: number, value: boolean): Promise<void> {
     await this.enqueue(async () => {
       await this.assertClient().writeSingleCoil(address, value);
-    });
+    }, 'high');
   }
 
   async writeRegister(address: number, value: number): Promise<void> {
     await this.enqueue(async () => {
       await this.assertClient().writeSingleRegister(address, value);
-    });
+    }, 'high');
   }
 
   async writeRegisters(address: number, values: number[]): Promise<void> {
     await this.enqueue(async () => {
       await this.assertClient().writeMultipleRegisters(address, values);
-    });
+    }, 'high');
   }
 }

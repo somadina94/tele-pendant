@@ -166,12 +166,20 @@ describe('HmiService', () => {
   it('skips audit on hold refresh activates', async () => {
     safetyState.canIssueMotion.mockReturnValue(true);
     auditService.write.mockClear();
+    plcService.writeHolding.mockClear();
+    registers.findOneBy.mockResolvedValue({
+      name: 'holding.speedPct',
+      kind: 'holding',
+      address: 2,
+    });
     await service.activateCell('c1', true, {
       role: UserRole.OPERATOR,
       userId: 'u1',
       refresh: true,
+      speed: 'fast',
     });
     expect(plcService.writeCoil).toHaveBeenCalledWith(0, true);
+    expect(plcService.writeHolding).not.toHaveBeenCalled();
     expect(auditService.write).not.toHaveBeenCalled();
   });
 

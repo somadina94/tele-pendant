@@ -14,6 +14,8 @@ export function motionDebugEnabled(): boolean {
     }
   }
   if (import.meta.env.VITE_MOTION_DEBUG === '1') return true;
+  // Vitest sets DEV; keep console quiet unless explicitly opted in.
+  if (import.meta.env.MODE === 'test') return false;
   return Boolean(import.meta.env.DEV);
 }
 

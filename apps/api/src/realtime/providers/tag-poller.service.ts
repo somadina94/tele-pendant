@@ -32,10 +32,13 @@ export type LiveTagSnapshot = {
 export class TagPollerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TagPollerService.name);
   private timer: NodeJS.Timeout | null = null;
+  /** Slow path: full named map + trends — must not block the 250ms live poll. */
+  private heavyTimer: NodeJS.Timeout | null = null;
   private tick = 0;
   private seq = 0;
   /** Skip overlapping polls — prod Modbus RTT otherwise stacks reads and stalls live tags. */
   private inFlight = false;
+  private heavyInFlight = false;
   private lastTags: LiveTagSnapshot | null = null;
   private pollStartedAt = 0;
 
@@ -52,10 +55,14 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
     this.timer = setInterval(() => {
       void this.poll();
     }, 250);
+    this.heavyTimer = setInterval(() => {
+      void this.heavyRefresh();
+    }, 2000);
   }
 
   onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
+    if (this.heavyTimer) clearInterval(this.heavyTimer);
   }
 
   /** Last broadcast payload — used by GET /realtime/tags when WS is laggy in prod. */
@@ -63,6 +70,10 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
     return this.lastTags ?? { at: null };
   }
 
+  /**
+   * Critical path only: safety tick + 2 batch reads + broadcast.
+   * Named-map / trends run on heavyRefresh so activate writes are not buried.
+   */
   private async poll(): Promise<void> {
     if (this.inFlight) {
       if (motionDebugEnabled()) {
@@ -157,17 +168,10 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
         'discrete.fault': fault,
         'discrete.commsOk': commsOk,
       };
-      let values = {
+      const values = {
         ...this.lastTags?.values,
         ...coreValues,
       };
-      if (this.tick === 0 || this.tick % 8 === 0) {
-        try {
-          values = { ...values, ...(await this.plcService.readNamedValues()) };
-        } catch {
-          // keep coreValues-only snapshot
-        }
-      }
 
       this.seq += 1;
       const prev = this.lastTags;
@@ -207,20 +211,47 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
       }
 
       await this.alarms.evaluate();
-
       this.tick += 1;
-      if (this.tick === 1 || this.tick % 4 === 0) {
-        const series = await this.plcService.trendedSamples();
-        for (const sample of series) {
-          await this.trends.record(sample.key, sample.value);
-        }
-      }
     } catch (err) {
       this.logger.debug(
         `poll error: ${err instanceof Error ? err.message : 'unknown'}`,
       );
     } finally {
       this.inFlight = false;
+    }
+  }
+
+  /** Secondary Modbus work — never blocks the live 250ms path. */
+  private async heavyRefresh(): Promise<void> {
+    if (this.heavyInFlight) return;
+    if (!this.plcService.getDriver().isConnected()) return;
+    this.heavyInFlight = true;
+    try {
+      if (this.lastTags) {
+        try {
+          const named = await this.plcService.readNamedValues();
+          this.seq += 1;
+          this.lastTags = {
+            ...this.lastTags,
+            values: { ...this.lastTags.values, ...named },
+            seq: this.seq,
+            at: new Date().toISOString(),
+          };
+          this.gateway.broadcast(WS_EVENTS.TAGS_UPDATE, this.lastTags);
+        } catch {
+          // keep core snapshot
+        }
+      }
+      const series = await this.plcService.trendedSamples();
+      for (const sample of series) {
+        await this.trends.record(sample.key, sample.value);
+      }
+    } catch (err) {
+      this.logger.debug(
+        `heavy refresh error: ${err instanceof Error ? err.message : 'unknown'}`,
+      );
+    } finally {
+      this.heavyInFlight = false;
     }
   }
 }

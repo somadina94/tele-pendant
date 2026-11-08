@@ -255,4 +255,43 @@ describe('TcpModbusDriver (TP-41)', () => {
     await expect(b).resolves.toEqual([2]);
     expect(order).toEqual(['first-start', 'first-end', 'second']);
   });
+
+  it('runs queued writes ahead of queued reads after the in-flight op', async () => {
+    const driver = new TcpModbusDriver();
+    await driver.connect({ host: '127.0.0.1', port: 1502, unitId: 1 });
+    const client = lastClient();
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const order: string[] = [];
+    client.readHoldingRegisters.mockImplementationOnce(async () => {
+      order.push('read-inflight-start');
+      await firstGate;
+      order.push('read-inflight-end');
+      return { response: { body: { valuesAsArray: [1] } } };
+    });
+    client.readHoldingRegisters.mockImplementationOnce(async () => {
+      order.push('read-queued');
+      return { response: { body: { valuesAsArray: [2] } } };
+    });
+    client.writeSingleCoil.mockImplementationOnce(async () => {
+      order.push('write');
+    });
+
+    const inflight = driver.readHoldingRegisters(0, 1);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const queuedRead = driver.readHoldingRegisters(1, 1);
+    const write = driver.writeCoil(4, true);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(order).toEqual(['read-inflight-start']);
+    releaseFirst();
+    await Promise.all([inflight, queuedRead, write]);
+    expect(order).toEqual([
+      'read-inflight-start',
+      'read-inflight-end',
+      'write',
+      'read-queued',
+    ]);
+  });
 });

@@ -326,7 +326,9 @@ export class HmiService {
     const speedMode = opts.speed === 'slow' ? 'slow' : 'fast';
     const usesVariableSpeed = cell.isMotion && (cell.variableSpeed ?? true);
 
-    if (usesVariableSpeed && value) {
+    // Hold refresh only re-asserts the coil — rewriting jog speed every pulse
+    // doubled Modbus RTT and starved live tag polls in prod.
+    if (usesVariableSpeed && value && !opts.refresh) {
       await this.writeJogSpeedPct(cell, speedMode);
     }
 

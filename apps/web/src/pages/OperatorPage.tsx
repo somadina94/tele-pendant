@@ -134,6 +134,8 @@ export function OperatorPage() {
   const lastWsTagAt = useRef(0);
   const holdPulseCount = useRef(0);
   const lastTagLogAt = useRef(0);
+  /** Bumps on release so a late activate(true) cannot leave a coil latched. */
+  const holdGen = useRef(0);
 
   const applyLiveTags = useCallback((payload: LiveTags) => {
     if (
@@ -392,6 +394,7 @@ export function OperatorPage() {
       );
       return;
     }
+    const pressGen = holdGen.current;
     if (cell.isMotion) {
       motionDebug('hold.press', {
         cellId: cell.id,
@@ -409,6 +412,17 @@ export function OperatorPage() {
     const t0 = Date.now();
     try {
       await activate.mutateAsync({ id: cell.id, value: true, speed });
+      if (cell.isMotion && holdGen.current !== pressGen) {
+        // Released while activate(true) was in flight — drop the coil.
+        void activate
+          .mutateAsync({
+            id: cell.id,
+            value: false,
+            speed,
+          })
+          .catch(() => undefined);
+        return;
+      }
       if (cell.isMotion) {
         motionDebug('hold.activate-true', {
           cellId: cell.id,
@@ -423,7 +437,7 @@ export function OperatorPage() {
           message: err instanceof Error ? err.message : String(err),
         });
       }
-      if (heldRef.current === cell.id) {
+      if (heldRef.current === cell.id && holdGen.current === pressGen) {
         heldRef.current = null;
         setHoldingCellId(null);
         releaseDeadman();
@@ -431,37 +445,41 @@ export function OperatorPage() {
     }
   }
 
-  async function releaseCell(cell: CellDto) {
+  function releaseCell(cell: CellDto) {
     if (!cell.isMotion) return;
     const mine = heldRef.current === cell.id;
     if (heldRef.current === cell.id) heldRef.current = null;
     setHoldingCellId((current) => (current === cell.id ? null : current));
     if (!mine) return;
+    holdGen.current += 1;
     motionDebug('hold.release', {
       cellId: cell.id,
       label: cell.label,
       pulses: holdPulseCount.current,
     });
     releaseDeadman();
+    // Fire-and-forget: awaiting activate-false stacked Modbus work behind the
+    // next press and caused live-tag jumps in prod (700–2500ms).
     const t0 = Date.now();
-    try {
-      await activate.mutateAsync({
+    void activate
+      .mutateAsync({
         id: cell.id,
         value: false,
         speed: (cell.variableSpeed ?? true) ? jogSpeedRef.current : undefined,
+      })
+      .then(() => {
+        motionDebug('hold.activate-false', {
+          cellId: cell.id,
+          ms: Date.now() - t0,
+        });
+      })
+      .catch((err: unknown) => {
+        motionDebug('hold.activate-false.fail', {
+          cellId: cell.id,
+          ms: Date.now() - t0,
+          message: err instanceof Error ? err.message : String(err),
+        });
       });
-      motionDebug('hold.activate-false', {
-        cellId: cell.id,
-        ms: Date.now() - t0,
-      });
-    } catch (err) {
-      motionDebug('hold.activate-false.fail', {
-        cellId: cell.id,
-        ms: Date.now() - t0,
-        message: err instanceof Error ? err.message : String(err),
-      });
-      // The coil drop is best-effort. The hold indicator is already clear.
-    }
   }
 
   function finishCellPointer(

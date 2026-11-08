@@ -48,6 +48,8 @@ export class SafetyStateService {
   private needsMotionDrop = false;
   /** Bumped on pulse so an in-flight coil-drop cannot clear after a newer hold. */
   private dropGeneration = 0;
+  /** Avoid rewriting deadman=true every 250ms while the hold is already asserted. */
+  private deadmanCoilHigh = false;
   private readonly watchdogTimeoutMs = 2000;
   /**
    * Allow Socket.IO flaps + missed HTTP pulses under prod proxy RTT before
@@ -315,6 +317,7 @@ export class SafetyStateService {
       });
       return;
     }
+    const freshHold = !this.deadmanActive;
     this.lastClientPulseAt = new Date();
     this.deadmanActive = true;
     this.deadmanHolderUserId = userId;
@@ -323,6 +326,8 @@ export class SafetyStateService {
     this.deadmanHolderSocketId = socketId || this.deadmanHolderSocketId;
     this.needsMotionDrop = false;
     this.dropGeneration += 1;
+    // Re-assert PLC deadman only when a hold starts (not every 400ms pulse).
+    if (freshHold) this.deadmanCoilHigh = false;
     motionDebug('deadman.pulse.ok', {
       userId,
       socketId: this.deadmanHolderSocketId,
@@ -393,6 +398,7 @@ export class SafetyStateService {
     this.deadmanHolderUserId = null;
     this.deadmanHolderSocketId = null;
     this.socketFlapGraceUntil = 0;
+    this.deadmanCoilHigh = false;
   }
 
   /**
@@ -518,14 +524,16 @@ export class SafetyStateService {
         motionDebug('deadman.coil-drop-run', {
           dropGeneration: this.dropGeneration,
         });
+        this.deadmanCoilHigh = false;
         await this.dropMotionAndDeadmanCoil();
-      } else if (this.deadmanActive) {
+      } else if (this.deadmanActive && !this.deadmanCoilHigh) {
         const deadman = await this.roleAddress(
           'deadmanRegisterId',
           'coil.deadman',
           DEMO_CRANE_MAP.coils.deadman,
         );
         await driver.writeCoil(deadman, true);
+        this.deadmanCoilHigh = true;
       }
 
       if (this.mode !== 'normal' && !this.eStopActive) {
