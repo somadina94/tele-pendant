@@ -114,6 +114,7 @@ describe('ui primitives', () => {
         <Badge variant="outline">Out</Badge>
         <Badge variant="destructive">Danger</Badge>
         <Button>Go</Button>
+        <Button loading>Saving</Button>
         <Button asChild>
           <a href="/x">Link</a>
         </Button>
@@ -146,6 +147,10 @@ describe('ui primitives', () => {
       </div>,
     );
     expect(screen.getByText('Title')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Saving' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
     expect(screen.getByLabelText('notes')).toHaveValue('hello');
     expect(screen.getByText('Open body')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Section two' }));

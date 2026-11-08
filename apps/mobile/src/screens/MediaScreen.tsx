@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  Dimensions,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import type { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useQuery } from '@tanstack/react-query';
@@ -25,6 +33,22 @@ import {
 /** Keep deadman pulsed through a short timed voice jog (matches API VOICE_JOG_MS). */
 const VOICE_DEADMAN_HOLD_MS = 2500;
 const VOICE_DEADMAN_PULSE_MS = 400;
+const CAMERA_PREVIEW_HEIGHT = 220;
+
+const cameraPreviewStyle = StyleSheet.create({
+  frame: {
+    width: Dimensions.get('window').width - 32,
+    height: CAMERA_PREVIEW_HEIGHT,
+    alignSelf: 'center',
+    marginBottom: 12,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
+  camera: {
+    ...StyleSheet.absoluteFill,
+  },
+});
 
 type ScanCodeRow = {
   code: string;
@@ -59,8 +83,7 @@ function routeHintToTarget(hint: string): {
 export function MediaScreen({ token }: { token: string }) {
   const { t } = useLocale();
   const isFocused = useIsFocused();
-  const navigation =
-    useNavigation<DrawerNavigationProp<RootDrawerParamList>>();
+  const navigation = useNavigation<DrawerNavigationProp<RootDrawerParamList>>();
   const [code, setCode] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const [voice, setVoice] = useState<string | null>(null);
@@ -146,9 +169,7 @@ export function MediaScreen({ token }: { token: string }) {
       });
       return;
     }
-    navigation.navigate(
-      target.name as 'face' | 'config' | 'audit',
-    );
+    navigation.navigate(target.name as 'face' | 'config' | 'audit');
   }
 
   async function resolve(value: string) {
@@ -262,8 +283,7 @@ export function MediaScreen({ token }: { token: string }) {
     }
   }
 
-  const canEditCodes =
-    userRole != null && canManageScanCodes(userRole);
+  const canEditCodes = userRole != null && canManageScanCodes(userRole);
 
   return (
     <ScrollView
@@ -324,19 +344,29 @@ export function MediaScreen({ token }: { token: string }) {
       <HelpTip id="tour.media.camera">
         <>
           {scanning && permission?.granted && isFocused ? (
-            <CameraView
-              className="mb-3 h-[220px] rounded-lg"
-              facing="back"
-              barcodeScannerSettings={{
-                barcodeTypes: ['qr', 'code128', 'ean13'],
-              }}
-              onBarcodeScanned={({ data }) => {
-                if (data === lastCode.current) return;
-                lastCode.current = data;
-                setCode(data);
-                void resolve(data);
-              }}
-            />
+            <View style={cameraPreviewStyle.frame} collapsable={false}>
+              <CameraView
+                style={cameraPreviewStyle.camera}
+                facing="back"
+                active={scanning && isFocused}
+                barcodeScannerSettings={{
+                  barcodeTypes: ['qr', 'code128', 'ean13'],
+                }}
+                onBarcodeScanned={({ data }) => {
+                  if (data === lastCode.current) return;
+                  lastCode.current = data;
+                  setCode(data);
+                  void resolve(data);
+                }}
+                onMountError={(event) => {
+                  showErrorAlert(
+                    event.message || 'Camera failed to start',
+                    'Camera',
+                  );
+                  setScanning(false);
+                }}
+              />
+            </View>
           ) : null}
           {cameraBlocked || (permission && !permission.granted) ? (
             <View className="mb-3 gap-2">

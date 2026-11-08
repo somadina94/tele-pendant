@@ -1,12 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import {
-  BookOpen,
-  ExternalLink,
-  Loader2,
-  RefreshCw,
-  Save,
-  Send,
-} from 'lucide-react';
+import { BookOpen, ExternalLink, RefreshCw, Save, Send } from 'lucide-react';
 import { apiGet, apiPost, apiPut } from '../lib/api';
 import { ASSISTANT_SUGGESTION_GROUPS } from '../lib/assistant-suggestions';
 import { HelpTip } from '../lib/tour';
@@ -189,18 +182,14 @@ export function AssistantPage() {
                       />
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button type="submit" disabled={settingsBusy}>
-                        {settingsBusy ? (
-                          <Loader2 className="animate-spin" />
-                        ) : (
-                          <Save />
-                        )}
+                      <Button type="submit" loading={settingsBusy}>
+                        <Save />
                         Save settings
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={settingsBusy}
+                        loading={settingsBusy}
                         onClick={() => void reindex()}
                       >
                         <RefreshCw />
@@ -280,8 +269,8 @@ export function AssistantPage() {
                   placeholder="Ask about deadman, Modbus, alarms, media, config…"
                 />
               </div>
-              <Button type="submit" disabled={busy || !question.trim()}>
-                {busy ? <Loader2 className="animate-spin" /> : <Send />}
+              <Button type="submit" loading={busy} disabled={!question.trim()}>
+                <Send />
                 {busy ? 'Asking…' : 'Ask'}
               </Button>
             </form>

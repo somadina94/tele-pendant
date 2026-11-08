@@ -1,6 +1,12 @@
 import { ConflictException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { UserRole } from '../enums/user-role.enum';
 import { UsersService } from './users.service';
+
+jest.mock('bcrypt', () => ({
+  hash: jest.fn(),
+  compare: jest.fn(),
+}));
 
 describe('UsersService', () => {
   const auditService = { write: jest.fn().mockResolvedValue({}) };
@@ -14,6 +20,8 @@ describe('UsersService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed');
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
   });
 
   it('repairs Opertaor typos in display names on boot (TP-33)', async () => {

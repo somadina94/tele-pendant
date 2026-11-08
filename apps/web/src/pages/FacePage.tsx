@@ -242,7 +242,7 @@ export function FacePage({
                   required
                 />
               </div>
-              <Button type="submit" disabled={busy} className="w-full">
+              <Button type="submit" loading={busy} className="w-full">
                 {busy ? t('signingIn') : t('otpVerify')}
               </Button>
               <Button
@@ -269,7 +269,8 @@ export function FacePage({
               <Button
                 type="button"
                 className="w-full"
-                disabled={busy || !mode}
+                loading={busy}
+                disabled={!mode}
                 onClick={() => mode && void captureStep(mode)}
               >
                 <Camera />{' '}

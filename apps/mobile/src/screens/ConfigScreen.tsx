@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check } from 'lucide-react-native';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../api';
 import type {
   Cell,
@@ -23,12 +24,98 @@ import {
   type UserRole,
 } from '@tele-pendant/shared';
 import {
+  Btn,
   confirmAction,
   confirmDestructive,
   Field,
   SelectField,
   showErrorFrom,
 } from '../ui';
+
+type PlcHealth = {
+  connected: boolean;
+  connectionId: string | null;
+  label: string | null;
+  host: string | null;
+  port: number | null;
+  lastError: string | null;
+};
+
+function ConfigCheckRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      accessibilityLabel={label}
+      className="min-h-[44px] flex-row items-center gap-2 py-1 active:opacity-80"
+      onPress={() => onChange(!checked)}
+    >
+      <View
+        className={`h-5 w-5 items-center justify-center rounded border ${
+          checked ? 'border-primary bg-primary' : 'border-border bg-card'
+        }`}
+      >
+        {checked ? <Check size={14} color="#041018" strokeWidth={3} /> : null}
+      </View>
+      <Text className="flex-1 text-sm text-foreground">{label}</Text>
+    </Pressable>
+  );
+}
+
+function PlcConnectionStatus({
+  connectionId,
+  inUse,
+  health,
+  healthLoading,
+}: {
+  connectionId: string;
+  inUse: boolean;
+  health?: PlcHealth | null;
+  healthLoading?: boolean;
+}) {
+  if (!inUse) return null;
+  if (healthLoading || health === undefined) {
+    return (
+      <Text className="mb-2 text-sm text-muted-foreground">
+        Checking connection…
+      </Text>
+    );
+  }
+  if (!health) {
+    return (
+      <Text className="mb-2 text-sm text-muted-foreground">
+        Checking connection…
+      </Text>
+    );
+  }
+  if (health.connectionId !== connectionId) {
+    return (
+      <Text className="mb-2 text-sm text-muted-foreground">
+        Standby — another PLC is active
+      </Text>
+    );
+  }
+  if (health.connected) {
+    return (
+      <View className="mb-2 self-start rounded-md bg-emerald-600 px-2.5 py-1">
+        <Text className="text-xs font-semibold text-white">Connected</Text>
+      </View>
+    );
+  }
+  return (
+    <Text className="mb-2 text-sm text-destructive">
+      Not connected{health.lastError ? `: ${health.lastError}` : ''}
+    </Text>
+  );
+}
 
 const SAFETY_REGISTER_NAMES = new Set([
   'coil.eStop',
@@ -84,6 +171,11 @@ export function ConfigScreen({ token }: { token: string }) {
   const connections = useQuery({
     queryKey: ['plc', token],
     queryFn: () => apiGet<PlcConnection[]>('/plc/connections', token),
+  });
+  const plcHealth = useQuery({
+    queryKey: ['plc-health', token],
+    queryFn: () => apiGet<PlcHealth>('/plc/health', token),
+    refetchInterval: 4000,
   });
   const layout = layoutQuery.data;
   const registers = layout?.registers ?? [];
@@ -146,16 +238,18 @@ export function ConfigScreen({ token }: { token: string }) {
               key={row.id}
               row={row}
               note={notes[row.id]}
+              health={plcHealth.data}
+              healthLoading={plcHealth.isLoading}
               onSave={async (value) => {
                 try {
                   await apiPatch(`/plc/connections/${row.id}`, value, token);
                   await queryClient.invalidateQueries({
                     queryKey: ['plc', token],
                   });
-                  remember(
-                    row.id,
-                    value.enabled ? 'Saved and connecting.' : 'Saved.',
-                  );
+                  await queryClient.invalidateQueries({
+                    queryKey: ['plc-health', token],
+                  });
+                  remember(row.id, 'Saved.');
                 } catch (err) {
                   showErrorFrom(err, 'Save failed');
                 }
@@ -171,10 +265,10 @@ export function ConfigScreen({ token }: { token: string }) {
                 await queryClient.invalidateQueries({
                   queryKey: ['plc', token],
                 });
-                remember(
-                  'new',
-                  value.enabled ? 'Saved and connecting.' : 'Saved.',
-                );
+                await queryClient.invalidateQueries({
+                  queryKey: ['plc-health', token],
+                });
+                remember('new', 'Saved.');
               } catch (err) {
                 showErrorFrom(err, 'Save failed');
               }
@@ -446,7 +540,9 @@ function UsersBlock({
         <Text className="text-sm text-muted-foreground">Loading users…</Text>
       ) : null}
       {(users.data ?? []).length === 0 && users.isSuccess ? (
-        <Text className="mb-2 text-sm text-muted-foreground">No users yet.</Text>
+        <Text className="mb-2 text-sm text-muted-foreground">
+          No users yet.
+        </Text>
       ) : null}
       {(users.data ?? []).map((row) => {
         const managed = isManagedUser(row);
@@ -561,8 +657,18 @@ function UsersBlock({
       {notes['new-user'] ? (
         <Text className="mb-1 text-xs text-success">{notes['new-user']}</Text>
       ) : null}
-      <Field label="Display name" value={displayName} onChangeText={setDisplayName} />
-      <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+      <Field
+        label="Display name"
+        value={displayName}
+        onChangeText={setDisplayName}
+      />
+      <Field
+        label="Email"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+      />
       <Field
         label="Password"
         value={password}
@@ -578,29 +684,26 @@ function UsersBlock({
         ]}
         onChange={(v) => setRole(v as 'operator' | 'supervisor')}
       />
-      <Pressable
-        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-        onPress={() => {
-          void (async () => {
-            try {
-              await apiPost(
-                '/users',
-                { email, displayName, password, role },
-                token,
-              );
-              await refresh();
-              setEmail('');
-              setDisplayName('');
-              setPassword('');
-              remember('new-user', `Added ${displayName || email}.`);
-            } catch (err) {
-              showErrorFrom(err, 'Could not add user');
-            }
-          })();
+      <Btn
+        onPress={async () => {
+          try {
+            await apiPost(
+              '/users',
+              { email, displayName, password, role },
+              token,
+            );
+            await refresh();
+            setEmail('');
+            setDisplayName('');
+            setPassword('');
+            remember('new-user', `Added ${displayName || email}.`);
+          } catch (err) {
+            showErrorFrom(err, 'Could not add user');
+          }
         }}
       >
         <Text className="font-semibold text-primary-foreground">Add user</Text>
-      </Pressable>
+      </Btn>
     </>
   );
 }
@@ -630,7 +733,11 @@ function UserEditForm({
 
   return (
     <View className="mt-3 border-t border-border pt-3">
-      <Field label="Display name" value={displayName} onChangeText={setDisplayName} />
+      <Field
+        label="Display name"
+        value={displayName}
+        onChangeText={setDisplayName}
+      />
       <Field
         label="Email"
         value={email}
@@ -664,22 +771,21 @@ function UserEditForm({
         placeholder="Leave blank to keep current"
       />
       {note ? <Text className="mb-1 text-xs text-success">{note}</Text> : null}
-      <Pressable
-        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-        onPress={() => {
-          void onSave({
+      <Btn
+        onPress={() =>
+          onSave({
             displayName,
             email,
             role,
             suspended,
             ...(password.trim() ? { password: password.trim() } : {}),
-          });
-        }}
+          })
+        }
       >
         <Text className="font-semibold text-primary-foreground">
           Save changes
         </Text>
-      </Pressable>
+      </Btn>
     </View>
   );
 }
@@ -687,10 +793,14 @@ function UserEditForm({
 function PlcForm({
   row,
   note,
+  health,
+  healthLoading,
   onSave,
 }: {
   row?: PlcConnection;
   note?: string;
+  health?: PlcHealth | null;
+  healthLoading?: boolean;
   onSave: (value: {
     label: string;
     host: string;
@@ -714,15 +824,19 @@ function PlcForm({
       <Field label="Host" value={host} onChangeText={setHost} />
       <Field label="Port" value={port} onChangeText={setPort} />
       <Field label="Unit" value={unitId} onChangeText={setUnitId} />
-      <SelectField
+      <ConfigCheckRow
         label="Use this PLC"
-        value={enabled ? 'yes' : 'no'}
-        options={[
-          { value: 'no', label: 'No' },
-          { value: 'yes', label: 'Yes' },
-        ]}
-        onChange={(v) => setEnabled(v === 'yes')}
+        checked={enabled}
+        onChange={setEnabled}
       />
+      {row?.id ? (
+        <PlcConnectionStatus
+          connectionId={row.id}
+          inUse={row.enabled}
+          health={health}
+          healthLoading={healthLoading}
+        />
+      ) : null}
       <SelectField
         label="Protocol"
         value={protocol}
@@ -732,34 +846,35 @@ function PlcForm({
         ]}
         onChange={setProtocol}
       />
-      <Pressable
-        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-        onPress={() => {
-          void (async () => {
-            if (enabled) {
-              const ok = await confirmAction(
-                'Use this PLC now?',
-                'Any other connection will be turned off.',
-                'Use this PLC',
-              );
-              if (!ok) return;
-            }
-            await onSave({
-              label,
-              host,
-              port: Number(port),
-              unitId: Number(unitId),
-              enabled,
-              protocol,
-            });
-          })();
+      <Btn
+        onPress={async () => {
+          if (enabled) {
+            const ok = await confirmAction(
+              'Use this PLC now?',
+              'Any other connection will be turned off.',
+              'Use this PLC',
+            );
+            if (!ok) return;
+          }
+          await onSave({
+            label,
+            host,
+            port: Number(port),
+            unitId: Number(unitId),
+            enabled,
+            protocol,
+          });
         }}
       >
         <Text className="font-bold text-primary-foreground">
           {row ? `Save ${row.label}` : 'Add PLC'}
         </Text>
-      </Pressable>
-      {note ? <Text className="my-2 text-success">{note}</Text> : null}
+      </Btn>
+      {note ? (
+        <Text className="my-2 flex-shrink text-success" numberOfLines={3}>
+          {note}
+        </Text>
+      ) : null}
     </>
   );
 }
@@ -823,9 +938,8 @@ function RegisterForm({
           />
         </>
       ) : null}
-      <Pressable
-        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-        onPress={() => {
+      <Btn
+        onPress={async () => {
           if (safetyCritical && addressChanged && !pin.trim()) {
             showErrorFrom(
               new Error(
@@ -835,18 +949,19 @@ function RegisterForm({
             );
             return;
           }
-          void onSave({
+          await onSave({
             address: Number(address),
             trended,
             ...(nodeId ? { nodeId } : {}),
             ...(safetyCritical && addressChanged ? { pin: pin.trim() } : {}),
-          }).then(() => setPin(''));
+          });
+          setPin('');
         }}
       >
         <Text className="font-bold text-primary-foreground">
           Save {row.name}
         </Text>
-      </Pressable>
+      </Btn>
       {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
   );
@@ -955,62 +1070,48 @@ function CellForm({
         options={optionalRegOpts}
         onChange={(id) => setStatus(id === NONE_REGISTER ? '' : id)}
       />
-      <SelectField
-        label="Motion (deadman)"
-        value={isMotion ? 'yes' : 'no'}
-        options={[
-          { value: 'yes', label: 'Yes' },
-          { value: 'no', label: 'No' },
-        ]}
-        onChange={(v) => {
-          const next = v === 'yes';
-          setIsMotion(next);
-          if (!next) setVariableSpeed(false);
-          else if (!variableSpeed) setVariableSpeed(true);
-        }}
-      />
-      {isMotion ? (
-        <>
-          <SelectField
+      <View className="mb-1 mt-1 flex-row flex-wrap gap-x-4 gap-y-1">
+        <ConfigCheckRow
+          label="Motion"
+          checked={isMotion}
+          onChange={(next) => {
+            setIsMotion(next);
+            if (!next) setVariableSpeed(false);
+            else if (!variableSpeed) setVariableSpeed(true);
+          }}
+        />
+        <ConfigCheckRow
+          label="Safe action"
+          checked={requiresSafeAction}
+          onChange={setRequiresSafeAction}
+        />
+        {isMotion ? (
+          <ConfigCheckRow
             label={t('variableSpeed')}
-            value={variableSpeed ? 'yes' : 'no'}
-            options={[
-              { value: 'yes', label: 'Yes' },
-              { value: 'no', label: 'No' },
-            ]}
-            onChange={(v) => setVariableSpeed(v === 'yes')}
+            checked={variableSpeed}
+            onChange={setVariableSpeed}
           />
-          {variableSpeed ? (
-            <>
-              <Field
-                label="Slow speed %"
-                value={slowSpeedPct}
-                onChangeText={setSlowSpeedPct}
-                keyboardType="numeric"
-              />
-              <Field
-                label="Fast speed %"
-                value={fastSpeedPct}
-                onChangeText={setFastSpeedPct}
-                keyboardType="numeric"
-              />
-            </>
-          ) : null}
+        ) : null}
+      </View>
+      {isMotion && variableSpeed ? (
+        <>
+          <Field
+            label="Slow speed %"
+            value={slowSpeedPct}
+            onChangeText={setSlowSpeedPct}
+            keyboardType="numeric"
+          />
+          <Field
+            label="Fast speed %"
+            value={fastSpeedPct}
+            onChangeText={setFastSpeedPct}
+            keyboardType="numeric"
+          />
         </>
       ) : null}
-      <SelectField
-        label="Requires safe action"
-        value={requiresSafeAction ? 'yes' : 'no'}
-        options={[
-          { value: 'yes', label: 'Yes' },
-          { value: 'no', label: 'No' },
-        ]}
-        onChange={(v) => setRequiresSafeAction(v === 'yes')}
-      />
-      <Pressable
-        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
+      <Btn
         onPress={() =>
-          void onSave({
+          onSave({
             row: Number(row),
             col: Number(col),
             label,
@@ -1031,16 +1132,13 @@ function CellForm({
         }
       >
         <Text className="font-bold text-primary-foreground">{saveLabel}</Text>
-      </Pressable>
+      </Btn>
       {onDelete ? (
-        <Pressable
-          className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-          onPress={() => void onDelete()}
-        >
+        <Btn onPress={() => onDelete()}>
           <Text className="font-bold text-primary-foreground">
             Delete {label || 'cell'}
           </Text>
-        </Pressable>
+        </Btn>
       ) : null}
       {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
@@ -1097,32 +1195,26 @@ function OverlayForm({
         options={regOpts}
         onChange={setRegisterId}
       />
-      <Pressable
-        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-        onPress={() => {
-          void (async () => {
-            await onSave({
-              label,
-              xPct: Number(xPct),
-              yPct: Number(yPct),
-              format,
-              registerId,
-            });
-            if (resetAfterSave && !overlay) resetAddForm();
-          })();
+      <Btn
+        onPress={async () => {
+          await onSave({
+            label,
+            xPct: Number(xPct),
+            yPct: Number(yPct),
+            format,
+            registerId,
+          });
+          if (resetAfterSave && !overlay) resetAddForm();
         }}
       >
         <Text className="font-bold text-primary-foreground">{saveLabel}</Text>
-      </Pressable>
+      </Btn>
       {onDelete ? (
-        <Pressable
-          className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-          onPress={() => void onDelete()}
-        >
+        <Btn onPress={() => onDelete()}>
           <Text className="font-bold text-primary-foreground">
             Delete {label || 'label'}
           </Text>
-        </Pressable>
+        </Btn>
       ) : null}
       {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
@@ -1170,18 +1262,23 @@ function BackgroundScreens({
         value={newName}
         onChangeText={setNewName}
       />
-      <Pressable
-        className="min-h-[44px] flex-row items-center justify-center rounded-lg bg-secondary px-4 py-3 active:opacity-80"
+      <Btn
+        className="min-h-[44px] mt-0"
         disabled={!newName.trim()}
-        onPress={() => {
+        onPress={async () => {
           const name = newName.trim();
           if (!name) return;
-          void onCreate(name).then(() => setNewName(''));
+          await onCreate(name);
+          setNewName('');
         }}
       >
-        <Text className="font-bold text-secondary-foreground">Add screen</Text>
-      </Pressable>
-      {note ? <Text className="my-1 text-success">{note}</Text> : null}
+        <Text className="font-bold text-primary-foreground">Add screen</Text>
+      </Btn>
+      {note ? (
+        <Text className="my-1 flex-shrink text-success" numberOfLines={3}>
+          {note}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -1220,14 +1317,11 @@ function BackgroundForm({
         onChangeText={setCss}
       />
       <Field label="Image URL" value={imageUrl} onChangeText={setImage} />
-      <Pressable
-        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-        onPress={() => void onSave({ name, cssBackground, imageUrl })}
-      >
+      <Btn onPress={() => onSave({ name, cssBackground, imageUrl })}>
         <Text className="font-bold text-primary-foreground">
           Save background
         </Text>
-      </Pressable>
+      </Btn>
       {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
   );
@@ -1325,17 +1419,24 @@ function AlarmBlock({
         </Text>
       ) : null}
       {(defs.data ?? []).map((row) => (
-        <View key={row.id} className="mb-2 rounded-lg border border-border p-2">
-          <Text className="text-sm font-medium text-foreground">
+        <View
+          key={row.id}
+          className="mb-2 overflow-hidden rounded-lg border border-border p-2"
+        >
+          <Text
+            className="text-sm font-medium text-foreground"
+            numberOfLines={2}
+          >
             {row.name}
           </Text>
-          <Text className="text-xs text-muted-foreground">
+          <Text className="text-xs text-muted-foreground" numberOfLines={2}>
             {row.register?.name ?? '—'} · {row.compareOp} {row.threshold} ·{' '}
             {normalizeAlarmSeverity(row.severity)}
             {row.enabled ? '' : ' · disabled'}
           </Text>
-          <View className="mt-1 flex-row gap-3">
+          <View className="mt-1 flex-row flex-wrap gap-3">
             <Pressable
+              className="shrink"
               onPress={() => {
                 setEditingId(row.id);
                 setName(row.name);
@@ -1346,9 +1447,12 @@ function AlarmBlock({
                 setEnabled(row.enabled);
               }}
             >
-              <Text className="text-primary">Edit {row.name}</Text>
+              <Text className="text-primary" numberOfLines={1}>
+                Edit
+              </Text>
             </Pressable>
             <Pressable
+              className="shrink"
               onPress={() => {
                 void (async () => {
                   const ok = await confirmDestructive(
@@ -1365,8 +1469,8 @@ function AlarmBlock({
                 })();
               }}
             >
-              <Text className="text-primary">
-                {t('delete')} {row.name}
+              <Text className="text-primary" numberOfLines={1}>
+                {t('delete')}
               </Text>
             </Pressable>
           </View>
@@ -1406,20 +1510,25 @@ function AlarmBlock({
         ]}
         onChange={(v) => setEnabled(v === 'yes')}
       />
-      <Pressable
-        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-        onPress={() => void saveAlarm()}
-      >
-        <Text className="font-bold text-primary-foreground">
-          {editingId ? `Update ${name || 'alarm'}` : t('saveAlarm')}
+      <Btn onPress={() => saveAlarm()}>
+        <Text className="font-bold text-primary-foreground" numberOfLines={1}>
+          {editingId ? 'Update alarm' : t('saveAlarm')}
         </Text>
-      </Pressable>
+      </Btn>
       {editingId ? (
         <Pressable onPress={resetForm}>
           <Text className="mt-1 text-primary">Cancel edit</Text>
         </Pressable>
       ) : null}
-      {note ? <Text className="my-2 text-success">{note}</Text> : null}
+      {note ? (
+        <Text
+          className="my-2 w-full shrink text-success"
+          style={{ flexShrink: 1 }}
+          numberOfLines={3}
+        >
+          {note}
+        </Text>
+      ) : null}
     </>
   );
 }
@@ -1478,22 +1587,24 @@ function ScanCodeEditor({
         onChange={setRouteHint}
       />
       <Field label="Notes (optional)" value={notes} onChangeText={setNotes} />
-      <Pressable
-        className="mt-2 flex-row items-center justify-center rounded-lg bg-primary px-4 py-3"
-        onPress={() => {
-          void onSubmit({
-            code,
-            label,
-            kind,
-            routeHint: routeHint.trim() || null,
-            notes: notes.trim() || null,
-          })
-            .then(() => setNote('Saved.'))
-            .catch((err: unknown) => showErrorFrom(err, 'Save failed'));
+      <Btn
+        onPress={async () => {
+          try {
+            await onSubmit({
+              code,
+              label,
+              kind,
+              routeHint: routeHint.trim() || null,
+              notes: notes.trim() || null,
+            });
+            setNote('Saved.');
+          } catch (err: unknown) {
+            showErrorFrom(err, 'Save failed');
+          }
         }}
       >
         <Text className="font-bold text-primary-foreground">{submitLabel}</Text>
-      </Pressable>
+      </Btn>
       {onDelete ? (
         <Pressable className="mt-2 py-2" onPress={onDelete}>
           <Text className="text-center text-destructive">Delete</Text>
@@ -1681,9 +1792,8 @@ function SafetyBlock({
         onChangeText={setPin}
         placeholder={t('safePin')}
       />
-      <Pressable
-        className="mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80"
-        onPress={() => {
+      <Btn
+        onPress={async () => {
           if (!pin.trim()) {
             showErrorFrom(
               new Error('Reset PIN is required to save safety roles'),
@@ -1691,31 +1801,33 @@ function SafetyBlock({
             );
             return;
           }
-          void apiPut(
-            '/safety/roles',
-            {
-              eStopRegisterId: eStop || current?.eStopRegisterId || '',
-              deadmanRegisterId: deadman || current?.deadmanRegisterId || '',
-              heartbeatRegisterId:
-                heartbeat || current?.heartbeatRegisterId || '',
-              safeStateRegisterId:
-                safeState || current?.safeStateRegisterId || '',
-              allowTimedMediaMotion: timedOn,
-              pin: pin.trim(),
-            },
-            token,
-          )
-            .then(() => {
-              setPin('');
-              setNote('Saved safety roles.');
-            })
-            .catch((err: unknown) => showErrorFrom(err, 'Save failed'));
+          try {
+            await apiPut(
+              '/safety/roles',
+              {
+                eStopRegisterId: eStop || current?.eStopRegisterId || '',
+                deadmanRegisterId: deadman || current?.deadmanRegisterId || '',
+                heartbeatRegisterId:
+                  heartbeat || current?.heartbeatRegisterId || '',
+                safeStateRegisterId:
+                  safeState || current?.safeStateRegisterId || '',
+                allowTimedMediaMotion: timedOn,
+                pin: pin.trim(),
+              },
+              token,
+            );
+            setPin('');
+            await roles.refetch();
+            setNote('Saved safety roles.');
+          } catch (err: unknown) {
+            showErrorFrom(err, 'Save failed');
+          }
         }}
       >
         <Text className="font-bold text-primary-foreground">
           Save safety roles
         </Text>
-      </Pressable>
+      </Btn>
       {note ? <Text className="my-2 text-success">{note}</Text> : null}
     </>
   );

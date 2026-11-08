@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, Mic, QrCode, ScanLine } from 'lucide-react';
+import { Mic, QrCode, ScanLine } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { HelpTip } from '../lib/tour';
@@ -423,10 +423,10 @@ export function MediaPage() {
               )}
               <Button
                 type="button"
-                disabled={scanBusy}
+                loading={scanBusy}
                 onClick={() => void scanFrame()}
               >
-                {scanBusy ? <Loader2 className="animate-spin" /> : <QrCode />}
+                <QrCode />
                 Scan QR / barcode in frame
               </Button>
               {scanFeedbackAlert}
@@ -503,7 +503,7 @@ export function MediaPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Button type="button" onClick={startVoice} disabled={listening}>
+                <Button type="button" loading={listening} onClick={startVoice}>
                   <Mic />
                   {listening ? 'Listening…' : 'Listen (8s)'}
                 </Button>

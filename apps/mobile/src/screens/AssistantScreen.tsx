@@ -4,7 +4,6 @@ import {
   BookOpen,
   ChevronDown,
   ExternalLink,
-  Loader2,
   RefreshCw,
   Save,
   Send,
@@ -199,23 +198,19 @@ export function AssistantScreen({
             />
             <View className="mt-2 flex-row flex-wrap gap-2">
               <Btn
-                disabled={settingsBusy}
+                loading={settingsBusy}
                 onPress={() => void saveSettings()}
                 className="mt-0 flex-1"
               >
-                {settingsBusy ? (
-                  <Loader2 size={16} color="#041018" />
-                ) : (
-                  <Save size={16} color="#041018" />
-                )}
+                {!settingsBusy ? <Save size={16} color="#041018" /> : null}
                 <BtnText>Save settings</BtnText>
               </Btn>
               <Btn
-                disabled={settingsBusy}
+                loading={settingsBusy}
                 onPress={() => void reindex()}
                 className="mt-0 flex-1"
               >
-                <RefreshCw size={16} color="#041018" />
+                {!settingsBusy ? <RefreshCw size={16} color="#041018" /> : null}
                 <BtnText>Reindex</BtnText>
               </Btn>
             </View>
@@ -277,14 +272,11 @@ export function AssistantScreen({
             numberOfLines={4}
           />
           <Btn
-            disabled={busy || !question.trim()}
+            loading={busy}
+            disabled={!question.trim()}
             onPress={() => void askQuestion(question)}
           >
-            {busy ? (
-              <Loader2 size={16} color="#041018" />
-            ) : (
-              <Send size={16} color="#041018" />
-            )}
+            {!busy ? <Send size={16} color="#041018" /> : null}
             <BtnText>{busy ? 'Asking…' : 'Ask'}</BtnText>
           </Btn>
           {answer ? (

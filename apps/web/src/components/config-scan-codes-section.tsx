@@ -1,6 +1,6 @@
 import { FormEvent, useId, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, QrCode, Save, Trash2 } from 'lucide-react';
+import { QrCode, Save, Trash2 } from 'lucide-react';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
 import { useDeleteConfirmDialog } from '@/lib/delete-confirm';
 import { toastErr, toastOk } from '@/lib/toast';
@@ -163,8 +163,8 @@ function ScanCodeEditor({
         />
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={busy}>
-          {busy ? <Loader2 className="animate-spin" /> : <Save />}
+        <Button type="submit" loading={busy}>
+          <Save />
           {submitLabel}
         </Button>
         {onDelete ? (

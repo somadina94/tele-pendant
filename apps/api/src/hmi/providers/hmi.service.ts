@@ -381,7 +381,7 @@ export class HmiService {
     await this.auditService.write({
       ...this.actorFields(actor),
       action: 'cell.create',
-      resource: saved.id,
+      resource: saved.label,
       details: saved.label,
       result: 'success',
     });
@@ -401,7 +401,7 @@ export class HmiService {
     await this.auditService.write({
       ...this.actorFields(actor),
       action: 'cell.update',
-      resource: saved.id,
+      resource: saved.label,
       details: saved.label,
       result: 'success',
     });

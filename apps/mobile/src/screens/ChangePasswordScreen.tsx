@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { apiPatch } from '../api';
+import { Btn } from '../ui';
 export function ChangePasswordScreen({
   token,
   onClose,
@@ -85,15 +86,11 @@ export function ChangePasswordScreen({
         value={confirmPassword}
         onChangeText={setConfirmPassword}
       />
-      <Pressable
-        className={`mb-2 items-center rounded-lg bg-primary py-3 ${busy ? 'opacity-60' : ''}`}
-        disabled={busy}
-        onPress={() => void submit()}
-      >
+      <Btn className="mb-2 mt-0" loading={busy} onPress={() => void submit()}>
         <Text className="font-semibold text-primary-foreground">
           {busy ? 'Saving…' : 'Save password'}
         </Text>
-      </Pressable>
+      </Btn>
       <Pressable className="items-center py-2" onPress={onClose}>
         <Text className="text-sm text-muted-foreground">Close</Text>
       </Pressable>

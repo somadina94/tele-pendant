@@ -183,7 +183,7 @@ export function LoginPage() {
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 ) : null}
-                <Button type="submit" disabled={busy} className="w-full">
+                <Button type="submit" loading={busy} className="w-full">
                   <LogIn />
                   {busy ? t('signingIn') : t('otpVerify')}
                 </Button>
@@ -245,7 +245,7 @@ export function LoginPage() {
                   </Alert>
                 ) : null}
                 <HelpTip id="tour.login.signIn">
-                  <Button type="submit" disabled={busy} className="w-full">
+                  <Button type="submit" loading={busy} className="w-full">
                     <LogIn />
                     {busy ? t('signingIn') : t('signIn')}
                   </Button>

@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Alert,
+  Animated,
+  Easing,
   Modal,
   Pressable,
   ScrollView,
@@ -10,8 +12,43 @@ import {
   type PressableProps,
   type TextInputProps,
 } from 'react-native';
-import { ChevronDown } from 'lucide-react-native';
+import { ChevronDown, Loader2 } from 'lucide-react-native';
 import { useTheme } from './theme';
+
+/** Lucide spinner for buttons and inline busy states. */
+export function LucideSpinner({
+  size = 16,
+  color = '#041018',
+}: {
+  size?: number;
+  color?: string;
+}) {
+  const rotation = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(rotation, {
+        toValue: 1,
+        duration: 800,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      rotation.setValue(0);
+    };
+  }, [rotation]);
+  const spin = rotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+  return (
+    <Animated.View style={{ transform: [{ rotate: spin }] }}>
+      <Loader2 size={size} color={color} />
+    </Animated.View>
+  );
+}
 
 export function ScreenScroll({ children }: { children: ReactNode }) {
   return (
@@ -130,15 +167,34 @@ export function Btn({
   onPress,
   className = '',
   disabled,
+  loading = false,
+  spinnerColor = '#041018',
   ...rest
-}: PressableProps & { children: ReactNode; className?: string }) {
+}: PressableProps & {
+  children: ReactNode;
+  className?: string;
+  /** Shows a Lucide spinner and blocks presses while true. */
+  loading?: boolean;
+  spinnerColor?: string;
+}) {
+  const [pending, setPending] = useState(false);
+  const busy = Boolean(loading || pending);
   return (
     <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      className={`mt-2 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80 disabled:opacity-50 ${className}`}
+      accessibilityRole="button"
+      onPress={(event) => {
+        if (!onPress || busy) return;
+        const result = onPress(event) as void | Promise<void>;
+        if (result && typeof (result as Promise<void>).then === 'function') {
+          setPending(true);
+          void Promise.resolve(result).finally(() => setPending(false));
+        }
+      }}
+      disabled={Boolean(disabled) || busy}
+      className={`mt-2 min-h-12 flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 active:opacity-80 disabled:opacity-50 ${className}`}
       {...rest}
     >
+      {busy ? <LucideSpinner color={spinnerColor} /> : null}
       {typeof children === 'string' ? (
         <Text className="font-bold text-primary-foreground">{children}</Text>
       ) : (

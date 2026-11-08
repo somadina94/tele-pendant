@@ -1,7 +1,4 @@
-import {
-  configSectionIdsForRole,
-  type UserRole,
-} from '@tele-pendant/shared';
+import { configSectionIdsForRole, type UserRole } from '@tele-pendant/shared';
 
 export type MobileConfigSection =
   | 'users'

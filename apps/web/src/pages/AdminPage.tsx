@@ -139,9 +139,11 @@ function isProtectedStopCell(style: string, label: string): boolean {
 function StatusNote({ note }: { note?: Note | null }) {
   if (!note) return null;
   return (
-    <Alert variant={note.ok ? 'default' : 'destructive'}>
-      {!note.ok ? <AlertCircle className="h-4 w-4" /> : null}
-      <AlertDescription>{note.text}</AlertDescription>
+    <Alert variant={note.ok ? 'default' : 'destructive'} className="max-w-full">
+      {!note.ok ? <AlertCircle className="h-4 w-4 shrink-0" /> : null}
+      <AlertDescription className="break-words [overflow-wrap:anywhere]">
+        {note.text}
+      </AlertDescription>
     </Alert>
   );
 }
@@ -762,38 +764,44 @@ function AlarmSection({
             key={row.id}
             className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
           >
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-medium">{row.name}</span>
-              <Badge variant="secondary">
+            <div className="min-w-0 flex-1 flex-wrap items-center gap-2 text-sm">
+              <span className="break-words font-medium [overflow-wrap:anywhere]">
+                {row.name}
+              </span>
+              <Badge variant="secondary" className="max-w-full truncate">
                 {row.register?.name ?? row.compareOp}
               </Badge>
               <span>{row.threshold}</span>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setEditingId(row.id);
-                setName(row.name);
-                setRegisterId(row.register?.id ?? registers[0]?.id ?? '');
-                setCompareOp(row.compareOp);
-                setThreshold(String(row.threshold));
-                setSeverity(normalizeAlarmSeverity(row.severity));
-                setEnabled(row.enabled);
-              }}
-            >
-              Edit {row.name}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => askDelete(row.name, () => remove(row.id))}
-            >
-              <Trash2 />
-              {t('delete')} {row.name}
-            </Button>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`Edit ${row.name}`}
+                onClick={() => {
+                  setEditingId(row.id);
+                  setName(row.name);
+                  setRegisterId(row.register?.id ?? registers[0]?.id ?? '');
+                  setCompareOp(row.compareOp);
+                  setThreshold(String(row.threshold));
+                  setSeverity(normalizeAlarmSeverity(row.severity));
+                  setEnabled(row.enabled);
+                }}
+              >
+                Edit
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`Delete ${row.name}`}
+                onClick={() => askDelete(row.name, () => remove(row.id))}
+              >
+                <Trash2 />
+                {t('delete')}
+              </Button>
+            </div>
           </div>
         ))}
         {deleteConfirmDialog}
@@ -1180,8 +1188,8 @@ function ConnectionEditor({
         />
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={busy}>
-          {busy ? <Loader2 className="animate-spin" /> : <Save />}
+        <Button type="submit" loading={busy}>
+          <Save />
           {submitLabel}
         </Button>
       </div>
@@ -1994,7 +2002,7 @@ function BackgroundEditor({
           </AlertDescription>
         </Alert>
       ) : null}
-      <Button type="submit" disabled={uploading}>
+      <Button type="submit" loading={uploading}>
         <Save />
         Save background
       </Button>

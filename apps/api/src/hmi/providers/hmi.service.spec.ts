@@ -451,6 +451,12 @@ describe('HmiService', () => {
     const created = await service.createCell(cellInput);
     expect(created.label).toBe('Spare');
     expect(created.id).toBe('new-cell');
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'cell.create',
+        resource: 'Spare',
+      }),
+    );
 
     await service.createCell({
       ...cellInput,
@@ -468,7 +474,10 @@ describe('HmiService', () => {
     const updated = await service.updateCell('c9', cellInput);
     expect(updated.label).toBe('Spare');
     expect(auditService.write).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'cell.update' }),
+      expect.objectContaining({
+        action: 'cell.update',
+        resource: 'Spare',
+      }),
     );
   });
 

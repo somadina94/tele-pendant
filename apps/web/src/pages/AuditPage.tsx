@@ -173,7 +173,7 @@ export function AuditPage() {
               type="button"
               variant="outline"
               size="sm"
-              disabled={exportBusy}
+              loading={exportBusy}
               onClick={() => void exportCsv()}
             >
               <Download />
