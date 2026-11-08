@@ -8,6 +8,7 @@ import {
 import { DEMO_CRANE_MAP } from '@tele-pendant/modbus-core';
 import { WS_EVENTS } from '@tele-pendant/shared';
 import { AlarmEngineService } from '../../alarms/providers/alarm-engine.service';
+import { motionDebug, motionDebugEnabled } from '../../common/motion-debug';
 import { PlcService } from '../../plc/providers/plc.service';
 import { SafetyStateService } from '../../safety/providers/safety-state.service';
 import { TrendsService } from '../../trends/providers/trends.service';
@@ -36,6 +37,7 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
   /** Skip overlapping polls — prod Modbus RTT otherwise stacks reads and stalls live tags. */
   private inFlight = false;
   private lastTags: LiveTagSnapshot | null = null;
+  private pollStartedAt = 0;
 
   constructor(
     @Inject(PlcService) private readonly plcService: PlcService,
@@ -62,8 +64,14 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async poll(): Promise<void> {
-    if (this.inFlight) return;
+    if (this.inFlight) {
+      if (motionDebugEnabled()) {
+        motionDebug('tags.poll.skip-inflight');
+      }
+      return;
+    }
     this.inFlight = true;
+    this.pollStartedAt = Date.now();
     try {
       await this.plcService.reconnectIfNeeded();
       const safety = await this.safetyState.tick();
@@ -162,6 +170,7 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
       }
 
       this.seq += 1;
+      const prev = this.lastTags;
       const snapshot: LiveTagSnapshot = {
         hoistHeightMm: height ?? 0,
         loadKg: loadKg ?? 0,
@@ -176,6 +185,26 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
       };
       this.lastTags = snapshot;
       this.gateway.broadcast(WS_EVENTS.TAGS_UPDATE, snapshot);
+
+      if (
+        motionDebugEnabled() &&
+        (safety.deadmanActive || this.tick % 8 === 0)
+      ) {
+        motionDebug('tags.poll', {
+          seq: snapshot.seq,
+          ms: Date.now() - this.pollStartedAt,
+          deadmanActive: safety.deadmanActive,
+          hoistHeightMm: snapshot.hoistHeightMm,
+          trolleyPositionMm: snapshot.trolleyPositionMm,
+          speedPct: snapshot.speedPct,
+          heightDelta: prev
+            ? snapshot.hoistHeightMm - prev.hoistHeightMm
+            : 0,
+          trolleyDelta: prev
+            ? snapshot.trolleyPositionMm - prev.trolleyPositionMm
+            : 0,
+        });
+      }
 
       await this.alarms.evaluate();
 

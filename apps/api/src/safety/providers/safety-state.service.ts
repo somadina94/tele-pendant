@@ -7,6 +7,7 @@ import { Cell } from '../../cells/entities/cell.entity';
 import { PlcService } from '../../plc/providers/plc.service';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
+import { motionDebug } from '../../common/motion-debug';
 import { SafeActionPinService } from '../../users/providers/safe-action-pin.service';
 import { SafetyRoles } from '../entities/safety-roles.entity';
 import {
@@ -306,7 +307,14 @@ export class SafetyStateService {
   pulseDeadman(holder: { userId: string; socketId?: string | null }): void {
     const userId = holder.userId?.trim();
     if (!userId) return;
-    if (!this.controlLease.holds(userId)) return;
+    if (!this.controlLease.holds(userId)) {
+      motionDebug('deadman.pulse.rejected', {
+        userId,
+        reason: 'no-control-lease',
+        via: holder.socketId ? 'ws' : 'http',
+      });
+      return;
+    }
     this.lastClientPulseAt = new Date();
     this.deadmanActive = true;
     this.deadmanHolderUserId = userId;
@@ -315,6 +323,13 @@ export class SafetyStateService {
     this.deadmanHolderSocketId = socketId || this.deadmanHolderSocketId;
     this.needsMotionDrop = false;
     this.dropGeneration += 1;
+    motionDebug('deadman.pulse.ok', {
+      userId,
+      socketId: this.deadmanHolderSocketId,
+      via: socketId ? 'ws' : 'http',
+      dropGeneration: this.dropGeneration,
+      msSinceEpoch: this.lastClientPulseAt.getTime(),
+    });
   }
 
   /**
@@ -329,6 +344,11 @@ export class SafetyStateService {
     if (this.deadmanActive) {
       this.socketFlapGraceUntil = Date.now() + this.socketFlapGraceMs;
       this.lastClientPulseAt = new Date();
+      motionDebug('deadman.socket-flap-grace', {
+        socketId: id,
+        graceMs: this.socketFlapGraceMs,
+        until: this.socketFlapGraceUntil,
+      });
     }
   }
 
@@ -356,6 +376,11 @@ export class SafetyStateService {
         return this.snapshot();
       }
     }
+    motionDebug('deadman.release', {
+      userId: opts?.userId ?? null,
+      socketId: opts?.socketId ?? null,
+      force: Boolean(opts?.force),
+    });
     this.clearDeadmanHolder();
     this.needsMotionDrop = true;
     await this.dropMotionAndDeadmanCoil();
@@ -479,10 +504,20 @@ export class SafetyStateService {
         Date.now() >= this.socketFlapGraceUntil &&
         Date.now() - this.lastClientPulseAt.getTime() > this.deadmanTimeoutMs
       ) {
+        const ageMs = Date.now() - this.lastClientPulseAt.getTime();
+        motionDebug('deadman.timeout-drop', {
+          ageMs,
+          timeoutMs: this.deadmanTimeoutMs,
+          holderUserId: this.deadmanHolderUserId,
+          holderSocketId: this.deadmanHolderSocketId,
+        });
         this.clearDeadmanHolder();
         this.needsMotionDrop = true;
       }
       if (this.needsMotionDrop) {
+        motionDebug('deadman.coil-drop-run', {
+          dropGeneration: this.dropGeneration,
+        });
         await this.dropMotionAndDeadmanCoil();
       } else if (this.deadmanActive) {
         const deadman = await this.roleAddress(

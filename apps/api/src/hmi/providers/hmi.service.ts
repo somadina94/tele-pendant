@@ -18,6 +18,7 @@ import { PlcService } from '../../plc/providers/plc.service';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { SafetyStateService } from '../../safety/providers/safety-state.service';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
+import { motionDebug } from '../../common/motion-debug';
 import { SafeActionPinService } from '../../users/providers/safe-action-pin.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 import {
@@ -291,6 +292,7 @@ export class HmiService {
       refresh?: boolean;
     },
   ) {
+    const started = Date.now();
     const cell = await this.cells.findOne({ where: { id: cellId } });
     if (!cell?.primaryRegister) {
       throw new NotFoundException('Cell or primary register not found');
@@ -301,6 +303,12 @@ export class HmiService {
       value &&
       !this.safetyState.canIssueMotion(opts.userId)
     ) {
+      motionDebug('activate.blocked', {
+        cellId,
+        label: cell.label,
+        userId: opts.userId ?? null,
+        refresh: Boolean(opts.refresh),
+      });
       throw new ForbiddenException(
         'Motion blocked: claim control, hold deadman, and ensure normal safety mode',
       );
@@ -352,6 +360,18 @@ export class HmiService {
 
     if (isEStopCell && value) {
       await this.safetyState.latchOperatorEStop(`STOP: ${cell.label}`);
+    }
+
+    if (cell.isMotion) {
+      motionDebug('activate.ok', {
+        cellId: cell.id,
+        label: cell.label,
+        value,
+        refresh: Boolean(opts.refresh),
+        speed: usesVariableSpeed && value ? speedMode : null,
+        ms: Date.now() - started,
+        userId: opts.userId ?? null,
+      });
     }
 
     return {

@@ -12,6 +12,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { corsOriginDelegate } from '../common/cors-origins';
 import { ACCESS_TOKEN_COOKIE } from '../common/constants';
+import { motionDebug } from '../common/motion-debug';
 import { AuthService, JwtPayload } from '../auth/providers/auth.service';
 import { SafetyStateService } from '../safety/providers/safety-state.service';
 
@@ -60,6 +61,13 @@ export class RealtimeGateway
       // TP-40: signature alone is not enough — reject suspended/deleted/revoked.
       const session = await this.authService.assertActiveSession(payload);
       this.setUser(client, session);
+      motionDebug('ws.connect', {
+        socketId: client.id,
+        userId: session.sub,
+        transport: (
+          client.conn as { transport?: { name?: string } } | undefined
+        )?.transport?.name,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unauthorized';
       this.logger.warn(`Realtime reject ${client.id}: ${message}`);
@@ -73,6 +81,12 @@ export class RealtimeGateway
    * when Socket.IO reconnects through the proxy).
    */
   handleDisconnect(client: Socket) {
+    const snap = this.safetyState.snapshot();
+    motionDebug('ws.disconnect', {
+      socketId: client.id,
+      deadmanActive: snap.deadmanActive,
+      lastClientPulseAt: snap.lastClientPulseAt,
+    });
     this.logger.warn(
       `Realtime disconnect ${client.id}; clearing socket deadman binding if any`,
     );
@@ -82,17 +96,37 @@ export class RealtimeGateway
   @SubscribeMessage('deadman.pulse')
   handleDeadmanPulse(@ConnectedSocket() client: Socket) {
     const user = this.userOf(client);
-    if (!user?.sub) return this.safetyState.snapshot();
+    if (!user?.sub) {
+      motionDebug('ws.deadman.pulse.ignored', {
+        socketId: client.id,
+        reason: 'no-user',
+      });
+      return this.safetyState.snapshot();
+    }
     this.safetyState.pulseDeadman({
       userId: user.sub,
       socketId: client.id,
     });
-    return this.safetyState.snapshot();
+    const snap = this.safetyState.snapshot();
+    motionDebug('ws.deadman.pulse', {
+      socketId: client.id,
+      userId: user.sub,
+      deadmanActive: snap.deadmanActive,
+      lastClientPulseAt: snap.lastClientPulseAt,
+      transport: (
+        client.conn as { transport?: { name?: string } } | undefined
+      )?.transport?.name,
+    });
+    return snap;
   }
 
   @SubscribeMessage('deadman.release')
   async handleDeadmanRelease(@ConnectedSocket() client: Socket) {
     const user = this.userOf(client);
+    motionDebug('ws.deadman.release', {
+      socketId: client.id,
+      userId: user?.sub ?? null,
+    });
     return this.safetyState.releaseDeadman({
       userId: user?.sub,
       socketId: client.id,

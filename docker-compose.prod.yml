@@ -37,6 +37,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3010
+      # Temporary motion diagnose (local baseline comparison). Set MOTION_DEBUG=0 to silence.
+      MOTION_DEBUG: ${MOTION_DEBUG:-1}
       SQLITE_DIR: /app/data
       DATABASE_PATH: /app/data/tele-pendant.sqlite
       MODBUS_HOST: modbus-sim

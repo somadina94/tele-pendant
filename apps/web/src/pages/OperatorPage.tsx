@@ -24,6 +24,7 @@ import {
   type MatrixCellUiState,
 } from '@tele-pendant/shared';
 import { applyLiveTagsState, shouldApplyLiveTags } from '../lib/live-tags';
+import { motionDebug } from '../lib/motion-debug';
 import { getRealtimeSocket } from '../lib/realtime';
 import { HelpTip } from '../lib/tour';
 import { CraneMimic } from '@/components/crane-mimic';
@@ -131,6 +132,8 @@ export function OperatorPage() {
   });
   const tagsPullInFlight = useRef(false);
   const lastWsTagAt = useRef(0);
+  const holdPulseCount = useRef(0);
+  const lastTagLogAt = useRef(0);
 
   const applyLiveTags = useCallback((payload: LiveTags) => {
     if (
@@ -140,9 +143,26 @@ export function OperatorPage() {
         payload,
       )
     ) {
+      motionDebug('tags.dropped-stale', {
+        seq: payload.seq ?? null,
+        at: payload.at ?? null,
+        lastSeq: tagOrderRef.current.lastSeq,
+        lastAt: tagOrderRef.current.lastAt,
+      });
       return;
     }
     tagOrderRef.current = applyLiveTagsState(tagOrderRef.current, payload);
+    const now = Date.now();
+    if (heldRef.current || now - lastTagLogAt.current > 1000) {
+      lastTagLogAt.current = now;
+      motionDebug('tags.apply', {
+        seq: payload.seq ?? null,
+        at: payload.at ?? null,
+        hoistHeightMm: payload.hoistHeightMm ?? null,
+        trolleyPositionMm: payload.trolleyPositionMm ?? null,
+        holding: heldRef.current,
+      });
+    }
     setTags((prev) => ({
       ...prev,
       ...payload,
@@ -170,16 +190,52 @@ export function OperatorPage() {
       applyLiveTags(payload);
     };
     const onSafety = (payload: HmiLayout['safety']) => {
+      if (heldRef.current) {
+        const pulseAt = (payload as { lastClientPulseAt?: string | null })
+          .lastClientPulseAt;
+        motionDebug('safety.state', {
+          mode: payload.mode,
+          deadmanActive: payload.deadmanActive,
+          eStopActive: payload.eStopActive,
+          lastClientPulseAt: pulseAt ?? null,
+        });
+      }
       setSafety(payload);
       if (payload.control) {
         setControl((prev) => mergeControl(payload.control, prev));
       }
     };
+    const onConnect = () => {
+      motionDebug('ws.connect', {
+        id: socket.id,
+        transport: socket.io?.engine?.transport?.name,
+      });
+    };
+    const onDisconnect = (reason: string) => {
+      motionDebug('ws.disconnect', {
+        reason,
+        holding: heldRef.current,
+        msSinceLastTag: Date.now() - (lastWsTagAt.current || Date.now()),
+      });
+    };
+    const onReconnect = (attempt: number) => {
+      motionDebug('ws.reconnect', {
+        attempt,
+        id: socket.id,
+        transport: socket.io?.engine?.transport?.name,
+      });
+    };
     socket.on('tags.update', onTags);
     socket.on('safety.state', onSafety);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.io?.on('reconnect', onReconnect);
     return () => {
       socket.off('tags.update', onTags);
       socket.off('safety.state', onSafety);
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.io?.off('reconnect', onReconnect);
     };
   }, [applyLiveTags]);
 
@@ -196,6 +252,10 @@ export function OperatorPage() {
       }
       if (tagsPullInFlight.current) return;
       tagsPullInFlight.current = true;
+      motionDebug('tags.http-fallback', {
+        msSinceWsTag: Date.now() - (lastWsTagAt.current || 0),
+        socketConnected: socket.connected,
+      });
       try {
         const payload = await apiGet<LiveTags & { at: string | null }>(
           '/realtime/tags',
@@ -261,7 +321,17 @@ export function OperatorPage() {
   useEffect(() => {
     const socket = getRealtimeSocket();
     if (!holdingCellId) return;
+    holdPulseCount.current = 0;
     const pulse = () => {
+      holdPulseCount.current += 1;
+      const n = holdPulseCount.current;
+      motionDebug('hold.pulse', {
+        n,
+        cellId: holdingCellId,
+        socketConnected: socket.connected,
+        transport: socket.io?.engine?.transport?.name,
+        msSinceLastTag: Date.now() - (lastWsTagAt.current || Date.now()),
+      });
       socket.emit('deadman.pulse');
     };
     pulse();
@@ -323,6 +393,11 @@ export function OperatorPage() {
       return;
     }
     if (cell.isMotion) {
+      motionDebug('hold.press', {
+        cellId: cell.id,
+        label: cell.label,
+        speed: jogSpeedRef.current,
+      });
       heldRef.current = cell.id;
       setHoldingCellId(cell.id);
       pulseDeadman();
@@ -331,9 +406,23 @@ export function OperatorPage() {
       cell.isMotion && (cell.variableSpeed ?? true)
         ? jogSpeedRef.current
         : undefined;
+    const t0 = Date.now();
     try {
       await activate.mutateAsync({ id: cell.id, value: true, speed });
-    } catch {
+      if (cell.isMotion) {
+        motionDebug('hold.activate-true', {
+          cellId: cell.id,
+          ms: Date.now() - t0,
+        });
+      }
+    } catch (err) {
+      if (cell.isMotion) {
+        motionDebug('hold.activate-true.fail', {
+          cellId: cell.id,
+          ms: Date.now() - t0,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
       if (heldRef.current === cell.id) {
         heldRef.current = null;
         setHoldingCellId(null);
@@ -348,14 +437,29 @@ export function OperatorPage() {
     if (heldRef.current === cell.id) heldRef.current = null;
     setHoldingCellId((current) => (current === cell.id ? null : current));
     if (!mine) return;
+    motionDebug('hold.release', {
+      cellId: cell.id,
+      label: cell.label,
+      pulses: holdPulseCount.current,
+    });
     releaseDeadman();
+    const t0 = Date.now();
     try {
       await activate.mutateAsync({
         id: cell.id,
         value: false,
         speed: (cell.variableSpeed ?? true) ? jogSpeedRef.current : undefined,
       });
-    } catch {
+      motionDebug('hold.activate-false', {
+        cellId: cell.id,
+        ms: Date.now() - t0,
+      });
+    } catch (err) {
+      motionDebug('hold.activate-false.fail', {
+        cellId: cell.id,
+        ms: Date.now() - t0,
+        message: err instanceof Error ? err.message : String(err),
+      });
       // The coil drop is best-effort. The hold indicator is already clear.
     }
   }
