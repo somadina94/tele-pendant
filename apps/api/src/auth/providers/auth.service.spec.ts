@@ -804,7 +804,7 @@ describe('AuthService', () => {
     const sealed = sealTemplate(descriptorFromChallengeFrames(frames), key);
     usersRepository.find.mockResolvedValue([{ ...user, faceTemplate: sealed }]);
     const ok = await service.loginWithFace({ frames });
-    expect(ok.accessToken).toBe('token');
+    expect(ok).toEqual(expect.objectContaining({ accessToken: 'token' }));
   });
 
   it('face login audits null displayName on success', async () => {
@@ -929,8 +929,16 @@ describe('AuthService', () => {
     ]);
 
     const ok = await service.loginWithFace({ frames });
-    expect(ok.accessToken).toBe('token');
-    expect(ok.user.email).toBe(user.email);
+    expect(ok).toEqual(
+      expect.objectContaining({
+        accessToken: 'token',
+        user: expect.objectContaining({ email: user.email }),
+        matchScore: expect.any(Number),
+      }),
+    );
+    if (!('matchScore' in ok)) {
+      throw new Error('expected face login session');
+    }
     expect(ok.matchScore).toBeGreaterThan(0.9);
   });
 

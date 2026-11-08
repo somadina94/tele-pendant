@@ -750,10 +750,10 @@ describe('HmiService', () => {
       name: 'yard',
       active: false,
     });
-    backgrounds.save.mockImplementation(async (row: { id?: string }) => ({
-      id: row.id ?? 'bg2',
-      ...row,
-    }));
+    backgrounds.save.mockImplementation(async (row) => {
+      const one = Array.isArray(row) ? row[0]! : row;
+      return { ...one, id: one.id ?? 'bg2' };
+    });
     const created = await service.createBackground({ name: ' yard ' });
     expect(created.name).toBe('yard');
     expect(created.active).toBe(false);
@@ -789,8 +789,8 @@ describe('HmiService', () => {
       active: true,
       imageUrl: null,
     });
-    backgrounds.save.mockImplementation(
-      async (row: { imageUrl?: string }) => row,
+    backgrounds.save.mockImplementation(async (row) =>
+      Array.isArray(row) ? row : row,
     );
 
     await expect(
