@@ -342,7 +342,9 @@ The API serves `apps/api/ota` with no login.
 
 ## 15. Expo handheld
 
-Use the **signed native app** the vendor sends securely (Android APK or AAB, iOS IPA). Binaries and signing keys are **not in this git repo**. To build APK, AAB, and IPA yourself after handover, run `pnpm handover:mobile` (see [MOBILE_RELEASE.md](./MOBILE_RELEASE.md)). Until then, iPhone users can use the web HMI in Safari at https://hmi.example.com.
+Use the **signed native app** the vendor sends securely (Android APK or AAB, iOS IPA). Binaries and signing keys are **not in this git repo**. To build APK, AAB, and IPA yourself after handover, run `pnpm handover:mobile` (see [MOBILE_RELEASE.md](./MOBILE_RELEASE.md)).
+
+**Until a signed IPA is installed:** iPhone operators can use the **web HMI in Safari** at https://hmi.example.com, or smoke-test the same Expo project in **Expo Go** (SDK 58) with `pnpm --filter @tele-pendant/mobile dev` and the Metro `exp://` URL ([INSTALLATION.md](./INSTALLATION.md)). Expo Go is for development/smoke only; **Listen** needs the signed native app or a local native debug build.
 
 Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit**.
 
@@ -373,7 +375,7 @@ Header buttons: **Operator**, **Media**, **Face**, **Ops**, **Config**, **Audit*
 - **Safety roles** bind E-stop, deadman, heartbeat, and safe-state to registers. Losing the deadman, the link, or e-stop clears the primary coil of every motion cell.
 - **Protocol** is Modbus TCP by default (simulator port 1502). OPC UA is optional: `docker compose -f docker-compose.dev.yml --profile opcua up opcua-sim`, then set the connection to OPC UA and fill each register’s node id (`ns=1;s=HoistUp` and the matching names).
 - The phone operator screen shows the same plant graphic, photo, and live labels as the web. Buttons stay the action name.
-- Phone **Listen** needs the signed native app or a local dev build (`npx expo run:android` / Xcode), not Expo Go alone.
+- Phone **Listen** needs the signed native app or a local native debug build (`npx expo run:android` / `expo run:ios`), not Expo Go alone. QR / face camera preview work in Expo Go when camera permission is granted.
 - Face login uses a 3-pose challenge with local liveness and optional AES template encryption. It is not ISO-certified and never authorizes e-stop. See `FACE_LIMITATIONS.md`.
 
 ## Security (operators & integrators)

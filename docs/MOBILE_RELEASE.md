@@ -6,7 +6,7 @@ Signed **Android** (APK / AAB) and **iOS** (IPA) installables are **not stored i
 - **Signing credentials** separately (Android keystore, Apple team/cert/profile material), also **never committed**.
 - Scripts in this repo to **produce new APK, AAB, and IPA** on your machine once credentials are configured locally.
 
-Until you install a native build, operators can use the **web HMI** on iPhone/Android browsers (https://hmi.example.com).
+Until you install a native build, operators can use the **web HMI** on iPhone/Android browsers (https://hmi.example.com), or smoke the Expo project in **Expo Go** (SDK 58) via `pnpm --filter @tele-pendant/mobile dev` — see [INSTALLATION.md](./INSTALLATION.md). Expo Go is not a substitute for the signed APK/IPA at handover; **Listen** still needs a native binary.
 
 **TP-49 (session security):** release builds store the JWT in **expo-secure-store** (not plaintext AsyncStorage) and set Android **`allowBackup: false`** in `app.json` so app data is not auto-backed up to Google Drive. Rebuild the native binary after pulling that change.
 
@@ -92,7 +92,7 @@ These items come from [Apple Developer](https://developer.apple.com) (paid **App
 | **Provisioning profile** | Profiles → **Ad Hoc** (default): register each device **UDID**, profile for `com.telependant.app` → **`.mobileprovision`**. **App Store**: app in App Store Connect + App Store distribution profile for TestFlight or store upload |
 | **Build host** | **macOS** with **Xcode**; Apple ID in Xcode → Settings → Accounts; import `.p12` and profile before `pnpm handover:mobile:ios` |
 
-Until an IPA is built and installed, iPhone users can use the **web HMI in Safari** (see [USER_MANUAL.md](./USER_MANUAL.md)).
+Until an IPA is built and installed, iPhone users can use the **web HMI in Safari** or **Expo Go** for smoke (see [USER_MANUAL.md](./USER_MANUAL.md) and [INSTALLATION.md](./INSTALLATION.md)).
 
 ## OTA and API URL for a build
 

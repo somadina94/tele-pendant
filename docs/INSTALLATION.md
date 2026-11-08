@@ -79,7 +79,11 @@ Restart the API container or process. Fresh installs seed the admin user; existi
 pnpm --filter @tele-pendant/mobile dev
 ```
 
-On a physical phone, set API base to the live API (`https://api.example.com/api/v1`) or your LAN URL (not `127.0.0.1`).
+API base comes from `MOBILE_API_URL` / `EXPO_PUBLIC_API_URL` (see root `.env.example` and `apps/mobile/app.config.js`). On a physical phone use the live API (`https://api.example.com/api/v1`) or your Mac’s LAN URL ending in `/api/v1` (not `127.0.0.1`).
+
+**Expo Go (Android / iOS):** install Expo Go matching the project SDK (currently **58**), same Wi‑Fi as the Metro host, then open the `exp://…` URL Metro prints (or scan the QR). Confirmed path for smoke: sign-in UI against the configured API. **Listen** (on-device speech) is **not** in Expo Go — use a signed native build or `expo run:android` / Xcode. Camera / QR / face preview use `expo-camera` and work in Expo Go when the device grants camera permission.
+
+**iOS Simulator:** `pnpm --filter @tele-pendant/mobile exec expo start --ios` installs Expo Go into the booted simulator when needed. Prefer `exp://127.0.0.1:8081` on the simulator; use the LAN `exp://` URL on a physical iPhone.
 
 ### Handover native builds (Android + iOS)
 

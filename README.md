@@ -77,7 +77,7 @@ Manual server deploy needs `GHCR_USERNAME` + `GHCR_PULL_TOKEN` (`read:packages`)
 - Compodoc: `pnpm --filter @tele-pendant/api docs:serve`
 - httpyac: `apps/api/src/**/http/*.endpoints.http`
 - Web: http://localhost:5173 (host) or http://localhost:8080 (Docker `WEB_PORT`) — `/operator`, `/ops`, `/media`, `/admin`, `/assistant`, `/face`
-- Expo: `pnpm --filter @tele-pendant/mobile dev` (set API base to LAN or the live API URL on the phone)
+- Expo: `pnpm --filter @tele-pendant/mobile dev` (Expo Go SDK 58 on Android/iOS; set API base to LAN or the live API URL — Listen needs a native build)
 - Native mobile (handover): signed `.apk`, `.aab`, and `.ipa` are **not in git**; vendor sends installables and signing keys securely. Rebuild with `pnpm handover:mobile` (APK + AAB + iOS) or `handover:mobile:apk` / `:aab` / `:ios` (see [`docs/MOBILE_RELEASE.md`](./docs/MOBILE_RELEASE.md))
 - Default admin: `admin@example.com` / `change-me-admin-password` (from `.env`); admins manage operator/supervisor accounts in Config **Users**; all roles change login password via the web **Account menu** or phone drawer
 - Safe-action PIN (reset e-stop only, not login): `SAFE_ACTION_PIN`

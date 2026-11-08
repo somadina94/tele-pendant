@@ -353,7 +353,8 @@ Production example URLs are listed in [README.md](../README.md) and [docs/README
 | **API base** | Must point to your server’s `/api/v1` URL. `localhost` only works on the same machine, not from a physical phone on Wi‑Fi. |
 | **Change password** | Drawer item at the bottom; same flow as web **Account menu** → **Change password**. |
 | **Native app** | Signed Android/iOS builds are delivered at handover (not in git). Rebuild with `pnpm handover:mobile` after you receive signing keys privately ([MOBILE_RELEASE.md](./MOBILE_RELEASE.md)). |
-| **Listen (voice)** | Needs the native app or a local dev build; Expo Go cannot run on-device speech. |
+| **Expo Go** | Same JS app for smoke on Android/iOS (match SDK **58**). Not a store install; use signed APK/IPA for handover. |
+| **Listen (voice)** | Needs the native app or a local native debug build; Expo Go cannot run on-device speech. Camera QR / face preview can run in Expo Go. |
 | **OTA manifest** | Server URL `/ota/manifest` tells the app where to download JS updates. |
 
 See [OTA.md](./OTA.md) for update workflow.

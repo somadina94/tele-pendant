@@ -42,7 +42,7 @@ OTA_PUBLIC_URL=https://api.example.com pnpm --filter @tele-pendant/mobile ota:ex
 ```
 
 That runs `expo export` and writes a protocol-1 `manifest.json` plus the bundle into `apps/api/ota`. When the OTA private key is present it also writes `manifest.signature` and copies the key for the API. The API already serves that folder and signs on demand.
-3. Camera and on-device speech are native modules. They are not in Expo Go. A JS update does not add them. Rebuild the native app with `pnpm handover:mobile` ([MOBILE_RELEASE.md](./MOBILE_RELEASE.md)); signed installables are not stored in git. Handover APKs must use the **release** keystore (`TELE_PENDANT_ANDROID_*`), not the Android debug key.
+3. **On-device speech** (`expo-speech-recognition`) is not in Expo Go — Listen needs a signed native app or local native debug build. **Camera** (`expo-camera`) is available in Expo Go for QR / face preview. A JS OTA does not add new native modules. Rebuild the native app with `pnpm handover:mobile` ([MOBILE_RELEASE.md](./MOBILE_RELEASE.md)); signed installables are not stored in git. Handover APKs must use the **release** keystore (`TELE_PENDANT_ANDROID_*`), not the Android debug key.
 4. `runtimeVersion.policy: appVersion` ties updates to the binary version (`0.0.1`).
 
 ## Acceptance clarity
