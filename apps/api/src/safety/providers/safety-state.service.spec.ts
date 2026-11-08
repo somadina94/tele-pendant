@@ -334,6 +334,8 @@ describe('SafetyStateService', () => {
     await service.tick();
     driver.writeCoil.mockClear();
     await service.releaseDeadman({ userId: 'u1' });
+    // Drop is fire-and-forget so the WS/HTTP response is not Modbus-bound.
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(service.canIssueMotion('u1')).toBe(false);
     expect(service.snapshot().lastClientPulseAt).toBeNull();
     // DEMO_CRANE_MAP.coils.deadman is 10
@@ -351,6 +353,7 @@ describe('SafetyStateService', () => {
       .mockRejectedValueOnce(new Error('link down'))
       .mockResolvedValue(undefined);
     await service.releaseDeadman({ userId: 'u1' });
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(service.canIssueMotion('u1')).toBe(false);
     driver.writeCoil.mockClear();
     await service.tick();
@@ -374,12 +377,23 @@ describe('SafetyStateService', () => {
     pulseHeld();
     driver.writeCoil.mockRejectedValueOnce('boom');
     await service.releaseDeadman({ userId: 'u1' });
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(service.canIssueMotion('u1')).toBe(false);
     driver.writeCoil.mockReset();
     driver.writeCoil.mockResolvedValue(undefined);
     await service.tick();
     expect(driver.writeCoil).toHaveBeenCalledWith(10, false);
     expect(driver.writeCoil).toHaveBeenCalledWith(7, false);
+  });
+
+  it('ignores a second release after deadman is already clear', async () => {
+    pulseHeld();
+    await service.releaseDeadman({ userId: 'u1' });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    driver.writeCoil.mockClear();
+    await service.releaseDeadman({ userId: 'u1' });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(driver.writeCoil).not.toHaveBeenCalled();
   });
 
   it('enters e_stop when coil is high and is idempotent', async () => {

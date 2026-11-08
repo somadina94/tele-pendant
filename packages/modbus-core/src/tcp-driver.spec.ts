@@ -256,6 +256,24 @@ describe('TcpModbusDriver (TP-41)', () => {
     expect(order).toEqual(['first-start', 'first-end', 'second']);
   });
 
+  it('runs exclusive nested writes without deadlocking', async () => {
+    const driver = new TcpModbusDriver();
+    await driver.connect({ host: '127.0.0.1', port: 1502, unitId: 1 });
+    const client = lastClient();
+    const order: string[] = [];
+    client.writeSingleRegister.mockImplementation(async () => {
+      order.push('reg');
+    });
+    client.writeSingleCoil.mockImplementation(async () => {
+      order.push('coil');
+    });
+    await driver.runExclusive(async () => {
+      await driver.writeRegister(5, 100);
+      await driver.writeCoil(4, true);
+    });
+    expect(order).toEqual(['reg', 'coil']);
+  });
+
   it('runs queued writes ahead of queued reads after the in-flight op', async () => {
     const driver = new TcpModbusDriver();
     await driver.connect({ host: '127.0.0.1', port: 1502, unitId: 1 });

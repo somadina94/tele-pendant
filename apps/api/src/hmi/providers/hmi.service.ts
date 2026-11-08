@@ -47,6 +47,8 @@ export class HmiService {
   private readonly safetyState: SafetyStateService;
   private readonly auditService: AuditService;
   private readonly safeActionPin: SafeActionPinService;
+  /** Last written holding.speedPct — skip redundant jog writes under hold spam. */
+  private lastJogSpeedPct: number | null = null;
 
   constructor(
     @InjectRepository(Cell)
@@ -325,39 +327,53 @@ export class HmiService {
 
     const speedMode = opts.speed === 'slow' ? 'slow' : 'fast';
     const usesVariableSpeed = cell.isMotion && (cell.variableSpeed ?? true);
-
-    // Hold refresh only re-asserts the coil — rewriting jog speed every pulse
-    // doubled Modbus RTT and starved live tag polls in prod.
-    if (usesVariableSpeed && value && !opts.refresh) {
-      await this.writeJogSpeedPct(cell, speedMode);
-    }
-
     const reg = cell.primaryRegister;
-    if (reg.kind === 'coil') {
-      await this.plcService.writeCoil(reg.address, value);
-    } else if (reg.kind === 'holding') {
-      await this.plcService.writeHolding(reg.address, value ? 1 : 0);
-    } else {
-      throw new ForbiddenException('Register is read-only');
-    }
 
-    if (usesVariableSpeed && !value) {
-      await this.writeJogSpeedPct(cell, null);
+    const writeMotion = async () => {
+      // Hold refresh only re-asserts the coil — skip jog rewrite.
+      if (usesVariableSpeed && value && !opts.refresh) {
+        await this.writeJogSpeedPct(cell, speedMode);
+      }
+      if (reg.kind === 'coil') {
+        await this.plcService.writeCoil(reg.address, value);
+        if (cell.isMotion) {
+          if (value) this.safetyState.noteMotionCoilAsserted(reg.address);
+          else this.safetyState.noteMotionCoilCleared(reg.address);
+        }
+      } else if (reg.kind === 'holding') {
+        await this.plcService.writeHolding(reg.address, value ? 1 : 0);
+      } else {
+        throw new ForbiddenException('Register is read-only');
+      }
+      if (usesVariableSpeed && !value) {
+        await this.writeJogSpeedPct(cell, null);
+      }
+    };
+
+    // Bundle jog+coil as one high-priority unit so a tag read cannot sneak in.
+    const driver = this.plcService.getDriver();
+    if (typeof driver.runExclusive === 'function') {
+      await driver.runExclusive(writeMotion);
+    } else {
+      await writeMotion();
     }
 
     if (!opts.refresh) {
-      await this.auditService.write({
-        userId: opts.userId,
-        userEmail: opts.userEmail,
-        userDisplayName: opts.userDisplayName ?? null,
-        action: 'cell.activate',
-        resource: cell.label,
-        details: usesVariableSpeed
-          ? `${cell.label}=${value};speed=${value ? speedMode : 'off'}`
-          : `${cell.label}=${value}`,
-        ip: opts.ip,
-        result: 'success',
-      });
+      // Audit must not block Modbus/live tags on the activate hot path.
+      void this.auditService
+        .write({
+          userId: opts.userId,
+          userEmail: opts.userEmail,
+          userDisplayName: opts.userDisplayName ?? null,
+          action: 'cell.activate',
+          resource: cell.label,
+          details: usesVariableSpeed
+            ? `${cell.label}=${value};speed=${value ? speedMode : 'off'}`
+            : `${cell.label}=${value}`,
+          ip: opts.ip,
+          result: 'success',
+        })
+        .catch(() => undefined);
     }
 
     if (isEStopCell && value) {
@@ -398,7 +414,9 @@ export class HmiService {
     const slow = Math.min(100, Math.max(1, cell.slowSpeedPct ?? 30));
     const fast = Math.min(100, Math.max(1, cell.fastSpeedPct ?? 100));
     const pct = mode === null ? 0 : mode === 'slow' ? slow : fast;
+    if (this.lastJogSpeedPct === pct) return;
     await this.plcService.writeHolding(speedReg.address, pct);
+    this.lastJogSpeedPct = pct;
   }
 
   async createCell(input: CellInput, actor?: Actor): Promise<Cell> {

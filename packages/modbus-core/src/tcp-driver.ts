@@ -21,11 +21,16 @@ export class TcpModbusDriver implements ModbusDriver {
   private highQueue: Array<() => Promise<void>> = [];
   private normalQueue: Array<() => Promise<void>> = [];
   private pumping = false;
+  /** >0 while inside runExclusive — nested writeCoil must not re-queue (deadlock). */
+  private exclusiveDepth = 0;
 
   private enqueue<T>(
     op: () => Promise<T>,
     priority: 'high' | 'normal' = 'normal',
   ): Promise<T> {
+    if (this.exclusiveDepth > 0) {
+      return op();
+    }
     return new Promise<T>((resolve, reject) => {
       const item = async () => {
         try {
@@ -38,6 +43,21 @@ export class TcpModbusDriver implements ModbusDriver {
       else this.normalQueue.push(item);
       void this.pump();
     });
+  }
+
+  /**
+   * Run several high-priority ops back-to-back so a tag read cannot sneak
+   * between jog-speed + coil writes of a single activate.
+   */
+  runExclusive<T>(op: () => Promise<T>): Promise<T> {
+    return this.enqueue(async () => {
+      this.exclusiveDepth += 1;
+      try {
+        return await op();
+      } finally {
+        this.exclusiveDepth -= 1;
+      }
+    }, 'high');
   }
 
   private async pump(): Promise<void> {

@@ -224,6 +224,8 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
   /** Secondary Modbus work — never blocks the live 250ms path. */
   private async heavyRefresh(): Promise<void> {
     if (this.heavyInFlight) return;
+    // Pause named-map reads while Operator is holding — frees the bus for coils.
+    if (this.safetyState.snapshot().deadmanActive) return;
     if (!this.plcService.getDriver().isConnected()) return;
     this.heavyInFlight = true;
     try {

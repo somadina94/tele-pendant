@@ -18,4 +18,6 @@ export interface ModbusDriver {
   writeCoil(address: number, value: boolean): Promise<void>;
   writeRegister(address: number, value: number): Promise<void>;
   writeRegisters(address: number, values: number[]): Promise<void>;
+  /** Optional: run several writes without interleaving tag reads. */
+  runExclusive?<T>(op: () => Promise<T>): Promise<T>;
 }

@@ -50,6 +50,8 @@ export class SafetyStateService {
   private dropGeneration = 0;
   /** Avoid rewriting deadman=true every 250ms while the hold is already asserted. */
   private deadmanCoilHigh = false;
+  /** Motion coils asserted via activate — clear only these on release (not every cell). */
+  private assertedMotionCoils = new Set<number>();
   private readonly watchdogTimeoutMs = 2000;
   /**
    * Allow Socket.IO flaps + missed HTTP pulses under prod proxy RTT before
@@ -363,11 +365,24 @@ export class SafetyStateService {
    * Only the holder (or force) can release so one client disconnect does not
    * clear another operator's hold (TP-37).
    */
+  /** Track a motion coil written true so release only clears what was asserted. */
+  noteMotionCoilAsserted(address: number): void {
+    if (Number.isFinite(address)) this.assertedMotionCoils.add(address);
+  }
+
+  noteMotionCoilCleared(address: number): void {
+    this.assertedMotionCoils.delete(address);
+  }
+
   async releaseDeadman(opts?: {
     userId?: string | null;
     socketId?: string | null;
     force?: boolean;
   }): Promise<SafetySnapshot> {
+    // WS + HTTP both call release — second call must not re-run a 6+ coil drop.
+    if (!this.deadmanActive && !opts?.force) {
+      return this.snapshot();
+    }
     if (!opts?.force && this.deadmanActive) {
       const bySocket =
         opts?.socketId &&
@@ -385,10 +400,12 @@ export class SafetyStateService {
       userId: opts?.userId ?? null,
       socketId: opts?.socketId ?? null,
       force: Boolean(opts?.force),
+      assertedCoils: this.assertedMotionCoils.size,
     });
     this.clearDeadmanHolder();
     this.needsMotionDrop = true;
-    await this.dropMotionAndDeadmanCoil();
+    // Do not block the WS/HTTP response on the full Modbus drop — tick retries.
+    void this.dropMotionAndDeadmanCoil();
     return this.snapshot();
   }
 
@@ -558,6 +575,15 @@ export class SafetyStateService {
   private async clearMotionCoils(): Promise<void> {
     const driver = this.plcService.getDriver();
     if (!driver.isConnected()) return;
+    // Prefer the coils we actually asserted this hold (1 write vs scanning all).
+    if (this.assertedMotionCoils.size > 0) {
+      const addrs = [...this.assertedMotionCoils];
+      this.assertedMotionCoils.clear();
+      for (const address of addrs) {
+        await driver.writeCoil(address, false);
+      }
+      return;
+    }
     const motion = await this.cells.find({
       where: { isMotion: true },
       relations: { primaryRegister: true },

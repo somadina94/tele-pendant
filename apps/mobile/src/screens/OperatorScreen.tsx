@@ -274,16 +274,13 @@ export function OperatorScreen({ token }: { token: string }) {
   });
 
   const pulseDeadman = useCallback(async () => {
+    // WS only — HTTP pulse/release doubled Modbus coil drops with the WS path.
     socketRef.current?.emit('deadman.pulse');
-    await apiPost('/safety/deadman/pulse', undefined, token);
-  }, [token]);
+  }, []);
 
   const releaseDeadman = useCallback(() => {
     socketRef.current?.emit('deadman.release');
-    void apiPost('/safety/deadman/release', undefined, token).catch(
-      () => undefined,
-    );
-  }, [token]);
+  }, []);
 
   const dropMotionCoil = useCallback(
     async (cellId: string) => {

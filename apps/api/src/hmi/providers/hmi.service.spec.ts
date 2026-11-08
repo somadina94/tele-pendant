@@ -62,11 +62,14 @@ describe('HmiService', () => {
     writeCoil: jest.fn().mockResolvedValue(undefined),
     writeHolding: jest.fn().mockResolvedValue(undefined),
     forgetAddresses: jest.fn(),
+    getDriver: jest.fn().mockReturnValue({}),
   };
   const safetyState = {
     canIssueMotion: jest.fn().mockReturnValue(false),
     snapshot: jest.fn().mockReturnValue({ mode: 'normal' }),
     latchOperatorEStop: jest.fn().mockResolvedValue({ mode: 'e_stop' }),
+    noteMotionCoilAsserted: jest.fn(),
+    noteMotionCoilCleared: jest.fn(),
     getRoles: jest.fn().mockResolvedValue({
       eStopRegisterId: 'estop-id',
       deadmanRegisterId: 'dead-id',
@@ -205,6 +208,7 @@ describe('HmiService', () => {
       style: 'estop',
     });
     await service.activateCell('stop', true, { role: UserRole.OPERATOR });
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(plcService.writeCoil).toHaveBeenCalled();
     expect(safetyState.latchOperatorEStop).toHaveBeenCalledWith('STOP: STOP');
     expect(auditService.write).toHaveBeenCalledWith(

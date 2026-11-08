@@ -361,13 +361,12 @@ export function OperatorPage() {
   });
 
   const pulseDeadman = useCallback(() => {
+    // WS only — HTTP pulse/release doubled Modbus coil drops with the WS path.
     getRealtimeSocket().emit('deadman.pulse');
-    void apiPost('/safety/deadman/pulse').catch(() => undefined);
   }, []);
 
   const releaseDeadman = useCallback(() => {
     getRealtimeSocket().emit('deadman.release');
-    void apiPost('/safety/deadman/release').catch(() => undefined);
   }, []);
 
   const grid = useMemo(() => {
