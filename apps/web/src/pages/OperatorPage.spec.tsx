@@ -2281,4 +2281,97 @@ describe('OperatorPage', () => {
       await screen.findByText('Claim exclusive control before moving'),
     ).toBeInTheDocument();
   });
+
+  it('scrolls past buttons on touch and still accepts a tap or a hold', async () => {
+    const posts: Array<{ path: string; body: unknown }> = [];
+    mockPostWithControl(async (path, body) => {
+      posts.push({ path: String(path), body });
+      return { ok: true };
+    });
+    const view = renderOperator(<OperatorPage />);
+    const hoist = await screen.findByRole('button', { name: 'Hoist Up' });
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => true);
+    const touch = (
+      type:
+        | 'pointerDown'
+        | 'pointerMove'
+        | 'pointerUp'
+        | 'pointerCancel'
+        | 'pointerLeave',
+      pointerId: number,
+      x: number,
+      y: number,
+    ) =>
+      fireEvent[type](hoist, {
+        pointerType: 'touch',
+        pointerId,
+        clientX: x,
+        clientY: y,
+      });
+
+    touch('pointerDown', 9, 10, 10);
+    touch('pointerMove', 9, 12, 14);
+    touch('pointerMove', 9, 18, 80);
+    touch('pointerMove', 9, 18, 120);
+    touch('pointerLeave', 9, 18, 120);
+    touch('pointerUp', 9, 18, 120);
+    touch('pointerMove', 10, 1, 1);
+    touch('pointerUp', 11, 1, 1);
+    expect(
+      posts.some((post) => post.path.includes('/hmi/cells/m1/activate')),
+    ).toBe(false);
+
+    touch('pointerDown', 13, 10, 10);
+    touch('pointerCancel', 13, 10, 10);
+    expect(
+      posts.some((post) => post.path.includes('/hmi/cells/m1/activate')),
+    ).toBe(false);
+
+    touch('pointerDown', 14, 10, 10);
+    touch('pointerUp', 14, 11, 11);
+    await waitFor(() =>
+      expect(
+        posts.some(
+          (post) =>
+            post.path === '/hmi/cells/m1/activate' &&
+            (post.body as { value?: boolean }).value === true,
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() =>
+      expect(
+        posts.some(
+          (post) =>
+            post.path === '/hmi/cells/m1/activate' &&
+            (post.body as { value?: boolean }).value === false,
+        ),
+      ).toBe(true),
+    );
+
+    const beforeHold = posts.length;
+    touch('pointerDown', 15, 20, 20);
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    await waitFor(() => expect(posts.length).toBeGreaterThan(beforeHold));
+    touch('pointerUp', 15, 20, 22);
+    await waitFor(() =>
+      expect(
+        posts.filter(
+          (post) =>
+            post.path === '/hmi/cells/m1/activate' &&
+            (post.body as { value?: boolean }).value === false,
+        ).length,
+      ).toBeGreaterThan(0),
+    );
+
+    const beforeCancel = posts.length;
+    touch('pointerDown', 17, 30, 30);
+    await new Promise((resolve) => setTimeout(resolve, 140));
+    await waitFor(() => expect(posts.length).toBeGreaterThan(beforeCancel));
+    touch('pointerCancel', 17, 30, 30);
+
+    touch('pointerDown', 16, 4, 4);
+    view.unmount();
+  });
 });

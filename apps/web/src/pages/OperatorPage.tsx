@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { HTMLAttributes, PointerEvent as ReactPointerEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Ban, Circle, Play, ShieldAlert } from 'lucide-react';
 import { apiGet, apiPost, CellDto, HmiLayout, LiveTags } from '../lib/api';
@@ -33,6 +34,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import {
+  armTouchPress,
+  clearTouchArms,
+  isTouchPointer,
+  noteTouchScroll,
+  settleTouchPress,
+  type TouchArm,
+} from '@/lib/touch-press';
 
 const CELL_STATE_ICON: Record<MatrixCellUiState, typeof Circle> = {
   idle: Circle,
@@ -111,6 +120,7 @@ export function OperatorPage() {
   const lastTagLogAt = useRef(0);
   /** Bumps on release so a late activate(true) cannot leave a coil latched. */
   const holdGen = useRef(0);
+  const touchArms = useRef(new Map<number, TouchArm>());
 
   const applyLiveTags = useCallback((payload: LiveTags) => {
     if (
@@ -463,6 +473,11 @@ export function OperatorPage() {
   }
 
   useEffect(() => {
+    const arms = touchArms.current;
+    return () => clearTouchArms(arms);
+  }, []);
+
+  useEffect(() => {
     const dropHeld = () => {
       const id = heldRef.current;
       if (!id) return;
@@ -615,6 +630,112 @@ export function OperatorPage() {
       feedbackRaw === 1 ||
       feedbackRaw === 'true' ||
       feedbackRaw === '1';
+    const pointerHandlers = (
+      direction?: 'a' | 'b',
+    ): Pick<
+      HTMLAttributes<HTMLElement>,
+      | 'onPointerDown'
+      | 'onPointerMove'
+      | 'onPointerUp'
+      | 'onPointerLeave'
+      | 'onPointerCancel'
+    > => {
+      const commit = () => {
+        void pressCell(cell, direction);
+      };
+      const finish = (event: ReactPointerEvent<HTMLElement>) => {
+        finishCellPointer(
+          cell,
+          event.currentTarget,
+          event.pointerId,
+          direction,
+        );
+      };
+      return {
+        onPointerDown: (event) => {
+          if (isTouchPointer(event.pointerType)) {
+            armTouchPress(
+              touchArms.current,
+              event.pointerId,
+              event.clientX,
+              event.clientY,
+              commit,
+              () => trySetPointerCapture(event.currentTarget, event.pointerId),
+            );
+            return;
+          }
+          event.preventDefault();
+          if (needsLease && !youHold) {
+            commit();
+            return;
+          }
+          trySetPointerCapture(event.currentTarget, event.pointerId);
+          commit();
+        },
+        onPointerMove: (event) => {
+          if (isTouchPointer(event.pointerType)) {
+            if (
+              noteTouchScroll(
+                touchArms.current,
+                event.pointerId,
+                event.clientX,
+                event.clientY,
+              )
+            ) {
+              finish(event);
+            }
+            return;
+          }
+          if (heldRef.current !== cell.id || !holdToRun) return;
+          if (
+            pointerLeftElement(
+              event.currentTarget,
+              event.clientX,
+              event.clientY,
+            )
+          ) {
+            finish(event);
+          }
+        },
+        onPointerUp: (event) => {
+          if (isTouchPointer(event.pointerType)) {
+            const scrolling = noteTouchScroll(
+              touchArms.current,
+              event.pointerId,
+              event.clientX,
+              event.clientY,
+            );
+            const effect = settleTouchPress(
+              touchArms.current,
+              event.pointerId,
+              'up',
+            );
+            if (!scrolling && effect === 'tap') commit();
+            if (effect === 'tap' || effect === 'release' || scrolling) {
+              finish(event);
+            }
+            return;
+          }
+          finish(event);
+        },
+        onPointerLeave: (event) => {
+          if (isTouchPointer(event.pointerType)) return;
+          finish(event);
+        },
+        onPointerCancel: (event) => {
+          if (isTouchPointer(event.pointerType)) {
+            const effect = settleTouchPress(
+              touchArms.current,
+              event.pointerId,
+              'cancel',
+            );
+            if (effect === 'release') finish(event);
+            return;
+          }
+          finish(event);
+        },
+      };
+    };
     const statusChip = (
       <span className="matrix-cell-trailing">
         {cell.feedbackRegister && feedbackIsBool ? (
@@ -684,37 +805,7 @@ export function OperatorPage() {
                   disabled={needsLease && !youHold}
                   aria-label={`${cell.label} ${caption}`}
                   aria-pressed={active}
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    if (needsLease && !youHold) {
-                      void pressCell(cell, dir);
-                      return;
-                    }
-                    trySetPointerCapture(e.currentTarget, e.pointerId);
-                    void pressCell(cell, dir);
-                  }}
-                  onPointerMove={(e) => {
-                    if (heldRef.current !== cell.id || !holdToRun) return;
-                    if (
-                      pointerLeftElement(e.currentTarget, e.clientX, e.clientY)
-                    ) {
-                      finishCellPointer(
-                        cell,
-                        e.currentTarget,
-                        e.pointerId,
-                        dir,
-                      );
-                    }
-                  }}
-                  onPointerUp={(e) =>
-                    finishCellPointer(cell, e.currentTarget, e.pointerId, dir)
-                  }
-                  onPointerLeave={(e) =>
-                    finishCellPointer(cell, e.currentTarget, e.pointerId, dir)
-                  }
-                  onPointerCancel={(e) =>
-                    finishCellPointer(cell, e.currentTarget, e.pointerId, dir)
-                  }
+                  {...pointerHandlers(dir)}
                   onLostPointerCapture={() => {
                     if (heldRef.current === cell.id && holdToRun) {
                       void releaseCell(cell, dir);
@@ -757,30 +848,7 @@ export function OperatorPage() {
           cell.style === 'enable' && 'matrix-enable',
         )}
         disabled={needsLease && !youHold}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          if (needsLease && !youHold) {
-            void pressCell(cell);
-            return;
-          }
-          trySetPointerCapture(e.currentTarget, e.pointerId);
-          void pressCell(cell);
-        }}
-        onPointerMove={(e) => {
-          if (heldRef.current !== cell.id || !holdToRun) return;
-          if (pointerLeftElement(e.currentTarget, e.clientX, e.clientY)) {
-            finishCellPointer(cell, e.currentTarget, e.pointerId);
-          }
-        }}
-        onPointerUp={(e) =>
-          finishCellPointer(cell, e.currentTarget, e.pointerId)
-        }
-        onPointerLeave={(e) =>
-          finishCellPointer(cell, e.currentTarget, e.pointerId)
-        }
-        onPointerCancel={(e) =>
-          finishCellPointer(cell, e.currentTarget, e.pointerId)
-        }
+        {...pointerHandlers()}
         onLostPointerCapture={() => {
           if (heldRef.current === cell.id && holdToRun) {
             void releaseCell(cell);
