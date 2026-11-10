@@ -605,7 +605,7 @@ export function OperatorScreen({ token }: { token: string }) {
         >
           <View className="flex-row items-center gap-1">
             <Text
-              numberOfLines={1}
+              numberOfLines={3}
               className="shrink font-semibold"
               style={{
                 color: palette.foreground,
@@ -698,7 +698,7 @@ export function OperatorScreen({ token }: { token: string }) {
         }}
       >
         <Text
-          numberOfLines={2}
+          numberOfLines={3}
           className="shrink font-semibold"
           style={{
             color: palette.foreground,

@@ -1,12 +1,12 @@
 {
-  "id": "a6197ac9-c951-4c4d-8a68-157819018f0f",
-  "createdAt": "2026-11-10T03:03:23.692Z",
+  "id": "96fbe92d-269e-4526-80a3-568ff399f217",
+  "createdAt": "2026-11-10T04:36:19.593Z",
   "runtimeVersion": "0.0.1",
   "launchAsset": {
-    "hash": "867156dc4b2542011024927a47b9ad48df8230bfbac3d8a10e414662b54d5f29",
-    "key": "index-d0c60c2e2162817a7f3dd16ae76b3396.hbc",
+    "hash": "ee7a6e8434a0079e10ab9b21034fff84be09e683f1c2c44fadb95598b64985fb",
+    "key": "index-99283f9c5849eda6192b30d554c000c5.hbc",
     "contentType": "application/javascript",
-    "url": "https://api.tele-pendant.jahbyte.com/ota/assets/index-d0c60c2e2162817a7f3dd16ae76b3396.hbc"
+    "url": "https://api.tele-pendant.jahbyte.com/ota/assets/index-99283f9c5849eda6192b30d554c000c5.hbc"
   },
   "assets": [],
   "metadata": {},

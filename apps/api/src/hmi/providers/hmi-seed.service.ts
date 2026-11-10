@@ -20,6 +20,26 @@ const DEMO_NODE_IDS: Record<string, string> = {
   'holding.safeState': 'ns=1;s=SafeState',
 };
 
+/** Short Operator names written by earlier seeds → P03A21 drawing words. */
+const P03A21_DRAWING_LABELS: Record<string, string> = {
+  'Teach Pipe Middle': 'Teach Pipe Middle Position',
+  'Teach Welding Pos.': 'OWVA/OWCA Teach Welding Position',
+  'Teach Seam Laser': 'Teach Seam Tracking Laser',
+  'OWFF close/open': 'OWFF Welding Flux Flap close/open',
+  'OWFF Flux Flap close/open': 'OWFF Welding Flux Flap close/open',
+  'Seam Tracking': 'Seam Tracking on/off',
+  'Move Home': 'OWVA, OWCA, OWCVA Move Home Position',
+  'Move Home Position': 'OWVA, OWCA, OWCVA Move Home Position',
+  'OWHA back/fwd': 'OWHA backw./forw.',
+  'Height Reg.': 'OWVA Height Reg. on/off',
+  'Axis fast/slow': 'Axis fast/slowly',
+  'Move Welding Pos.': 'OWVA, OWCA, OWCVA Move Welding Posit.',
+  'Move Welding Position': 'OWVA, OWCA, OWCVA Move Welding Posit.',
+  'OWWAC up/down': 'OWWAC Wire Feed AC up/down',
+  'OWWDC up/down': 'OWWDC Wire Feed DC up/down',
+  'OWCA back/fwd': 'OWCA backw./forw.',
+};
+
 @Injectable()
 export class HmiSeedService implements OnModuleInit {
   private readonly logger = new Logger(HmiSeedService.name);
@@ -45,6 +65,7 @@ export class HmiSeedService implements OnModuleInit {
     } else {
       await this.ensureP03a21Layout();
     }
+    await this.syncP03a21DrawingLabels();
     await this.ensureRuntimeRegisters();
     await this.ensureSafetyRoles();
   }
@@ -67,6 +88,17 @@ export class HmiSeedService implements OnModuleInit {
       'Migrating legacy HMI layout to P03A21 welding pendant demo',
     );
     await this.resetP03a21Demo();
+  }
+
+  /** Rename shortened demo labels in place. Custom names are left alone. */
+  private async syncP03a21DrawingLabels(): Promise<void> {
+    const rows = await this.cells.find();
+    for (const cell of rows) {
+      const next = P03A21_DRAWING_LABELS[cell.label];
+      if (!next) continue;
+      cell.label = next;
+      await this.cells.save(cell);
+    }
   }
 
   /** Safety + crane leftovers the poller still resolves by name. */
@@ -356,7 +388,7 @@ export class HmiSeedService implements OnModuleInit {
     };
 
     const cellDefs: CellDef[] = [
-      // Row 0 — short labels so the 3-col Operator matrix fits.
+      // Row 0 — drawing words. The matrix wraps them; it does not shorten them.
       {
         row: 0,
         col: 0,
@@ -368,7 +400,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 0,
         col: 1,
-        label: 'Teach Pipe Middle',
+        label: 'Teach Pipe Middle Position',
         style: 'pushbutton',
         primary: teachPipeDi,
         feedback: teachPipeLamp,
@@ -376,7 +408,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 0,
         col: 2,
-        label: 'Teach Welding Pos.',
+        label: 'OWVA/OWCA Teach Welding Position',
         style: 'pushbutton',
         primary: teachWeldDi,
         feedback: teachWeldLamp,
@@ -385,7 +417,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 1,
         col: 0,
-        label: 'Teach Seam Laser',
+        label: 'Teach Seam Tracking Laser',
         style: 'pushbutton',
         primary: teachSeamDi,
         feedback: teachSeamLamp,
@@ -393,7 +425,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 1,
         col: 1,
-        label: 'OWFF close/open',
+        label: 'OWFF Welding Flux Flap close/open',
         style: 'selector',
         primary: owffClose,
         secondary: owffOpen,
@@ -404,7 +436,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 1,
         col: 2,
-        label: 'Seam Tracking',
+        label: 'Seam Tracking on/off',
         style: 'pushbutton',
         primary: seamTrackDi,
         feedback: seamTrackLamp,
@@ -413,7 +445,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 2,
         col: 0,
-        label: 'Move Home',
+        label: 'OWVA, OWCA, OWCVA Move Home Position',
         style: 'pushbutton',
         primary: moveHomeDi,
         feedback: moveHomeLamp,
@@ -431,7 +463,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 2,
         col: 2,
-        label: 'OWHA back/fwd',
+        label: 'OWHA backw./forw.',
         style: 'selector',
         primary: owhaBack,
         secondary: owhaFwd,
@@ -442,7 +474,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 3,
         col: 0,
-        label: 'Height Reg.',
+        label: 'OWVA Height Reg. on/off',
         style: 'pushbutton',
         primary: heightRegDi,
         feedback: heightRegLamp,
@@ -450,7 +482,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 3,
         col: 1,
-        label: 'Axis fast/slow',
+        label: 'Axis fast/slowly',
         style: 'pushbutton',
         primary: axisFastDi,
         feedback: axisFastLamp,
@@ -469,7 +501,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 4,
         col: 0,
-        label: 'Move Welding Pos.',
+        label: 'OWVA, OWCA, OWCVA Move Welding Posit.',
         style: 'pushbutton',
         primary: moveWeldDi,
         feedback: moveWeldLamp,
@@ -477,7 +509,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 4,
         col: 1,
-        label: 'OWWAC up/down',
+        label: 'OWWAC Wire Feed AC up/down',
         style: 'selector',
         primary: owwacUp,
         secondary: owwacDown,
@@ -487,7 +519,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 4,
         col: 2,
-        label: 'OWWDC up/down',
+        label: 'OWWDC Wire Feed DC up/down',
         style: 'selector',
         primary: owwdcUp,
         secondary: owwdcDown,
@@ -513,7 +545,7 @@ export class HmiSeedService implements OnModuleInit {
       {
         row: 5,
         col: 2,
-        label: 'OWCA back/fwd',
+        label: 'OWCA backw./forw.',
         style: 'selector',
         primary: owcaBack,
         secondary: owcaFwd,
@@ -536,7 +568,7 @@ export class HmiSeedService implements OnModuleInit {
           statusRegister: null,
           isMotion,
           requiresSafeAction: def.requiresSafeAction ?? false,
-          // Pendant uses Axis fast/slow cell; hide the separate jog strip.
+          // Pendant uses the Axis fast/slowly cell; hide the separate jog strip.
           variableSpeed: def.variableSpeed ?? false,
           slowSpeedPct: 30,
           fastSpeedPct: 100,

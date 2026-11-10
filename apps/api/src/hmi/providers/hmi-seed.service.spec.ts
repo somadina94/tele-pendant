@@ -94,6 +94,22 @@ describe('HmiSeedService', () => {
     expect(reset).not.toHaveBeenCalled();
   });
 
+  it('renames shortened P03A21 labels and leaves custom names', async () => {
+    const { service, cells } = makeService({
+      cellCount: 12,
+      selectorCount: 3,
+      activeBg: { name: 'demo-p03a21', active: true },
+    });
+    const shortened = { id: 'a', label: 'OWHA back/fwd' };
+    const custom = { id: 'b', label: 'My custom jog' };
+    cells.find.mockResolvedValue([shortened, custom]);
+    await service.onModuleInit();
+    expect(shortened.label).toBe('OWHA backw./forw.');
+    expect(custom.label).toBe('My custom jog');
+    expect(cells.save).toHaveBeenCalledTimes(1);
+    expect(cells.save).toHaveBeenCalledWith(shortened);
+  });
+
   it('migrates legacy crane layouts to P03A21 on boot', async () => {
     const { service } = makeService({
       cellCount: 12,

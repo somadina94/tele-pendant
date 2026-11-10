@@ -380,6 +380,9 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
+.operator-shell[data-pendant='p03a21'] .matrix-cell-label {
+  -webkit-line-clamp: 3;
+}
 .matrix-cell-trailing {
   @apply flex shrink-0 items-center gap-1;
 }
