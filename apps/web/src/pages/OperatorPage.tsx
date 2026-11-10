@@ -776,7 +776,7 @@ export function OperatorPage() {
         <div
           key={cell.id}
           className={cn(
-            'matrix-cell matrix-selector flex h-full min-h-11 flex-col gap-0.5',
+            'matrix-cell matrix-selector flex h-full min-h-11 flex-col gap-0.5 max-md:gap-px max-md:px-[3px] max-md:py-0.5 max-md:text-[6px]',
             `state-${cellState}`,
           )}
           data-cell-state={cellState}
@@ -799,7 +799,7 @@ export function OperatorPage() {
                   variant={sideVariant}
                   size="sm"
                   className={cn(
-                    'matrix-selector-side h-9 min-h-9 flex-1 px-1.5 text-[11px]',
+                    'matrix-selector-side h-9 min-h-9 flex-1 px-1.5 text-[11px] max-md:px-[3px] max-md:text-[5.5px]',
                     active && 'is-active',
                   )}
                   disabled={needsLease && !youHold}
@@ -821,7 +821,7 @@ export function OperatorPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="matrix-selector-center h-9 min-h-9 px-1.5"
+                className="matrix-selector-center h-9 min-h-9 px-1.5 max-md:px-[3px]"
                 aria-label={`${cell.label} center`}
                 onClick={() => void clearSelector(cell)}
               >
@@ -842,7 +842,7 @@ export function OperatorPage() {
         data-touch-min="44"
         data-stop-dock={isEstop ? 'true' : undefined}
         className={cn(
-          'matrix-cell flex h-full min-h-11 flex-row items-center justify-between gap-1.5 whitespace-normal',
+          'matrix-cell flex h-full min-h-11 flex-row items-center justify-between gap-1.5 whitespace-normal max-md:gap-[3px] max-md:px-1 max-md:py-[3px] max-md:text-[6px]',
           `state-${cellState}`,
           isEstop && 'estop',
           cell.style === 'enable' && 'matrix-enable',

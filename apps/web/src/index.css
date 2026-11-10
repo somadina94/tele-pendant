@@ -562,6 +562,29 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
+  .matrix-cell {
+    padding-inline: 0.25rem;
+    padding-block: 3px;
+    font-size: 6px;
+  }
+  .matrix-selector {
+    padding-inline: 3px;
+    padding-block: 2px;
+  }
+  .matrix-selector-side {
+    font-size: 5.5px;
+  }
+  .matrix-cell-meta {
+    font-size: 5px;
+  }
+  .matrix-cell-state {
+    padding-inline: 2px;
+    padding-block: 1px;
+    font-size: 4.5px;
+  }
+  .matrix-stop-dock .matrix-cell.estop {
+    font-size: 7px;
+  }
   .matrix-cell-label {
     -webkit-line-clamp: 2;
   }

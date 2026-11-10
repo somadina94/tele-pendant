@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  ComponentProps,
+  MutableRefObject,
+  ReactNode,
+  RefObject,
+} from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -10,6 +16,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useQuery } from '@tanstack/react-query';
 import {
   cellRequiresControlLease,
@@ -43,6 +50,7 @@ import { CraneMimic } from '../crane-mimic';
 import { ESTOP, matrixCellStatePalette } from '../hmi-styles';
 import { useTheme } from '../theme';
 import { Card, showErrorAlert } from '../ui';
+import { syncFingers, touchesStillDown, type Finger } from '../multi-touch';
 
 type SafetySnap = {
   mode: string;
@@ -51,6 +59,106 @@ type SafetySnap = {
   watchdogOk?: boolean;
   control?: ControlLease;
 };
+
+type Hold = {
+  cellId: string;
+  direction: 'a' | 'b' | null;
+  gen: number;
+};
+
+function holdKey(cellId: string, direction?: 'a' | 'b' | null): string {
+  return direction ? `${cellId}:${direction}` : cellId;
+}
+
+function cellIsHeld(
+  holds: Map<string, Hold>,
+  cellId: string,
+  direction?: 'a' | 'b',
+): boolean {
+  if (direction) return holds.has(holdKey(cellId, direction));
+  for (const key of holds.keys()) {
+    if (key === cellId || key.startsWith(`${cellId}:`)) return true;
+  }
+  return false;
+}
+
+type TargetBox = {
+  cell: Cell;
+  direction?: 'a' | 'b';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type Measurable = {
+  measureLayout: (
+    relativeToNativeNode: Measurable,
+    onSuccess: (x: number, y: number, width: number, height: number) => void,
+    onFail: () => void,
+  ) => void;
+};
+
+function TouchTarget({
+  targetKey,
+  cell,
+  direction,
+  boardRef,
+  targets,
+  accessibilityLabel,
+  className,
+  style,
+  children,
+}: {
+  targetKey: string;
+  cell: Cell;
+  direction?: 'a' | 'b';
+  boardRef: RefObject<Measurable | null>;
+  targets: MutableRefObject<Map<string, TargetBox>>;
+  accessibilityLabel: string;
+  className?: string;
+  style?: ComponentProps<typeof View>['style'];
+  children: ReactNode;
+}) {
+  const ref = useRef<Measurable | null>(null);
+  const measure = () => {
+    const node = ref.current;
+    const board = boardRef.current;
+    if (!node || !board) return;
+    node.measureLayout(
+      board,
+      (x, y, width, height) => {
+        targets.current.set(targetKey, {
+          cell,
+          direction,
+          x,
+          y,
+          width,
+          height,
+        });
+      },
+      () => undefined,
+    );
+  };
+  useEffect(
+    () => () => {
+      targets.current.delete(targetKey);
+    },
+    [targetKey, targets],
+  );
+  return (
+    <View
+      ref={ref as never}
+      onLayout={measure}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      className={className}
+      style={style}
+    >
+      {children}
+    </View>
+  );
+}
 
 function statusTone(mode: string): 'ok' | 'warn' | 'danger' {
   if (mode === 'safe_state' || mode === 'estop' || mode === 'e_stop') {
@@ -77,10 +185,11 @@ export function OperatorScreen({ token }: { token: string }) {
   const { control, youHold, applyControl } = useControlLease();
   const controlRef = useRef(control);
   const [pin, setPin] = useState('');
-  const [holdingId, setHoldingId] = useState<string | null>(null);
-  const [holdingDirection, setHoldingDirection] = useState<'a' | 'b' | null>(
-    null,
-  );
+  const holdsRef = useRef(new Map<string, Hold>());
+  const [heldVersion, setHeldVersion] = useState(0);
+  const bumpHolds = useCallback(() => {
+    setHeldVersion((version) => version + 1);
+  }, []);
   const [jogSpeed, setJogSpeed] = useState<'slow' | 'fast'>('fast');
   const jogSpeedRef = useRef<'slow' | 'fast'>('fast');
   const [safety, setSafety] = useState<SafetySnap>({ mode: 'unknown' });
@@ -98,14 +207,23 @@ export function OperatorScreen({ token }: { token: string }) {
   const [photoOk, setPhotoOk] = useState(true);
   const [liveFallback, setLiveFallback] = useState(false);
   const socketRef = useRef<Socket | null>(null);
-  const heldId = useRef<string | null>(null);
-  const heldDirection = useRef<'a' | 'b' | null>(null);
-  /** Bumps on release so in-flight activate(true) cannot leave a coil latched. */
-  const holdGen = useRef(0);
-  const activatingId = useRef<string | null>(null);
-  /** Release arrived while activate(true) was still in flight — finish after pressCell. */
-  const releaseAfterActivate = useRef<string | null>(null);
-  const releaseAfterDirection = useRef<'a' | 'b' | null>(null);
+  const inflight = useRef(new Set<string>());
+  const releaseWaiting = useRef(new Map<string, 'a' | 'b' | null>());
+  const fingers = useRef(new Map<number, Finger>());
+  const targets = useRef(
+    new Map<
+      string,
+      {
+        cell: Cell;
+        direction?: 'a' | 'b';
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }
+    >(),
+  );
+  const boardRef = useRef<Measurable | null>(null);
   const tagOrderRef = useRef<{ lastSeq: number; lastAt: string | null }>({
     lastSeq: 0,
     lastAt: null,
@@ -226,35 +344,50 @@ export function OperatorScreen({ token }: { token: string }) {
     [token],
   );
 
-  const finishMotionRelease = useCallback(
-    (cellId: string, direction?: 'a' | 'b' | null) => {
-      releaseAfterActivate.current = null;
-      releaseAfterDirection.current = null;
-      heldDirection.current = null;
-      setHoldingId((current) => (current === cellId ? null : current));
-      setHoldingDirection(null);
-      releaseDeadman();
-      // Fire-and-forget — awaiting coil-off stacked Modbus behind the next press.
-      void dropMotionCoil(cellId, direction);
+  const leaseStillHeld = useCallback(
+    (exceptKey?: string) => {
+      for (const [key, hold] of holdsRef.current) {
+        if (key === exceptKey) continue;
+        const cell = layoutQuery.data?.cells.find(
+          (row) => row.id === hold.cellId,
+        );
+        if (cell && cellRequiresControlLease(cell)) return true;
+      }
+      return false;
     },
-    [dropMotionCoil, releaseDeadman],
+    [layoutQuery.data?.cells],
   );
 
-  // Match the local working hold path: WS deadman pulse only (no HTTP flood).
+  const finishMotionRelease = useCallback(
+    (key: string, cellId: string, direction?: 'a' | 'b' | null) => {
+      releaseWaiting.current.delete(key);
+      if (!leaseStillHeld()) releaseDeadman();
+      void dropMotionCoil(cellId, direction);
+    },
+    [dropMotionCoil, leaseStillHeld, releaseDeadman],
+  );
+
+  // Pulse deadman while any jog is held. Enable can stay down beside it.
   useEffect(() => {
-    if (!holdingId) return;
-    const heldCell = layoutQuery.data?.cells.find((c) => c.id === holdingId);
-    if (!heldCell || !cellRequiresControlLease(heldCell)) return;
+    void heldVersion;
+    const needsPulse = [...holdsRef.current.values()].some((hold) => {
+      const cell = layoutQuery.data?.cells.find(
+        (row) => row.id === hold.cellId,
+      );
+      return Boolean(cell && cellRequiresControlLease(cell));
+    });
+    if (!needsPulse) return;
     const pulse = () => {
       socketRef.current?.emit('deadman.pulse');
     };
     pulse();
     const id = setInterval(pulse, 400);
     return () => clearInterval(id);
-  }, [holdingId, layoutQuery.data?.cells]);
+  }, [heldVersion, layoutQuery.data?.cells]);
 
   const pressCell = async (cell: Cell, direction?: 'a' | 'b') => {
-    const pressGen = holdGen.current;
+    const key = holdKey(cell.id, direction);
+    const pressGen = holdsRef.current.get(key)?.gen ?? 0;
     const needsLease = cellRequiresControlLease(cell);
     const holdToRun = cellUsesHoldToRun(cell);
     if (needsLease && !controlRef.current?.youHold) {
@@ -267,15 +400,16 @@ export function OperatorScreen({ token }: { token: string }) {
       return;
     }
     if (holdToRun) {
-      heldId.current = cell.id;
-      heldDirection.current = direction ?? null;
-      setHoldingId(cell.id);
-      setHoldingDirection(direction ?? null);
-      releaseAfterActivate.current = null;
-      releaseAfterDirection.current = null;
+      holdsRef.current.set(key, {
+        cellId: cell.id,
+        direction: direction ?? null,
+        gen: pressGen,
+      });
+      releaseWaiting.current.delete(key);
+      bumpHolds();
       void hapticHoldStart();
     }
-    activatingId.current = cell.id;
+    inflight.current.add(key);
     const speed =
       cell.isMotion && (cell.variableSpeed ?? true)
         ? jogSpeedRef.current
@@ -304,51 +438,55 @@ export function OperatorScreen({ token }: { token: string }) {
           terror,
         ),
       );
-      if (heldId.current === cell.id) {
-        heldId.current = null;
-        heldDirection.current = null;
-        setHoldingId(null);
-        setHoldingDirection(null);
-        if (needsLease) releaseDeadman();
+      const held = holdsRef.current.get(key);
+      if (held && held.gen === pressGen) {
+        holdsRef.current.delete(key);
+        bumpHolds();
+        if (needsLease && !leaseStillHeld()) releaseDeadman();
       }
-      releaseAfterActivate.current = null;
-      releaseAfterDirection.current = null;
+      releaseWaiting.current.delete(key);
       return;
     } finally {
-      if (activatingId.current === cell.id) {
-        activatingId.current = null;
-      }
+      inflight.current.delete(key);
     }
-    if (holdToRun && releaseAfterActivate.current === cell.id) {
-      finishMotionRelease(cell.id, releaseAfterDirection.current);
+    if (holdToRun && releaseWaiting.current.has(key)) {
+      const waitingDirection = releaseWaiting.current.get(key);
+      finishMotionRelease(key, cell.id, waitingDirection);
       return;
     }
-    if (
-      holdToRun &&
-      (heldId.current !== cell.id || holdGen.current !== pressGen)
-    ) {
+    const held = holdsRef.current.get(key);
+    if (holdToRun && (!held || held.gen !== pressGen)) {
       void dropMotionCoil(cell.id, direction);
-      if (heldId.current === null) releaseDeadman();
+      if (!leaseStillHeld()) releaseDeadman();
     }
   };
 
   const releaseCell = (cell: Cell, direction?: 'a' | 'b') => {
     if (!cellUsesHoldToRun(cell)) return;
-    const mine = heldId.current === cell.id;
-    const heldDir = heldDirection.current;
-    if (direction && heldDir && direction !== heldDir) return;
-    if (heldId.current === cell.id) {
-      heldId.current = null;
-      heldDirection.current = null;
+    const key = holdKey(cell.id, direction);
+    const held = holdsRef.current.get(key);
+    if (!held) return;
+    holdsRef.current.delete(key);
+    bumpHolds();
+    if (cell.style === 'enable') {
+      for (const [otherKey, hold] of [...holdsRef.current.entries()]) {
+        const other = layoutQuery.data?.cells.find(
+          (row) => row.id === hold.cellId,
+        );
+        if (!other || !cellRequiresControlLease(other)) continue;
+        holdsRef.current.delete(otherKey);
+        if (inflight.current.has(otherKey)) {
+          releaseWaiting.current.set(otherKey, hold.direction);
+          continue;
+        }
+        finishMotionRelease(otherKey, other.id, hold.direction);
+      }
     }
-    if (!mine) return;
-    holdGen.current += 1;
-    if (activatingId.current === cell.id) {
-      releaseAfterActivate.current = cell.id;
-      releaseAfterDirection.current = direction ?? heldDir;
+    if (inflight.current.has(key)) {
+      releaseWaiting.current.set(key, direction ?? held.direction);
       return;
     }
-    finishMotionRelease(cell.id, direction ?? heldDir);
+    finishMotionRelease(key, cell.id, direction ?? held.direction);
   };
 
   const clearSelector = async (cell: Cell) => {
@@ -362,26 +500,30 @@ export function OperatorScreen({ token }: { token: string }) {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       if (next !== 'active') {
-        const id = heldId.current;
-        const dir = heldDirection.current;
-        heldId.current = null;
-        heldDirection.current = null;
-        holdGen.current += 1;
-        setHoldingId(null);
-        setHoldingDirection(null);
+        const held = [...holdsRef.current.values()];
+        holdsRef.current.clear();
+        releaseWaiting.current.clear();
+        fingers.current.clear();
+        bumpHolds();
         releaseDeadman();
-        if (!id) return;
-        const cell = layoutQuery.data?.cells.find((row) => row.id === id);
-        if (!cell || !cellUsesHoldToRun(cell)) return;
-        void apiPost(
-          `/hmi/cells/${id}/activate`,
-          { value: false, ...(dir ? { direction: dir } : {}) },
-          token,
-        );
+        for (const hold of held) {
+          const cell = layoutQuery.data?.cells.find(
+            (row) => row.id === hold.cellId,
+          );
+          if (!cell || !cellUsesHoldToRun(cell)) continue;
+          void apiPost(
+            `/hmi/cells/${hold.cellId}/activate`,
+            {
+              value: false,
+              ...(hold.direction ? { direction: hold.direction } : {}),
+            },
+            token,
+          );
+        }
       }
     });
     return () => sub.remove();
-  }, [layoutQuery.data?.cells, releaseDeadman, token]);
+  }, [bumpHolds, layoutQuery.data?.cells, releaseDeadman, token]);
 
   const resetEStop = async () => {
     try {
@@ -478,6 +620,64 @@ export function OperatorScreen({ token }: { token: string }) {
     liveFallback,
   });
 
+  const pressCellRef = useRef(pressCell);
+  const releaseCellRef = useRef(releaseCell);
+  pressCellRef.current = pressCell;
+  releaseCellRef.current = releaseCell;
+
+  const applyTouches = useCallback(
+    (
+      touches: { id: number; x: number; y: number }[],
+      lifted: { id: number; x: number; y: number }[] = [],
+    ) => {
+      const { press, release } = syncFingers(
+        fingers.current,
+        touchesStillDown(touches, lifted),
+        (x, y) => {
+          for (const [key, target] of targets.current) {
+            if (
+              x >= target.x &&
+              y >= target.y &&
+              x <= target.x + target.width &&
+              y <= target.y + target.height
+            ) {
+              return key;
+            }
+          }
+          return null;
+        },
+      );
+      for (const key of release) {
+        const target = targets.current.get(key);
+        if (target) releaseCellRef.current(target.cell, target.direction);
+      }
+      for (const key of press) {
+        const target = targets.current.get(key);
+        if (target) void pressCellRef.current(target.cell, target.direction);
+      }
+    },
+    [],
+  );
+
+  const matrixGesture = useMemo(
+    () =>
+      Gesture.Manual()
+        .runOnJS(true)
+        .onTouchesDown((event) => {
+          applyTouches(event.allTouches);
+        })
+        .onTouchesMove((event) => {
+          applyTouches(event.allTouches);
+        })
+        .onTouchesUp((event) => {
+          applyTouches(event.allTouches, event.changedTouches);
+        })
+        .onTouchesCancelled((event) => {
+          applyTouches(event.allTouches, event.changedTouches);
+        }),
+    [applyTouches],
+  );
+
   if (layoutQuery.isError) {
     return (
       <View className="flex-1 items-center justify-center bg-background p-4">
@@ -507,14 +707,16 @@ export function OperatorScreen({ token }: { token: string }) {
         cell.style === 'estop' || cell.label.trim().toUpperCase() === 'STOP',
     ) ?? null;
 
-  const renderMobileCell = (cell: Cell) => {
+  const compactButtons = windowWidth < 768;
+
+  const renderMobileCell = (cell: Cell, multi = false) => {
     const isEstop = cell.style === 'estop';
     const needsLease = cellRequiresControlLease(cell);
     const holdToRun = cellUsesHoldToRun(cell);
     const cellState = resolveMatrixCellUiState({
       style: cell.style,
       isMotion: cell.isMotion,
-      isHolding: holdingId === cell.id,
+      isHolding: cellIsHeld(holdsRef.current, cell.id),
       safety,
       tags,
       statusRegisterName: cell.statusRegister?.name,
@@ -570,7 +772,11 @@ export function OperatorScreen({ token }: { token: string }) {
         ) : null}
         <Text
           numberOfLines={1}
-          className="rounded px-1 py-0.5 text-[9px] font-bold uppercase"
+          className={`rounded font-bold uppercase ${
+            compactButtons
+              ? 'px-[2.5px] py-[1.25px] text-[5.6px]'
+              : 'px-1 py-0.5 text-[9px]'
+          }`}
           style={{
             color: palette.foreground,
             backgroundColor: palette.chip,
@@ -585,17 +791,19 @@ export function OperatorScreen({ token }: { token: string }) {
       const { sideA, sideB } = parseSelectorSideLabels(cell.label);
       const latch = !holdToRun;
       const aActive =
-        holdingId === cell.id && holdingDirection === 'a'
-          ? true
-          : Boolean(tagValueForRegister(tags, cell.primaryRegister?.name));
+        cellIsHeld(holdsRef.current, cell.id, 'a') ||
+        Boolean(tagValueForRegister(tags, cell.primaryRegister?.name));
       const bActive =
-        holdingId === cell.id && holdingDirection === 'b'
-          ? true
-          : Boolean(tagValueForRegister(tags, cell.secondaryRegister?.name));
+        cellIsHeld(holdsRef.current, cell.id, 'b') ||
+        Boolean(tagValueForRegister(tags, cell.secondaryRegister?.name));
       return (
         <View
           key={cell.id}
-          className="w-full gap-0.5 rounded-md border px-1.5 py-1"
+          className={`w-full rounded-md border ${
+            compactButtons
+              ? 'gap-[1.25px] px-[3.75px] py-[2.5px]'
+              : 'gap-0.5 px-1.5 py-1'
+          }`}
           style={{
             borderColor: palette.border,
             backgroundColor: palette.background,
@@ -609,10 +817,22 @@ export function OperatorScreen({ token }: { token: string }) {
               className="shrink font-semibold"
               style={{
                 color: palette.foreground,
-                fontSize: isP03a21 ? 11 : 13,
+                fontSize: compactButtons
+                  ? isP03a21
+                    ? 6.9
+                    : 8.1
+                  : isP03a21
+                    ? 11
+                    : 13,
                 flexGrow: 1,
                 flexShrink: 1,
-                lineHeight: isP03a21 ? 14 : 16,
+                lineHeight: compactButtons
+                  ? isP03a21
+                    ? 8.8
+                    : 10
+                  : isP03a21
+                    ? 14
+                    : 16,
               }}
             >
               {cell.label}
@@ -623,13 +843,51 @@ export function OperatorScreen({ token }: { token: string }) {
             {(['a', 'b'] as const).map((dir) => {
               const caption = dir === 'a' ? sideA : sideB;
               const active = dir === 'a' ? aActive : bActive;
-              return (
+              return multi ? (
+                <TouchTarget
+                  key={dir}
+                  targetKey={holdKey(cell.id, dir)}
+                  cell={cell}
+                  direction={dir}
+                  boardRef={boardRef}
+                  targets={targets}
+                  accessibilityLabel={`${cell.label} ${caption}`}
+                  className={`flex-1 items-center justify-center rounded-md border ${
+                    compactButtons ? 'px-[2.5px]' : 'px-1'
+                  }`}
+                  style={{
+                    minHeight: 36,
+                    borderColor: palette.border,
+                    backgroundColor: active ? palette.chip : 'transparent',
+                    opacity: needsLease && !youHold ? 0.5 : 1,
+                  }}
+                >
+                  <Text
+                    className="font-bold uppercase"
+                    numberOfLines={1}
+                    style={{
+                      color: palette.foreground,
+                      fontSize: compactButtons
+                        ? isP03a21
+                          ? 6.3
+                          : 7.5
+                        : isP03a21
+                          ? 10
+                          : 12,
+                    }}
+                  >
+                    {caption}
+                  </Text>
+                </TouchTarget>
+              ) : (
                 <Pressable
                   key={dir}
                   accessibilityRole="button"
                   accessibilityLabel={`${cell.label} ${caption}`}
                   accessibilityState={{ disabled: needsLease && !youHold }}
-                  className="flex-1 items-center justify-center rounded-md border px-1"
+                  className={`flex-1 items-center justify-center rounded-md border ${
+                    compactButtons ? 'px-[2.5px]' : 'px-1'
+                  }`}
                   style={{
                     minHeight: 36,
                     borderColor: palette.border,
@@ -650,7 +908,13 @@ export function OperatorScreen({ token }: { token: string }) {
                     numberOfLines={1}
                     style={{
                       color: palette.foreground,
-                      fontSize: isP03a21 ? 10 : 12,
+                      fontSize: compactButtons
+                        ? isP03a21
+                          ? 6.3
+                          : 7.5
+                        : isP03a21
+                          ? 10
+                          : 12,
                     }}
                   >
                     {caption}
@@ -662,7 +926,9 @@ export function OperatorScreen({ token }: { token: string }) {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`${cell.label} center`}
-                className="items-center justify-center rounded-md border px-1.5"
+                className={`items-center justify-center rounded-md border ${
+                  compactButtons ? 'px-[3.75px]' : 'px-1.5'
+                }`}
                 style={{ minHeight: 36, borderColor: palette.border }}
                 onPress={() => void clearSelector(cell)}
               >
@@ -674,20 +940,75 @@ export function OperatorScreen({ token }: { token: string }) {
       );
     }
 
+    const face = (
+      <Text
+        numberOfLines={3}
+        className="shrink font-semibold"
+        style={{
+          color: palette.foreground,
+          fontSize: compactButtons
+            ? isP03a21
+              ? 7.5
+              : 8.8
+            : isP03a21
+              ? 12
+              : 14,
+          flexGrow: 1,
+          flexShrink: 1,
+          lineHeight: compactButtons
+            ? isP03a21
+              ? 10
+              : 11.3
+            : isP03a21
+              ? 15
+              : 18,
+        }}
+      >
+        {cell.label}
+      </Text>
+    );
+    const faceStyle = {
+      minHeight: 44,
+      flex: 1,
+      backgroundColor: palette.background,
+      borderColor: palette.border,
+      borderWidth: cellState === 'running' && !isEstop ? 2 : 1,
+    } as const;
+
+    if (multi) {
+      return (
+        <TouchTarget
+          key={cell.id}
+          targetKey={holdKey(cell.id)}
+          cell={cell}
+          boardRef={boardRef}
+          targets={targets}
+          accessibilityLabel={cell.label}
+          className={`w-full flex-row items-center rounded-md border ${
+            compactButtons
+              ? 'gap-[3.75px] px-[5px] py-[3.75px]'
+              : 'gap-1 px-2 py-1.5'
+          }`}
+          style={faceStyle}
+        >
+          {face}
+          {statusTrailing}
+        </TouchTarget>
+      );
+    }
+
     return (
       <Pressable
         key={cell.id}
         accessibilityRole="button"
         accessibilityLabel={cell.label}
         accessibilityHint={`${stateCode}: ${stateLabel}`}
-        className="w-full flex-row items-center gap-1 rounded-md border px-2 py-1.5"
-        style={{
-          minHeight: 44,
-          flex: 1,
-          backgroundColor: palette.background,
-          borderColor: palette.border,
-          borderWidth: cellState === 'running' && !isEstop ? 2 : 1,
-        }}
+        className={`w-full flex-row items-center rounded-md border ${
+          compactButtons
+            ? 'gap-[3.75px] px-[5px] py-[3.75px]'
+            : 'gap-1 px-2 py-1.5'
+        }`}
+        style={faceStyle}
         disabled={needsLease && !youHold}
         onPressIn={() => {
           if (needsLease && !youHold) return;
@@ -697,19 +1018,7 @@ export function OperatorScreen({ token }: { token: string }) {
           void releaseCell(cell);
         }}
       >
-        <Text
-          numberOfLines={3}
-          className="shrink font-semibold"
-          style={{
-            color: palette.foreground,
-            fontSize: isP03a21 ? 12 : 14,
-            flexGrow: 1,
-            flexShrink: 1,
-            lineHeight: isP03a21 ? 15 : 18,
-          }}
-        >
-          {cell.label}
-        </Text>
+        {face}
         {statusTrailing}
       </Pressable>
     );
@@ -730,7 +1039,7 @@ export function OperatorScreen({ token }: { token: string }) {
             <Text className="text-sm text-foreground">
               {t('safety')}: <Text className="font-semibold">{safetyMode}</Text>
             </Text>
-            {safety.deadmanActive || holdingId ? (
+            {safety.deadmanActive || holdsRef.current.size > 0 ? (
               <View className="rounded-full border border-border bg-muted px-2 py-0.5">
                 <Text className="text-[10px] font-medium text-foreground">
                   {t('deadmanHold')}
@@ -1004,62 +1313,67 @@ export function OperatorScreen({ token }: { token: string }) {
                 contentContainerStyle={{ paddingBottom: 8 }}
                 showsVerticalScrollIndicator={false}
               >
-                {grid && matrixCols > 1
-                  ? grid.rows.map((row, rowIdx) => (
-                      <View
-                        key={`row-${rowIdx}`}
-                        className="flex-row"
-                        style={{
-                          gap: matrixGap,
-                          marginBottom: matrixGap,
-                          alignItems: 'stretch',
-                        }}
-                      >
-                        {row.map((cell, colIdx) => {
-                          const isStop =
-                            Boolean(cell) &&
-                            Boolean(stopCell) &&
-                            (cell!.id === stopCell!.id ||
-                              cell!.style === 'estop');
-                          if (!cell || isStop) {
-                            return (
-                              <View
-                                key={`hole-${rowIdx}-${colIdx}`}
-                                style={{ flex: 1, minWidth: 0 }}
-                                accessibilityElementsHidden
-                              />
-                            );
-                          }
-                          return (
-                            <View
-                              key={cell.id}
-                              style={{ flex: 1, minWidth: 0 }}
-                            >
-                              {renderMobileCell(cell)}
-                            </View>
-                          );
-                        })}
-                      </View>
-                    ))
-                  : grid?.rows.flatMap((row) =>
-                      row.flatMap((cell) => {
-                        if (!cell) return [];
-                        if (
-                          stopCell &&
-                          (cell.id === stopCell.id || cell.style === 'estop')
-                        ) {
-                          return [];
-                        }
-                        return [
+                <GestureDetector gesture={matrixGesture}>
+                  <View ref={boardRef as never} collapsable={false}>
+                    {grid && matrixCols > 1
+                      ? grid.rows.map((row, rowIdx) => (
                           <View
-                            key={cell.id}
-                            style={{ width: '100%', marginBottom: 6 }}
+                            key={`row-${rowIdx}`}
+                            className="flex-row"
+                            style={{
+                              gap: matrixGap,
+                              marginBottom: matrixGap,
+                              alignItems: 'stretch',
+                            }}
                           >
-                            {renderMobileCell(cell)}
-                          </View>,
-                        ];
-                      }),
-                    )}
+                            {row.map((cell, colIdx) => {
+                              const isStop =
+                                Boolean(cell) &&
+                                Boolean(stopCell) &&
+                                (cell!.id === stopCell!.id ||
+                                  cell!.style === 'estop');
+                              if (!cell || isStop) {
+                                return (
+                                  <View
+                                    key={`hole-${rowIdx}-${colIdx}`}
+                                    style={{ flex: 1, minWidth: 0 }}
+                                    accessibilityElementsHidden
+                                  />
+                                );
+                              }
+                              return (
+                                <View
+                                  key={cell.id}
+                                  style={{ flex: 1, minWidth: 0 }}
+                                >
+                                  {renderMobileCell(cell, true)}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        ))
+                      : grid?.rows.flatMap((row) =>
+                          row.flatMap((cell) => {
+                            if (!cell) return [];
+                            if (
+                              stopCell &&
+                              (cell.id === stopCell.id ||
+                                cell.style === 'estop')
+                            ) {
+                              return [];
+                            }
+                            return [
+                              <View
+                                key={cell.id}
+                                style={{ width: '100%', marginBottom: 6 }}
+                              >
+                                {renderMobileCell(cell, true)}
+                              </View>,
+                            ];
+                          }),
+                        )}
+                  </View>
+                </GestureDetector>
               </ScrollView>
             </HelpTip>
           </HelpTip>
