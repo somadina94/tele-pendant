@@ -575,12 +575,10 @@ export function OperatorPage() {
     return <PageSpinner label={t('operator')} />;
   }
 
-  const isP03a21 =
-    Boolean(layout.background?.name?.includes('p03a21')) ||
-    layout.cells.some((cell) => cell.style === 'selector');
-  // Crane mimic/readouts only when the active screen is a crane layout.
+  // Plant chrome follows the active background tab — not the shared cell set.
+  const isPendantScreen = Boolean(layout.background?.name?.includes('p03a21'));
   const showCraneMetrics =
-    !isP03a21 &&
+    !isPendantScreen &&
     (tags?.hoistHeightMm != null ||
       tags?.values?.['holding.hoistHeightMm'] != null);
 
@@ -660,11 +658,11 @@ export function OperatorPage() {
         <div
           key={cell.id}
           className={cn(
-            'matrix-cell matrix-selector flex h-full min-h-0 flex-col gap-0.5',
+            'matrix-cell matrix-selector flex h-full min-h-11 flex-col gap-0.5',
             `state-${cellState}`,
           )}
           data-cell-state={cellState}
-          data-touch-min="28"
+          data-touch-min="44"
           title={`${cell.label} · ${stateCode}: ${stateLabel}`}
         >
           <div className="matrix-selector-head">
@@ -683,7 +681,7 @@ export function OperatorPage() {
                   variant={sideVariant}
                   size="sm"
                   className={cn(
-                    'matrix-selector-side h-6 min-h-6 flex-1 px-1 text-[9px]',
+                    'matrix-selector-side h-9 min-h-9 flex-1 px-1.5 text-[11px]',
                     active && 'is-active',
                   )}
                   disabled={needsLease && !youHold}
@@ -735,7 +733,7 @@ export function OperatorPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="matrix-selector-center h-6 min-h-6 px-1"
+                className="matrix-selector-center h-9 min-h-9 px-1.5"
                 aria-label={`${cell.label} center`}
                 onClick={() => void clearSelector(cell)}
               >
@@ -756,8 +754,7 @@ export function OperatorPage() {
         data-touch-min="44"
         data-stop-dock={isEstop ? 'true' : undefined}
         className={cn(
-          'matrix-cell flex h-full flex-row items-center justify-between gap-1 whitespace-normal',
-          isP03a21 ? 'min-h-0' : 'min-h-11',
+          'matrix-cell flex h-full min-h-11 flex-row items-center justify-between gap-1.5 whitespace-normal',
           `state-${cellState}`,
           isEstop && 'estop',
           cell.style === 'enable' && 'matrix-enable',
@@ -806,7 +803,7 @@ export function OperatorPage() {
     <div
       className="operator-shell mx-auto max-w-6xl gap-2 md:gap-3"
       data-feat="hmi-shell"
-      data-pendant={isP03a21 ? 'p03a21' : undefined}
+      data-pendant={isPendantScreen ? 'p03a21' : undefined}
     >
       <div className="operator-body">
         <HelpTip id="tour.operator.banner">

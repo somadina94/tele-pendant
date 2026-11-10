@@ -1681,11 +1681,21 @@ describe('OperatorPage', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
 
-  it('hides crane mimic and height readouts on the welding pendant', async () => {
+  it('hides crane mimic on p03a21 and shows it again on demo-crane', async () => {
     const pendantTags = {
       ...defaultTags,
       hoistHeightMm: 1250,
       values: { 'holding.hoistHeightMm': 1250 },
+    };
+    const selectorCell = {
+      ...layout.cells[0],
+      style: 'selector',
+      secondaryRegister: {
+        id: 'pb',
+        name: 'coil.p03a21.di.owvaDown',
+        address: 27,
+        kind: 'coil',
+      },
     };
     socket.on.mockImplementation(
       (event: string, handler: (p: unknown) => void) => {
@@ -1698,25 +1708,29 @@ describe('OperatorPage', () => {
       return {
         ...layout,
         background: { ...layout.background, name: 'demo-p03a21' },
-        cells: [
-          {
-            ...layout.cells[0],
-            style: 'selector',
-            secondaryRegister: {
-              id: 'pb',
-              name: 'coil.p03a21.di.owvaDown',
-              address: 27,
-              kind: 'coil',
-            },
-          },
-        ],
+        cells: [selectorCell],
       } as never;
     });
     mockPostWithControl(async () => ({ ok: true }));
-    renderOperator(<OperatorPage />);
+    const { unmount } = renderOperator(<OperatorPage />);
     expect(await screen.findByText('demo-p03a21')).toBeInTheDocument();
     expect(screen.queryByText('Height')).not.toBeInTheDocument();
     expect(document.querySelector('[data-pendant="p03a21"]')).toBeTruthy();
+    unmount();
+
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return pendantTags as never;
+      return {
+        ...layout,
+        background: { ...layout.background, name: 'demo-crane' },
+        cells: [selectorCell],
+      } as never;
+    });
+    renderOperator(<OperatorPage />);
+    expect(await screen.findByText('demo-crane')).toBeInTheDocument();
+    expect(await screen.findByText('Height')).toBeInTheDocument();
+    expect(document.querySelector('[data-pendant="p03a21"]')).toBeNull();
   });
 
   it('switches plant screens and hides mimic when a custom graphic is set', async () => {

@@ -418,8 +418,11 @@ export function OperatorScreen({ token }: { token: string }) {
     }
   }
 
+  const isPendantScreen = (layoutQuery.data?.background?.name ?? '').includes(
+    'p03a21',
+  );
   const isP03a21 =
-    (layoutQuery.data?.background?.name ?? '').includes('p03a21') ||
+    isPendantScreen ||
     Boolean(layoutQuery.data?.cells.some((c) => c.style === 'selector'));
 
   const grid = useMemo(() => {
@@ -451,7 +454,7 @@ export function OperatorScreen({ token }: { token: string }) {
   /** Pendant: keep 3-col layout on phones; otherwise 1 col until tablet. */
   const matrixCols =
     isP03a21 || windowWidth >= 768 ? Math.max(1, grid?.cols ?? 1) : 1;
-  const matrixGap = isP03a21 ? 2 : 8;
+  const matrixGap = isP03a21 ? 6 : 8;
 
   const needsLive = useMemo(
     () => operatorNeedsLiveTags(layoutQuery.data),
@@ -535,12 +538,12 @@ export function OperatorScreen({ token }: { token: string }) {
       feedbackRaw === 1;
     const lampOn = Boolean(feedbackRaw);
     const statusTrailing = (
-      <View className="shrink-0 flex-row items-center gap-0.5">
+      <View className="shrink-0 flex-row items-center gap-1">
         {cell.feedbackRegister && feedbackIsBool ? (
           <View
             style={{
-              width: isP03a21 ? 7 : 8,
-              height: isP03a21 ? 7 : 8,
+              width: 8,
+              height: 8,
               borderRadius: 999,
               backgroundColor: lampOn ? '#34d399' : 'rgba(148,163,184,0.45)',
             }}
@@ -551,7 +554,7 @@ export function OperatorScreen({ token }: { token: string }) {
           <Text
             numberOfLines={1}
             className="text-[9px] opacity-80"
-            style={{ color: palette.foreground, maxWidth: isP03a21 ? 36 : 56 }}
+            style={{ color: palette.foreground, maxWidth: 56 }}
           >
             F {String(feedbackRaw)}
           </Text>
@@ -560,14 +563,14 @@ export function OperatorScreen({ token }: { token: string }) {
           <Text
             numberOfLines={1}
             className="text-[9px] opacity-80"
-            style={{ color: palette.foreground, maxWidth: isP03a21 ? 32 : 48 }}
+            style={{ color: palette.foreground, maxWidth: 48 }}
           >
             S {String(tagValueForRegister(tags, cell.statusRegister.name))}
           </Text>
         ) : null}
         <Text
           numberOfLines={1}
-          className="rounded px-0.5 py-0 text-[8px] font-bold uppercase"
+          className="rounded px-1 py-0.5 text-[9px] font-bold uppercase"
           style={{
             color: palette.foreground,
             backgroundColor: palette.chip,
@@ -592,24 +595,24 @@ export function OperatorScreen({ token }: { token: string }) {
       return (
         <View
           key={cell.id}
-          className="w-full gap-0 rounded-md border px-1 py-0.5"
+          className="w-full gap-0.5 rounded-md border px-1.5 py-1"
           style={{
             borderColor: palette.border,
             backgroundColor: palette.background,
-            minHeight: isP03a21 ? 42 : 44,
+            minHeight: 56,
             flex: 1,
           }}
         >
-          <View className="flex-row items-center gap-0.5">
+          <View className="flex-row items-center gap-1">
             <Text
               numberOfLines={1}
               className="shrink font-semibold"
               style={{
                 color: palette.foreground,
-                fontSize: isP03a21 ? 9 : 13,
+                fontSize: isP03a21 ? 11 : 13,
                 flexGrow: 1,
                 flexShrink: 1,
-                lineHeight: isP03a21 ? 11 : 16,
+                lineHeight: isP03a21 ? 14 : 16,
               }}
             >
               {cell.label}
@@ -626,9 +629,9 @@ export function OperatorScreen({ token }: { token: string }) {
                   accessibilityRole="button"
                   accessibilityLabel={`${cell.label} ${caption}`}
                   accessibilityState={{ disabled: needsLease && !youHold }}
-                  className="flex-1 items-center justify-center rounded border px-0.5"
+                  className="flex-1 items-center justify-center rounded-md border px-1"
                   style={{
-                    minHeight: isP03a21 ? 24 : 36,
+                    minHeight: 36,
                     borderColor: palette.border,
                     backgroundColor: active ? palette.chip : 'transparent',
                     opacity: needsLease && !youHold ? 0.5 : 1,
@@ -647,7 +650,7 @@ export function OperatorScreen({ token }: { token: string }) {
                     numberOfLines={1}
                     style={{
                       color: palette.foreground,
-                      fontSize: isP03a21 ? 8 : 12,
+                      fontSize: isP03a21 ? 10 : 12,
                     }}
                   >
                     {caption}
@@ -659,11 +662,8 @@ export function OperatorScreen({ token }: { token: string }) {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`${cell.label} center`}
-                className="items-center justify-center rounded border px-1"
-                style={{
-                  minHeight: isP03a21 ? 24 : 36,
-                  borderColor: palette.border,
-                }}
+                className="items-center justify-center rounded-md border px-1.5"
+                style={{ minHeight: 36, borderColor: palette.border }}
                 onPress={() => void clearSelector(cell)}
               >
                 <Text style={{ color: palette.foreground }}>·</Text>
@@ -680,9 +680,9 @@ export function OperatorScreen({ token }: { token: string }) {
         accessibilityRole="button"
         accessibilityLabel={cell.label}
         accessibilityHint={`${stateCode}: ${stateLabel}`}
-        className="w-full flex-row items-center gap-0.5 rounded-md border px-1 py-0.5"
+        className="w-full flex-row items-center gap-1 rounded-md border px-2 py-1.5"
         style={{
-          minHeight: isP03a21 ? 30 : 44,
+          minHeight: 44,
           flex: 1,
           backgroundColor: palette.background,
           borderColor: palette.border,
@@ -698,14 +698,14 @@ export function OperatorScreen({ token }: { token: string }) {
         }}
       >
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           className="shrink font-semibold"
           style={{
             color: palette.foreground,
-            fontSize: isP03a21 ? 9 : 14,
+            fontSize: isP03a21 ? 12 : 14,
             flexGrow: 1,
             flexShrink: 1,
-            lineHeight: isP03a21 ? 11 : 18,
+            lineHeight: isP03a21 ? 15 : 18,
           }}
         >
           {cell.label}
@@ -715,12 +715,12 @@ export function OperatorScreen({ token }: { token: string }) {
     );
   };
 
-  // Crane mimic/readouts only for crane layouts — not the welding pendant.
+  // Crane mimic/readouts follow the active plant tab, not the shared cells.
   const showCraneMetrics =
-    !isP03a21 &&
+    !isPendantScreen &&
     (tags?.hoistHeightMm != null ||
       tags?.values?.['holding.hoistHeightMm'] != null);
-  const plantMinHeight = isP03a21 ? 36 : windowWidth >= 768 ? 140 : 110;
+  const plantMinHeight = isPendantScreen ? 40 : windowWidth >= 768 ? 140 : 110;
 
   return (
     <View className="flex-1 bg-background" style={{ minHeight: 0 }}>
@@ -778,16 +778,16 @@ export function OperatorScreen({ token }: { token: string }) {
 
         <HelpTip
           id="tour.operator.graphic"
-          className={isP03a21 ? 'shrink-0' : 'min-h-0 flex-1'}
+          className={isPendantScreen ? 'shrink-0' : 'min-h-0 flex-1'}
         >
           <View
             className={`relative overflow-hidden rounded-xl border border-white/10 ${
-              isP03a21 ? 'shrink-0' : 'min-h-0 flex-1'
+              isPendantScreen ? 'shrink-0' : 'min-h-0 flex-1'
             }`}
             style={{
-              flex: isP03a21 ? undefined : 1,
+              flex: isPendantScreen ? undefined : 1,
               minHeight: plantMinHeight,
-              maxHeight: isP03a21 ? plantMinHeight + 8 : undefined,
+              maxHeight: isPendantScreen ? plantMinHeight + 8 : undefined,
               backgroundColor: solidBackground || '#07090c',
             }}
           >
@@ -931,7 +931,7 @@ export function OperatorScreen({ token }: { token: string }) {
             <View className="gap-0.5">
               <View className="flex-row items-center gap-1">
                 <TextInput
-                  className="h-7 min-h-7 flex-1 rounded-md border border-border bg-input px-2 text-[11px] text-foreground"
+                  className="h-9 min-h-9 flex-1 rounded-md border border-border bg-input px-2.5 text-xs text-foreground"
                   value={pin}
                   onChangeText={setPin}
                   secureTextEntry
@@ -943,10 +943,10 @@ export function OperatorScreen({ token }: { token: string }) {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('resetEstop')}
-                  className="h-7 min-h-7 shrink-0 items-center justify-center rounded-md border border-border px-2"
+                  className="h-9 min-h-9 shrink-0 items-center justify-center rounded-md border border-border px-2.5"
                   onPress={() => void resetEStop()}
                 >
-                  <Text className="text-[10px] font-semibold text-foreground">
+                  <Text className="text-[11px] font-semibold text-foreground">
                     {t('resetEstop')}
                   </Text>
                 </Pressable>

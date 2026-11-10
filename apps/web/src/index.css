@@ -399,17 +399,13 @@
 .matrix-cell-state {
   @apply inline-flex shrink-0 items-center gap-0.5 truncate rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide md:text-[10px];
 }
-/* Pendant demo: compact cells so the full matrix fits without scroll. */
-.operator-shell[data-pendant='p03a21'] {
-  @apply gap-1 md:gap-1.5;
+/* Welding pendant screen: thin chrome only — no empty plant void. */
+.operator-shell[data-pendant='p03a21'] .operator-plant-slot {
+  @apply flex-none;
 }
-.operator-shell[data-pendant='p03a21'] .operator-body {
-  @apply gap-1 md:gap-1.5;
-}
-/* Welding pendant: no crane mimic — keep a thin screen chrome only. */
 .operator-shell[data-pendant='p03a21'] .operator-plant-slot .plant-graphic {
-  min-height: 2.25rem;
-  max-height: 2.5rem;
+  @apply h-auto min-h-0 flex-none;
+  max-height: 2.75rem;
 }
 .operator-shell[data-pendant='p03a21'] .plant-mimic-stage,
 .operator-shell[data-pendant='p03a21'] .plant-overlay-stage,
@@ -417,52 +413,13 @@
   display: none;
 }
 .operator-shell[data-pendant='p03a21'] .plant-cluster-chrome {
-  padding-block: 0.35rem;
+  padding-block: 0.4rem;
 }
 .operator-shell[data-pendant='p03a21'] .operator-matrix-card {
-  @apply mt-0 min-h-0 flex-1 overflow-hidden;
+  @apply flex-1;
 }
 .operator-shell[data-pendant='p03a21'] .operator-matrix-toolbar-wrap {
-  @apply min-h-0 flex-1 gap-0.5 overflow-hidden;
-}
-.operator-shell[data-pendant='p03a21'] .operator-matrix-toolbar {
-  @apply gap-0.5;
-}
-.operator-shell[data-pendant='p03a21'] .matrix-grid {
-  @apply gap-0.5 md:gap-1;
-  grid-auto-rows: minmax(1.75rem, auto);
-}
-.operator-shell[data-pendant='p03a21'] .matrix-cell {
-  @apply min-h-0 px-1 py-0.5 text-[10px] md:px-1.5 md:py-1 md:text-[11px];
-}
-.operator-shell[data-pendant='p03a21'] .matrix-cell-label {
-  -webkit-line-clamp: 1;
-  @apply leading-tight;
-}
-.operator-shell[data-pendant='p03a21'] .matrix-cell-state {
-  @apply px-0.5 py-0 text-[8px] md:text-[9px];
-}
-.operator-shell[data-pendant='p03a21'] .matrix-cell-meta {
-  @apply max-w-[4.5rem] text-[8px];
-}
-.operator-shell[data-pendant='p03a21'] .matrix-lamp {
-  @apply size-1.5;
-}
-.operator-shell[data-pendant='p03a21'] .matrix-selector {
-  @apply gap-0 px-1 py-0.5;
-}
-.operator-shell[data-pendant='p03a21'] .matrix-selector-side,
-.operator-shell[data-pendant='p03a21'] .matrix-selector-center {
-  @apply h-6 min-h-6 text-[9px];
-}
-.operator-shell[data-pendant='p03a21'] .matrix-grid-hole {
-  @apply min-h-[1.75rem] md:min-h-[1.75rem];
-}
-.operator-shell[data-pendant='p03a21'] .matrix-stop-dock {
-  @apply pt-1;
-}
-.operator-shell[data-pendant='p03a21'] .matrix-stop-dock .matrix-cell.estop {
-  @apply min-h-9 py-1 text-xs;
+  @apply overflow-y-auto;
 }
 .matrix-cell.state-idle:not(.estop) {
   background-color: var(--matrix-state-idle-bg) !important;
