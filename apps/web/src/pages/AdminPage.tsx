@@ -463,7 +463,8 @@ export function AdminPage() {
               <CardTitle>{t('cellsTitle')}</CardTitle>
               <CardDescription>
                 Milestone-1 demo uses the Siemens P03A21 welding pendant layout.
-                Existing databases keep their cells until an admin resets.
+                API boot migrates legacy crane demos; use reset to reseed
+                anytime.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">

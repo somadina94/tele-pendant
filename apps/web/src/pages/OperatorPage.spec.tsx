@@ -1649,6 +1649,74 @@ describe('OperatorPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows crane readouts from values when top-level metrics are missing', async () => {
+    const craneTags = {
+      hoistHeightMm: undefined as unknown as number,
+      loadKg: undefined as unknown as number,
+      speedPct: 0,
+      motorRunning: false,
+      fault: false,
+      commsOk: true,
+      trolleyPositionMm: undefined as unknown as number,
+      values: {
+        'holding.hoistHeightMm': 88,
+        'holding.trolleyPosition': 12,
+      },
+      at: new Date().toISOString(),
+    };
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === 'tags.update') handler(craneTags);
+      },
+    );
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return craneTags as never;
+      return layout as never;
+    });
+    mockPostWithControl(async () => ({ ok: true }));
+    renderOperator(<OperatorPage />);
+    expect(await screen.findByText('Height')).toBeInTheDocument();
+    expect(screen.getByText('Load')).toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('shows pendant idle plant copy when crane metrics are hidden', async () => {
+    const idleTags = {
+      ...defaultTags,
+      hoistHeightMm: undefined as unknown as number,
+      values: {},
+    };
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === 'tags.update') handler(idleTags);
+      },
+    );
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return idleTags as never;
+      return {
+        ...layout,
+        background: { ...layout.background, name: '' },
+        cells: [
+          {
+            ...layout.cells[0],
+            style: 'selector',
+            secondaryRegister: {
+              id: 'pb',
+              name: 'coil.p03a21.di.owvaDown',
+              address: 27,
+              kind: 'coil',
+            },
+          },
+        ],
+      } as never;
+    });
+    mockPostWithControl(async () => ({ ok: true }));
+    renderOperator(<OperatorPage />);
+    expect(await screen.findByText(/P03A21 pendant demo/i)).toBeInTheDocument();
+  });
+
   it('switches plant screens and hides mimic when a custom graphic is set', async () => {
     mockGetWithControl({
       ...layout,

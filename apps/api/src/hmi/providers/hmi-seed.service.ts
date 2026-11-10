@@ -42,9 +42,31 @@ export class HmiSeedService implements OnModuleInit {
     if (count === 0) {
       this.logger.log('Seeding P03A21 welding pendant HMI layout');
       await this.seed();
+    } else {
+      await this.ensureP03a21Layout();
     }
     await this.ensureRuntimeRegisters();
     await this.ensureSafetyRoles();
+  }
+
+  /**
+   * Existing DBs still hold the old crane demo after image deploy.
+   * Promote them to P03A21 when no selector cells / pendant background exist.
+   */
+  private async ensureP03a21Layout(): Promise<void> {
+    const selectorCount = await this.cells
+      .createQueryBuilder('cell')
+      .where('cell.style = :style', { style: 'selector' })
+      .getCount();
+    if (selectorCount > 0) return;
+
+    const active = await this.backgrounds.findOne({ where: { active: true } });
+    if ((active?.name ?? '').includes('p03a21')) return;
+
+    this.logger.log(
+      'Migrating legacy HMI layout to P03A21 welding pendant demo',
+    );
+    await this.resetP03a21Demo();
   }
 
   /** Safety + crane leftovers the poller still resolves by name. */
@@ -486,7 +508,8 @@ export class HmiSeedService implements OnModuleInit {
           statusRegister: null,
           isMotion,
           requiresSafeAction: def.requiresSafeAction ?? false,
-          variableSpeed: def.variableSpeed ?? isMotion,
+          // Pendant uses Axis fast/slow cell; hide the separate jog strip.
+          variableSpeed: def.variableSpeed ?? false,
           slowSpeedPct: 30,
           fastSpeedPct: 100,
         }),

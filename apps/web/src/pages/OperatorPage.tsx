@@ -786,13 +786,19 @@ export function OperatorPage() {
     );
   }
 
+  const isP03a21 =
+    Boolean(layout.background?.name?.includes('p03a21')) ||
+    layout.cells.some((cell) => cell.style === 'selector');
+  const showCraneMetrics =
+    !isP03a21 &&
+    (tags?.hoistHeightMm != null ||
+      tags?.values?.['holding.hoistHeightMm'] != null);
+
   return (
     <div
       className="operator-shell mx-auto max-w-6xl gap-2 md:gap-3"
       data-feat="hmi-shell"
-      data-pendant={
-        layout.background?.name?.includes('p03a21') ? 'p03a21' : undefined
-      }
+      data-pendant={isP03a21 ? 'p03a21' : undefined}
     >
       <div className="operator-body">
         <HelpTip id="tour.operator.banner">
@@ -880,12 +886,11 @@ export function OperatorPage() {
               </div>
               {!useCustomGraphic ? (
                 <div className="plant-mimic-stage" aria-hidden={false}>
-                  {tags?.hoistHeightMm != null ||
-                  tags?.values?.['holding.hoistHeightMm'] != null ? (
+                  {showCraneMetrics ? (
                     <CraneMimic tags={tags} safety={safety ?? layout.safety} />
                   ) : (
                     <div className="plant-mimic-idle px-4 py-6 text-center text-sm text-muted-foreground">
-                      {layout.background?.name ?? 'P03A21'} pendant demo
+                      {(layout.background?.name || 'P03A21') + ' pendant demo'}
                     </div>
                   )}
                 </div>
@@ -909,8 +914,7 @@ export function OperatorPage() {
                     </div>
                   ))}
               </div>
-              {tags?.hoistHeightMm != null ||
-              tags?.values?.['holding.hoistHeightMm'] != null ? (
+              {showCraneMetrics ? (
                 <div className="plant-readout">
                   <div className="plant-metric">
                     <span className="plant-metric-label">Height</span>

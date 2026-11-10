@@ -19,7 +19,7 @@ Think of it as: **sign in → see a picture of the plant → press buttons / roc
 
 ### P03A21 walkthrough (milestone-1)
 
-1. Admin: **Config → Cells → Reset P03A21 demo layout** (or empty DB seed on first boot).
+1. Fresh DB seeds P03A21 on boot. Existing crane demos migrate to P03A21 on API restart (or Admin: **Config → Cells → Reset P03A21 demo layout**).
 2. Operator: claim control, hold **Enable**, then use jog rockers (each rocker writes **two** PLC inputs with mutual exclusion).
 3. Illuminated pushbuttons show lamp feedback from DO coils when pressed.
 4. **STOP** docks at the bottom and latches e-stop; unlabeled spares stay empty holes.

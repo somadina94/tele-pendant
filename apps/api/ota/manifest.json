@@ -1,16 +1,16 @@
 {
-  "id": "00000000-0000-4000-8000-000000000001",
-  "createdAt": "2026-01-01T00:00:00.000Z",
+  "id": "91641103-fbc7-4684-877f-5fd1beeb8ed5",
+  "createdAt": "2026-11-10T02:43:21.180Z",
   "runtimeVersion": "0.0.1",
   "launchAsset": {
-    "hash": "placeholder",
-    "key": "bundle.js",
+    "hash": "4a8a4f4f964d2ca6710cf4c5d209f8a2f352bc03043e51d7937721b15714a924",
+    "key": "index-971f76cc4d402a9c0e65082114c12d66.hbc",
     "contentType": "application/javascript",
-    "url": "https://api.tele-pendant.jahbyte.com/ota/assets/bundle.js"
+    "url": "https://api.tele-pendant.jahbyte.com/ota/assets/index-971f76cc4d402a9c0e65082114c12d66.hbc"
   },
   "assets": [],
   "metadata": {},
   "extra": {
-    "note": "Placeholder until ota:export. launchAsset.url must be https. Camera and speech still need a new binary."
+    "note": "Published by apps/mobile scripts/export-ota.mjs. Camera and speech still need a new binary."
   }
 }

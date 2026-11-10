@@ -418,39 +418,40 @@ export function OperatorScreen({ token }: { token: string }) {
     }
   }
 
+  const isP03a21 =
+    (layoutQuery.data?.background?.name ?? '').includes('p03a21') ||
+    Boolean(layoutQuery.data?.cells.some((c) => c.style === 'selector'));
+
   const grid = useMemo(() => {
     const layout = layoutQuery.data;
     if (!layout) return null;
     const map = new Map(layout.cells.map((c) => [`${c.row}:${c.col}`, c]));
-    const cells: Array<Cell | null> = [];
+    const rows: Array<Array<Cell | null>> = [];
     for (let r = 0; r < layout.matrix.rows; r++) {
+      const row: Array<Cell | null> = [];
       for (let c = 0; c < layout.matrix.cols; c++) {
-        cells.push(map.get(`${r}:${c}`) ?? null);
+        row.push(map.get(`${r}:${c}`) ?? null);
       }
+      rows.push(row);
     }
-    return { cols: layout.matrix.cols, cells };
+    return { cols: layout.matrix.cols, rows };
   }, [layoutQuery.data]);
 
   const showJogSpeed = useMemo(
     () =>
+      !isP03a21 &&
       Boolean(
         layoutQuery.data?.cells.some(
           (cell) => cell.isMotion && (cell.variableSpeed ?? true),
         ),
       ),
-    [layoutQuery.data?.cells],
+    [isP03a21, layoutQuery.data?.cells],
   );
 
-  const isP03a21 =
-    (layoutQuery.data?.background?.name ?? '').includes('p03a21') ||
-    Boolean(layoutQuery.data?.cells.some((c) => c.style === 'selector'));
   /** Pendant: keep 3-col layout on phones; otherwise 1 col until tablet. */
   const matrixCols =
     isP03a21 || windowWidth >= 768 ? Math.max(1, grid?.cols ?? 1) : 1;
-  const matrixGap = isP03a21 ? 6 : 8;
-  const matrixPad = 24;
-  const matrixCellWidth =
-    (windowWidth - matrixPad - matrixGap * (matrixCols - 1)) / matrixCols;
+  const matrixGap = isP03a21 ? 4 : 8;
 
   const needsLive = useMemo(
     () => operatorNeedsLiveTags(layoutQuery.data),
@@ -468,7 +469,7 @@ export function OperatorScreen({ token }: { token: string }) {
 
   const operatorReady = isOperatorScreenReady({
     layoutLoaded: Boolean(layoutQuery.data),
-    gridReady: Boolean(grid),
+    gridReady: Boolean(grid?.rows.length),
     needsLive,
     hasTags: tags !== null,
     liveFallback,
@@ -534,12 +535,12 @@ export function OperatorScreen({ token }: { token: string }) {
       feedbackRaw === 1;
     const lampOn = Boolean(feedbackRaw);
     const statusTrailing = (
-      <View className="shrink-0 flex-row items-center gap-1">
+      <View className="shrink-0 flex-row items-center gap-0.5">
         {cell.feedbackRegister && feedbackIsBool ? (
           <View
             style={{
-              width: 8,
-              height: 8,
+              width: isP03a21 ? 7 : 8,
+              height: isP03a21 ? 7 : 8,
               borderRadius: 999,
               backgroundColor: lampOn ? '#34d399' : 'rgba(148,163,184,0.45)',
             }}
@@ -550,7 +551,7 @@ export function OperatorScreen({ token }: { token: string }) {
           <Text
             numberOfLines={1}
             className="text-[9px] opacity-80"
-            style={{ color: palette.foreground, maxWidth: 56 }}
+            style={{ color: palette.foreground, maxWidth: isP03a21 ? 36 : 56 }}
           >
             F {String(feedbackRaw)}
           </Text>
@@ -559,21 +560,23 @@ export function OperatorScreen({ token }: { token: string }) {
           <Text
             numberOfLines={1}
             className="text-[9px] opacity-80"
-            style={{ color: palette.foreground, maxWidth: 48 }}
+            style={{ color: palette.foreground, maxWidth: isP03a21 ? 32 : 48 }}
           >
             S {String(tagValueForRegister(tags, cell.statusRegister.name))}
           </Text>
         ) : null}
-        <Text
-          numberOfLines={1}
-          className="rounded px-1 py-0.5 text-[9px] font-bold uppercase"
-          style={{
-            color: palette.foreground,
-            backgroundColor: palette.chip,
-          }}
-        >
-          {stateCode}
-        </Text>
+        {!isP03a21 ? (
+          <Text
+            numberOfLines={1}
+            className="rounded px-1 py-0.5 text-[9px] font-bold uppercase"
+            style={{
+              color: palette.foreground,
+              backgroundColor: palette.chip,
+            }}
+          >
+            {stateCode}
+          </Text>
+        ) : null}
       </View>
     );
 
@@ -591,22 +594,24 @@ export function OperatorScreen({ token }: { token: string }) {
       return (
         <View
           key={cell.id}
-          className="w-full gap-0.5 rounded-md border px-1.5 py-1"
+          className="w-full gap-0.5 rounded-md border px-1 py-1"
           style={{
             borderColor: palette.border,
             backgroundColor: palette.background,
-            minHeight: 44,
+            minHeight: isP03a21 ? 64 : 44,
+            flex: 1,
           }}
         >
-          <View className="flex-row items-start gap-1">
+          <View className="flex-row items-center gap-0.5">
             <Text
-              numberOfLines={2}
+              numberOfLines={1}
               className="shrink font-semibold"
               style={{
                 color: palette.foreground,
-                fontSize: isP03a21 ? 11 : 13,
+                fontSize: isP03a21 ? 10 : 13,
                 flexGrow: 1,
-                lineHeight: isP03a21 ? 14 : 16,
+                flexShrink: 1,
+                lineHeight: isP03a21 ? 12 : 16,
               }}
             >
               {cell.label}
@@ -623,9 +628,9 @@ export function OperatorScreen({ token }: { token: string }) {
                   accessibilityRole="button"
                   accessibilityLabel={`${cell.label} ${caption}`}
                   accessibilityState={{ disabled: needsLease && !youHold }}
-                  className="flex-1 items-center justify-center rounded-md border px-1"
+                  className="flex-1 items-center justify-center rounded-md border px-0.5"
                   style={{
-                    minHeight: 36,
+                    minHeight: isP03a21 ? 40 : 36,
                     borderColor: palette.border,
                     backgroundColor: active ? palette.chip : 'transparent',
                     opacity: needsLease && !youHold ? 0.5 : 1,
@@ -641,9 +646,10 @@ export function OperatorScreen({ token }: { token: string }) {
                 >
                   <Text
                     className="font-bold uppercase"
+                    numberOfLines={1}
                     style={{
                       color: palette.foreground,
-                      fontSize: isP03a21 ? 10 : 12,
+                      fontSize: isP03a21 ? 9 : 12,
                     }}
                   >
                     {caption}
@@ -655,8 +661,11 @@ export function OperatorScreen({ token }: { token: string }) {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`${cell.label} center`}
-                className="items-center justify-center rounded-md border px-1.5"
-                style={{ minHeight: 36, borderColor: palette.border }}
+                className="items-center justify-center rounded-md border px-1"
+                style={{
+                  minHeight: isP03a21 ? 40 : 36,
+                  borderColor: palette.border,
+                }}
                 onPress={() => void clearSelector(cell)}
               >
                 <Text style={{ color: palette.foreground }}>·</Text>
@@ -673,9 +682,10 @@ export function OperatorScreen({ token }: { token: string }) {
         accessibilityRole="button"
         accessibilityLabel={cell.label}
         accessibilityHint={`${stateCode}: ${stateLabel}`}
-        className="w-full flex-row items-center gap-1 rounded-md border px-2 py-1.5"
+        className="w-full flex-row items-center gap-1 rounded-md border px-1.5 py-1"
         style={{
-          minHeight: 44,
+          minHeight: isP03a21 ? 64 : 44,
+          flex: 1,
           backgroundColor: palette.background,
           borderColor: palette.border,
           borderWidth: cellState === 'running' && !isEstop ? 2 : 1,
@@ -694,9 +704,10 @@ export function OperatorScreen({ token }: { token: string }) {
           className="shrink font-semibold"
           style={{
             color: palette.foreground,
-            fontSize: isP03a21 ? 11 : 14,
+            fontSize: isP03a21 ? 10 : 14,
             flexGrow: 1,
-            lineHeight: isP03a21 ? 14 : 18,
+            flexShrink: 1,
+            lineHeight: isP03a21 ? 12 : 18,
           }}
         >
           {cell.label}
@@ -707,16 +718,11 @@ export function OperatorScreen({ token }: { token: string }) {
   };
 
   const showCraneMetrics =
-    tags?.hoistHeightMm != null ||
-    tags?.values?.['holding.hoistHeightMm'] != null;
-  /** Pendant: shrink plant so the 3-col matrix stays visible. */
-  const plantMinHeight = isP03a21
-    ? windowWidth >= 768
-      ? 96
-      : 72
-    : windowWidth >= 768
-      ? 140
-      : 110;
+    !isP03a21 &&
+    (tags?.hoistHeightMm != null ||
+      tags?.values?.['holding.hoistHeightMm'] != null);
+  /** Pendant: keep plant to a thin status strip so the matrix fills the phone. */
+  const plantMinHeight = isP03a21 ? 40 : windowWidth >= 768 ? 140 : 110;
 
   return (
     <View className="flex-1 bg-background" style={{ minHeight: 0 }}>
@@ -783,7 +789,7 @@ export function OperatorScreen({ token }: { token: string }) {
             style={{
               flex: isP03a21 ? undefined : 1,
               minHeight: plantMinHeight,
-              maxHeight: isP03a21 ? plantMinHeight + 36 : undefined,
+              maxHeight: isP03a21 ? plantMinHeight : undefined,
               backgroundColor: solidBackground || '#07090c',
             }}
           >
@@ -800,10 +806,14 @@ export function OperatorScreen({ token }: { token: string }) {
                 style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}
               />
             )}
-            <View className="z-10 flex-row items-center justify-between px-3.5 pb-1 pt-2.5">
+            <View
+              className={`z-10 flex-row items-center justify-between px-3 ${
+                isP03a21 ? 'py-2' : 'pb-1 pt-2.5'
+              }`}
+            >
               <Text
                 className="flex-1 text-[10px] font-medium uppercase text-white/70"
-                style={{ letterSpacing: 2.8 }}
+                style={{ letterSpacing: isP03a21 ? 1.4 : 2.8 }}
                 numberOfLines={1}
               >
                 {layoutQuery.data?.background?.name ?? t('plantGraphic')}
@@ -828,52 +838,43 @@ export function OperatorScreen({ token }: { token: string }) {
                 </Text>
               </View>
             </View>
-            {!useCustomGraphic ? (
-              <View
-                className={`absolute inset-x-0 top-9 z-[8] px-1 ${
-                  showCraneMetrics ? 'bottom-14' : 'bottom-2'
-                }`}
-              >
-                {showCraneMetrics ? (
-                  <CraneMimic tags={tags} safety={safety} />
-                ) : (
-                  <Text className="px-3 py-2 text-center text-xs text-white/55">
-                    {layoutQuery.data?.background?.name ?? 'P03A21'} pendant
-                    demo
-                  </Text>
-                )}
+            {!useCustomGraphic && showCraneMetrics ? (
+              <View className="absolute inset-x-0 bottom-14 top-9 z-[8] px-1">
+                <CraneMimic tags={tags} safety={safety} />
               </View>
             ) : null}
-            <View
-              className={`absolute inset-x-0 top-9 z-[10] ${
-                showCraneMetrics ? 'bottom-14' : 'bottom-2'
-              }`}
-              pointerEvents="none"
-            >
-              {(layoutQuery.data?.overlays ?? [])
-                .filter((o) => !isClusterMetricRegister(o.register?.name))
-                .map((o) => (
-                  <View
-                    key={o.id}
-                    className="absolute min-w-[4.5rem] items-center rounded-lg border border-white/18 bg-black/70 px-2.5 py-1.5"
-                    style={{
-                      left: `${o.xPct}%`,
-                      top: `${o.yPct}%`,
-                      transform: [{ translateX: -36 }, { translateY: -18 }],
-                    }}
-                  >
-                    <Text className="text-[9px] uppercase text-white/55">
-                      {o.label}
-                    </Text>
-                    <Text className="font-mono text-sm font-semibold text-white">
-                      {formatOverlay(
-                        o.format,
-                        tagValueForRegister(tags, o.register?.name),
-                      )}
-                    </Text>
-                  </View>
-                ))}
-            </View>
+            {!isP03a21 || useCustomGraphic ? (
+              <View
+                className={`absolute inset-x-0 top-9 z-[10] ${
+                  showCraneMetrics ? 'bottom-14' : 'bottom-2'
+                }`}
+                pointerEvents="none"
+              >
+                {(layoutQuery.data?.overlays ?? [])
+                  .filter((o) => !isClusterMetricRegister(o.register?.name))
+                  .map((o) => (
+                    <View
+                      key={o.id}
+                      className="absolute min-w-[4.5rem] items-center rounded-lg border border-white/18 bg-black/70 px-2.5 py-1.5"
+                      style={{
+                        left: `${o.xPct}%`,
+                        top: `${o.yPct}%`,
+                        transform: [{ translateX: -36 }, { translateY: -18 }],
+                      }}
+                    >
+                      <Text className="text-[9px] uppercase text-white/55">
+                        {o.label}
+                      </Text>
+                      <Text className="font-mono text-sm font-semibold text-white">
+                        {formatOverlay(
+                          o.format,
+                          tagValueForRegister(tags, o.register?.name),
+                        )}
+                      </Text>
+                    </View>
+                  ))}
+              </View>
+            ) : null}
             {showCraneMetrics ? (
               <View className="absolute inset-x-0 bottom-0 z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1">
                 {(
@@ -1006,48 +1007,65 @@ export function OperatorScreen({ token }: { token: string }) {
             <HelpTip id="tour.operator.matrix">
               <ScrollView
                 className="mt-1 min-h-0 flex-1"
-                contentContainerStyle={
-                  matrixCols > 1
-                    ? {
-                        flexDirection: 'row',
-                        flexWrap: 'wrap',
-                        gap: matrixGap,
-                        paddingBottom: 8,
-                      }
-                    : { gap: 6, paddingBottom: 8 }
-                }
+                contentContainerStyle={{ paddingBottom: 8 }}
                 showsVerticalScrollIndicator={false}
               >
-                {grid &&
-                  grid.cells.map((cell, idx) => {
-                    if (!cell) {
-                      return matrixCols > 1 ? (
-                        <View
-                          key={`empty-${idx}`}
-                          style={{ width: matrixCellWidth, height: 44 }}
-                          accessibilityElementsHidden
-                        />
-                      ) : null;
-                    }
-                    if (
-                      stopCell &&
-                      (cell.id === stopCell.id || cell.style === 'estop')
-                    ) {
-                      return null;
-                    }
-                    return (
+                {grid && matrixCols > 1
+                  ? grid.rows.map((row, rowIdx) => (
                       <View
-                        key={cell.id}
-                        style={
-                          matrixCols > 1
-                            ? { width: matrixCellWidth }
-                            : { width: '100%' }
-                        }
+                        key={`row-${rowIdx}`}
+                        className="flex-row"
+                        style={{
+                          gap: matrixGap,
+                          marginBottom: matrixGap,
+                          alignItems: 'stretch',
+                        }}
                       >
-                        {renderMobileCell(cell)}
+                        {row.map((cell, colIdx) => {
+                          const isStop =
+                            Boolean(cell) &&
+                            Boolean(stopCell) &&
+                            (cell!.id === stopCell!.id ||
+                              cell!.style === 'estop');
+                          if (!cell || isStop) {
+                            return (
+                              <View
+                                key={`hole-${rowIdx}-${colIdx}`}
+                                style={{ flex: 1, minWidth: 0 }}
+                                accessibilityElementsHidden
+                              />
+                            );
+                          }
+                          return (
+                            <View
+                              key={cell.id}
+                              style={{ flex: 1, minWidth: 0 }}
+                            >
+                              {renderMobileCell(cell)}
+                            </View>
+                          );
+                        })}
                       </View>
-                    );
-                  })}
+                    ))
+                  : grid?.rows.flatMap((row) =>
+                      row.flatMap((cell) => {
+                        if (!cell) return [];
+                        if (
+                          stopCell &&
+                          (cell.id === stopCell.id || cell.style === 'estop')
+                        ) {
+                          return [];
+                        }
+                        return [
+                          <View
+                            key={cell.id}
+                            style={{ width: '100%', marginBottom: 6 }}
+                          >
+                            {renderMobileCell(cell)}
+                          </View>,
+                        ];
+                      }),
+                    )}
               </ScrollView>
             </HelpTip>
           </HelpTip>
