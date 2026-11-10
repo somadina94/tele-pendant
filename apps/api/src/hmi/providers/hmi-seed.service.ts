@@ -97,6 +97,27 @@ export class HmiSeedService implements OnModuleInit {
           'r',
         ],
         [
+          'holding.hoistHeightMm',
+          DEMO_CRANE_MAP.holdings.hoistHeightMm,
+          'holding',
+          'uint16',
+          'r',
+        ],
+        [
+          'holding.loadKg',
+          DEMO_CRANE_MAP.holdings.loadKg,
+          'holding',
+          'uint16',
+          'r',
+        ],
+        [
+          'holding.trolleyPosition',
+          DEMO_CRANE_MAP.holdings.trolleyPosition,
+          'holding',
+          'uint16',
+          'r',
+        ],
+        [
           'discrete.fault',
           DEMO_CRANE_MAP.discretes.fault,
           'discrete',
@@ -106,6 +127,13 @@ export class HmiSeedService implements OnModuleInit {
         [
           'discrete.commsOk',
           DEMO_CRANE_MAP.discretes.commsOk,
+          'discrete',
+          'bool',
+          'r',
+        ],
+        [
+          'discrete.motorRunning',
+          DEMO_CRANE_MAP.discretes.motorRunning,
           'discrete',
           'bool',
           'r',

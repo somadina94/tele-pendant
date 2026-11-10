@@ -1681,23 +1681,23 @@ describe('OperatorPage', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
 
-  it('shows pendant idle plant copy when crane metrics are hidden', async () => {
-    const idleTags = {
+  it('hides crane mimic and height readouts on the welding pendant', async () => {
+    const pendantTags = {
       ...defaultTags,
-      hoistHeightMm: undefined as unknown as number,
-      values: {},
+      hoistHeightMm: 1250,
+      values: { 'holding.hoistHeightMm': 1250 },
     };
     socket.on.mockImplementation(
       (event: string, handler: (p: unknown) => void) => {
-        if (event === 'tags.update') handler(idleTags);
+        if (event === 'tags.update') handler(pendantTags);
       },
     );
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
       if (path === '/safety/control') return heldControl as never;
-      if (path === '/realtime/tags') return idleTags as never;
+      if (path === '/realtime/tags') return pendantTags as never;
       return {
         ...layout,
-        background: { ...layout.background, name: '' },
+        background: { ...layout.background, name: 'demo-p03a21' },
         cells: [
           {
             ...layout.cells[0],
@@ -1714,7 +1714,9 @@ describe('OperatorPage', () => {
     });
     mockPostWithControl(async () => ({ ok: true }));
     renderOperator(<OperatorPage />);
-    expect(await screen.findByText(/P03A21 pendant demo/i)).toBeInTheDocument();
+    expect(await screen.findByText('demo-p03a21')).toBeInTheDocument();
+    expect(screen.queryByText('Height')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-pendant="p03a21"]')).toBeTruthy();
   });
 
   it('switches plant screens and hides mimic when a custom graphic is set', async () => {
@@ -1876,7 +1878,8 @@ describe('OperatorPage', () => {
 
     renderOperator(<OperatorPage />);
     expect(await screen.findByText('OWVA up/down')).toBeInTheDocument();
-    expect(screen.getByText(/pendant demo/i)).toBeInTheDocument();
+    expect(screen.getByText('demo-p03a21')).toBeInTheDocument();
+    expect(screen.queryByText('Height')).not.toBeInTheDocument();
 
     const up = screen.getByRole('button', { name: 'OWVA up/down up' });
     const down = screen.getByRole('button', { name: 'OWVA up/down down' });

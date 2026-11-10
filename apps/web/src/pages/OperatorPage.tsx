@@ -575,6 +575,15 @@ export function OperatorPage() {
     return <PageSpinner label={t('operator')} />;
   }
 
+  const isP03a21 =
+    Boolean(layout.background?.name?.includes('p03a21')) ||
+    layout.cells.some((cell) => cell.style === 'selector');
+  // Crane mimic/readouts only when the active screen is a crane layout.
+  const showCraneMetrics =
+    !isP03a21 &&
+    (tags?.hoistHeightMm != null ||
+      tags?.values?.['holding.hoistHeightMm'] != null);
+
   const stopCell =
     grid.cells.find(
       (cell) =>
@@ -603,8 +612,14 @@ export function OperatorPage() {
     const feedbackIsBool =
       typeof feedbackRaw === 'boolean' ||
       feedbackRaw === 0 ||
-      feedbackRaw === 1;
-    const lampOn = Boolean(feedbackRaw);
+      feedbackRaw === 1 ||
+      feedbackRaw === 'true' ||
+      feedbackRaw === 'false';
+    const lampOn =
+      feedbackRaw === true ||
+      feedbackRaw === 1 ||
+      feedbackRaw === 'true' ||
+      feedbackRaw === '1';
     const statusChip = (
       <span className="matrix-cell-trailing">
         {cell.feedbackRegister && feedbackIsBool ? (
@@ -645,11 +660,11 @@ export function OperatorPage() {
         <div
           key={cell.id}
           className={cn(
-            'matrix-cell matrix-selector flex h-full min-h-11 flex-col gap-0.5',
+            'matrix-cell matrix-selector flex h-full min-h-0 flex-col gap-0.5',
             `state-${cellState}`,
           )}
           data-cell-state={cellState}
-          data-touch-min="44"
+          data-touch-min="28"
           title={`${cell.label} · ${stateCode}: ${stateLabel}`}
         >
           <div className="matrix-selector-head">
@@ -668,7 +683,7 @@ export function OperatorPage() {
                   variant={sideVariant}
                   size="sm"
                   className={cn(
-                    'matrix-selector-side h-9 min-h-9 flex-1 px-1.5',
+                    'matrix-selector-side h-6 min-h-6 flex-1 px-1 text-[9px]',
                     active && 'is-active',
                   )}
                   disabled={needsLease && !youHold}
@@ -720,7 +735,7 @@ export function OperatorPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="matrix-selector-center h-9 min-h-9 px-1.5"
+                className="matrix-selector-center h-6 min-h-6 px-1"
                 aria-label={`${cell.label} center`}
                 onClick={() => void clearSelector(cell)}
               >
@@ -741,7 +756,8 @@ export function OperatorPage() {
         data-touch-min="44"
         data-stop-dock={isEstop ? 'true' : undefined}
         className={cn(
-          'matrix-cell flex h-full min-h-11 flex-row items-center justify-between gap-1.5 whitespace-normal',
+          'matrix-cell flex h-full flex-row items-center justify-between gap-1 whitespace-normal',
+          isP03a21 ? 'min-h-0' : 'min-h-11',
           `state-${cellState}`,
           isEstop && 'estop',
           cell.style === 'enable' && 'matrix-enable',
@@ -785,14 +801,6 @@ export function OperatorPage() {
       </Button>
     );
   }
-
-  const isP03a21 =
-    Boolean(layout.background?.name?.includes('p03a21')) ||
-    layout.cells.some((cell) => cell.style === 'selector');
-  const showCraneMetrics =
-    !isP03a21 &&
-    (tags?.hoistHeightMm != null ||
-      tags?.values?.['holding.hoistHeightMm'] != null);
 
   return (
     <div
@@ -884,15 +892,9 @@ export function OperatorPage() {
                   {mode}
                 </div>
               </div>
-              {!useCustomGraphic ? (
+              {!useCustomGraphic && showCraneMetrics ? (
                 <div className="plant-mimic-stage" aria-hidden={false}>
-                  {showCraneMetrics ? (
-                    <CraneMimic tags={tags} safety={safety ?? layout.safety} />
-                  ) : (
-                    <div className="plant-mimic-idle px-4 py-6 text-center text-sm text-muted-foreground">
-                      {(layout.background?.name || 'P03A21') + ' pendant demo'}
-                    </div>
-                  )}
+                  <CraneMimic tags={tags} safety={safety ?? layout.safety} />
                 </div>
               ) : null}
               <div className="plant-overlay-stage">

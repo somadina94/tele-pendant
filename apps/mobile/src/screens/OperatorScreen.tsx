@@ -451,7 +451,7 @@ export function OperatorScreen({ token }: { token: string }) {
   /** Pendant: keep 3-col layout on phones; otherwise 1 col until tablet. */
   const matrixCols =
     isP03a21 || windowWidth >= 768 ? Math.max(1, grid?.cols ?? 1) : 1;
-  const matrixGap = isP03a21 ? 4 : 8;
+  const matrixGap = isP03a21 ? 2 : 8;
 
   const needsLive = useMemo(
     () => operatorNeedsLiveTags(layoutQuery.data),
@@ -565,18 +565,16 @@ export function OperatorScreen({ token }: { token: string }) {
             S {String(tagValueForRegister(tags, cell.statusRegister.name))}
           </Text>
         ) : null}
-        {!isP03a21 ? (
-          <Text
-            numberOfLines={1}
-            className="rounded px-1 py-0.5 text-[9px] font-bold uppercase"
-            style={{
-              color: palette.foreground,
-              backgroundColor: palette.chip,
-            }}
-          >
-            {stateCode}
-          </Text>
-        ) : null}
+        <Text
+          numberOfLines={1}
+          className="rounded px-0.5 py-0 text-[8px] font-bold uppercase"
+          style={{
+            color: palette.foreground,
+            backgroundColor: palette.chip,
+          }}
+        >
+          {stateCode}
+        </Text>
       </View>
     );
 
@@ -594,11 +592,11 @@ export function OperatorScreen({ token }: { token: string }) {
       return (
         <View
           key={cell.id}
-          className="w-full gap-0.5 rounded-md border px-1 py-1"
+          className="w-full gap-0 rounded-md border px-1 py-0.5"
           style={{
             borderColor: palette.border,
             backgroundColor: palette.background,
-            minHeight: isP03a21 ? 64 : 44,
+            minHeight: isP03a21 ? 42 : 44,
             flex: 1,
           }}
         >
@@ -608,10 +606,10 @@ export function OperatorScreen({ token }: { token: string }) {
               className="shrink font-semibold"
               style={{
                 color: palette.foreground,
-                fontSize: isP03a21 ? 10 : 13,
+                fontSize: isP03a21 ? 9 : 13,
                 flexGrow: 1,
                 flexShrink: 1,
-                lineHeight: isP03a21 ? 12 : 16,
+                lineHeight: isP03a21 ? 11 : 16,
               }}
             >
               {cell.label}
@@ -628,9 +626,9 @@ export function OperatorScreen({ token }: { token: string }) {
                   accessibilityRole="button"
                   accessibilityLabel={`${cell.label} ${caption}`}
                   accessibilityState={{ disabled: needsLease && !youHold }}
-                  className="flex-1 items-center justify-center rounded-md border px-0.5"
+                  className="flex-1 items-center justify-center rounded border px-0.5"
                   style={{
-                    minHeight: isP03a21 ? 40 : 36,
+                    minHeight: isP03a21 ? 24 : 36,
                     borderColor: palette.border,
                     backgroundColor: active ? palette.chip : 'transparent',
                     opacity: needsLease && !youHold ? 0.5 : 1,
@@ -649,7 +647,7 @@ export function OperatorScreen({ token }: { token: string }) {
                     numberOfLines={1}
                     style={{
                       color: palette.foreground,
-                      fontSize: isP03a21 ? 9 : 12,
+                      fontSize: isP03a21 ? 8 : 12,
                     }}
                   >
                     {caption}
@@ -661,9 +659,9 @@ export function OperatorScreen({ token }: { token: string }) {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`${cell.label} center`}
-                className="items-center justify-center rounded-md border px-1"
+                className="items-center justify-center rounded border px-1"
                 style={{
-                  minHeight: isP03a21 ? 40 : 36,
+                  minHeight: isP03a21 ? 24 : 36,
                   borderColor: palette.border,
                 }}
                 onPress={() => void clearSelector(cell)}
@@ -682,9 +680,9 @@ export function OperatorScreen({ token }: { token: string }) {
         accessibilityRole="button"
         accessibilityLabel={cell.label}
         accessibilityHint={`${stateCode}: ${stateLabel}`}
-        className="w-full flex-row items-center gap-1 rounded-md border px-1.5 py-1"
+        className="w-full flex-row items-center gap-0.5 rounded-md border px-1 py-0.5"
         style={{
-          minHeight: isP03a21 ? 64 : 44,
+          minHeight: isP03a21 ? 30 : 44,
           flex: 1,
           backgroundColor: palette.background,
           borderColor: palette.border,
@@ -700,14 +698,14 @@ export function OperatorScreen({ token }: { token: string }) {
         }}
       >
         <Text
-          numberOfLines={2}
+          numberOfLines={1}
           className="shrink font-semibold"
           style={{
             color: palette.foreground,
-            fontSize: isP03a21 ? 10 : 14,
+            fontSize: isP03a21 ? 9 : 14,
             flexGrow: 1,
             flexShrink: 1,
-            lineHeight: isP03a21 ? 12 : 18,
+            lineHeight: isP03a21 ? 11 : 18,
           }}
         >
           {cell.label}
@@ -717,12 +715,12 @@ export function OperatorScreen({ token }: { token: string }) {
     );
   };
 
+  // Crane mimic/readouts only for crane layouts — not the welding pendant.
   const showCraneMetrics =
     !isP03a21 &&
     (tags?.hoistHeightMm != null ||
       tags?.values?.['holding.hoistHeightMm'] != null);
-  /** Pendant: keep plant to a thin status strip so the matrix fills the phone. */
-  const plantMinHeight = isP03a21 ? 40 : windowWidth >= 768 ? 140 : 110;
+  const plantMinHeight = isP03a21 ? 36 : windowWidth >= 768 ? 140 : 110;
 
   return (
     <View className="flex-1 bg-background" style={{ minHeight: 0 }}>
@@ -789,7 +787,7 @@ export function OperatorScreen({ token }: { token: string }) {
             style={{
               flex: isP03a21 ? undefined : 1,
               minHeight: plantMinHeight,
-              maxHeight: isP03a21 ? plantMinHeight : undefined,
+              maxHeight: isP03a21 ? plantMinHeight + 8 : undefined,
               backgroundColor: solidBackground || '#07090c',
             }}
           >
@@ -806,19 +804,15 @@ export function OperatorScreen({ token }: { token: string }) {
                 style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}
               />
             )}
-            <View
-              className={`z-10 flex-row items-center justify-between px-3 ${
-                isP03a21 ? 'py-2' : 'pb-1 pt-2.5'
-              }`}
-            >
+            <View className="z-10 flex-row items-center justify-between px-2.5 pb-0.5 pt-1.5">
               <Text
-                className="flex-1 text-[10px] font-medium uppercase text-white/70"
-                style={{ letterSpacing: isP03a21 ? 1.4 : 2.8 }}
+                className="flex-1 text-[9px] font-medium uppercase text-white/70"
+                style={{ letterSpacing: 1.4 }}
                 numberOfLines={1}
               >
                 {layoutQuery.data?.background?.name ?? t('plantGraphic')}
               </Text>
-              <View className="ml-2 flex-row items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5">
+              <View className="ml-2 flex-row items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-0.5">
                 <View
                   className="h-1.5 w-1.5 rounded-full"
                   style={{
@@ -831,22 +825,22 @@ export function OperatorScreen({ token }: { token: string }) {
                   }}
                 />
                 <Text
-                  className="text-[10px] font-medium uppercase text-white/85"
-                  style={{ letterSpacing: 1.6 }}
+                  className="text-[9px] font-medium uppercase text-white/85"
+                  style={{ letterSpacing: 1.2 }}
                 >
                   {safetyMode}
                 </Text>
               </View>
             </View>
             {!useCustomGraphic && showCraneMetrics ? (
-              <View className="absolute inset-x-0 bottom-14 top-9 z-[8] px-1">
+              <View className="absolute inset-x-0 bottom-10 top-7 z-[8] px-1">
                 <CraneMimic tags={tags} safety={safety} />
               </View>
             ) : null}
-            {!isP03a21 || useCustomGraphic ? (
+            {showCraneMetrics || useCustomGraphic ? (
               <View
-                className={`absolute inset-x-0 top-9 z-[10] ${
-                  showCraneMetrics ? 'bottom-14' : 'bottom-2'
+                className={`absolute inset-x-0 top-7 z-[10] ${
+                  showCraneMetrics ? 'bottom-10' : 'bottom-2'
                 }`}
                 pointerEvents="none"
               >
@@ -855,17 +849,17 @@ export function OperatorScreen({ token }: { token: string }) {
                   .map((o) => (
                     <View
                       key={o.id}
-                      className="absolute min-w-[4.5rem] items-center rounded-lg border border-white/18 bg-black/70 px-2.5 py-1.5"
+                      className="absolute min-w-[3.5rem] items-center rounded-md border border-white/18 bg-black/70 px-1.5 py-0.5"
                       style={{
                         left: `${o.xPct}%`,
                         top: `${o.yPct}%`,
-                        transform: [{ translateX: -36 }, { translateY: -18 }],
+                        transform: [{ translateX: -28 }, { translateY: -12 }],
                       }}
                     >
-                      <Text className="text-[9px] uppercase text-white/55">
+                      <Text className="text-[8px] uppercase text-white/55">
                         {o.label}
                       </Text>
-                      <Text className="font-mono text-sm font-semibold text-white">
+                      <Text className="font-mono text-xs font-semibold text-white">
                         {formatOverlay(
                           o.format,
                           tagValueForRegister(tags, o.register?.name),
@@ -876,7 +870,7 @@ export function OperatorScreen({ token }: { token: string }) {
               </View>
             ) : null}
             {showCraneMetrics ? (
-              <View className="absolute inset-x-0 bottom-0 z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1">
+              <View className="absolute inset-x-0 bottom-0 z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-0.5 pb-0.5 pt-0.5">
                 {(
                   [
                     {
@@ -906,22 +900,22 @@ export function OperatorScreen({ token }: { token: string }) {
                 ).map((metric, index) => (
                   <View
                     key={metric.label}
-                    className={`flex-1 items-center gap-0.5 px-1 py-1 ${
+                    className={`flex-1 items-center px-0.5 py-0.5 ${
                       index > 0 ? 'border-l border-white/10' : ''
                     }`}
                   >
                     <Text
-                      className="text-[9px] font-medium uppercase text-white/45"
-                      style={{ letterSpacing: 2 }}
+                      className="text-[7px] font-medium uppercase text-white/45"
+                      style={{ letterSpacing: 1 }}
                     >
                       {metric.label}
                     </Text>
-                    <Text className="font-mono text-base font-semibold text-white">
+                    <Text className="font-mono text-sm font-semibold text-white">
                       {metric.value}
                     </Text>
                     <Text
-                      className="text-[10px] uppercase text-white/40"
-                      style={{ letterSpacing: 1.2 }}
+                      className="text-[8px] uppercase text-white/40"
+                      style={{ letterSpacing: 0.8 }}
                     >
                       {metric.unit}
                     </Text>
@@ -934,10 +928,10 @@ export function OperatorScreen({ token }: { token: string }) {
 
         <Card compact className="min-h-0 flex-1">
           <HelpTip id="tour.operator.safePin">
-            <View className="gap-1">
-              <View className="flex-row items-center gap-1.5">
+            <View className="gap-0.5">
+              <View className="flex-row items-center gap-1">
                 <TextInput
-                  className="h-9 min-h-9 flex-1 rounded-md border border-border bg-input px-2.5 text-xs text-foreground"
+                  className="h-7 min-h-7 flex-1 rounded-md border border-border bg-input px-2 text-[11px] text-foreground"
                   value={pin}
                   onChangeText={setPin}
                   secureTextEntry
@@ -949,10 +943,10 @@ export function OperatorScreen({ token }: { token: string }) {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('resetEstop')}
-                  className="h-9 min-h-9 shrink-0 items-center justify-center rounded-md border border-border px-2.5"
+                  className="h-7 min-h-7 shrink-0 items-center justify-center rounded-md border border-border px-2"
                   onPress={() => void resetEStop()}
                 >
-                  <Text className="text-[11px] font-semibold text-foreground">
+                  <Text className="text-[10px] font-semibold text-foreground">
                     {t('resetEstop')}
                   </Text>
                 </Pressable>
