@@ -1,6 +1,11 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DEMO_CRANE_MAP } from '@tele-pendant/modbus-core';
+import {
+  DEMO_CRANE_MAP,
+  DEMO_P03A21_MAP,
+  pendantDiName,
+  pendantDoName,
+} from '@tele-pendant/modbus-core';
 import { Repository } from 'typeorm';
 import { BackgroundDisplay } from '../../backgrounds/entities/background-display.entity';
 import { Cell } from '../../cells/entities/cell.entity';
@@ -9,26 +14,11 @@ import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { SafetyRoles } from '../../safety/entities/safety-roles.entity';
 
 const DEMO_NODE_IDS: Record<string, string> = {
-  'coil.hoistUp': 'ns=1;s=HoistUp',
-  'coil.hoistDown': 'ns=1;s=HoistDown',
-  'coil.trolleyLeft': 'ns=1;s=TrolleyLeft',
-  'coil.trolleyRight': 'ns=1;s=TrolleyRight',
-  'coil.bridgeFwd': 'ns=1;s=BridgeFwd',
-  'coil.bridgeRev': 'ns=1;s=BridgeRev',
   'coil.deadman': 'ns=1;s=Deadman',
   'coil.eStop': 'ns=1;s=EStop',
-  'holding.trolleyPosition': 'ns=1;s=TrolleyPosition',
-  'holding.hoistHeightMm': 'ns=1;s=HoistHeightMm',
-  'holding.loadKg': 'ns=1;s=LoadKg',
-  'holding.speedPct': 'ns=1;s=SpeedPct',
   'holding.heartbeat': 'ns=1;s=Heartbeat',
   'holding.safeState': 'ns=1;s=SafeState',
-  'discrete.motorRunning': 'ns=1;s=MotorRunning',
-  'discrete.fault': 'ns=1;s=Fault',
-  'discrete.commsOk': 'ns=1;s=CommsOk',
 };
-
-const TRENDED = new Set(['holding.hoistHeightMm', 'holding.loadKg']);
 
 @Injectable()
 export class HmiSeedService implements OnModuleInit {
@@ -50,34 +40,19 @@ export class HmiSeedService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     const count = await this.cells.count();
     if (count === 0) {
-      this.logger.log('Seeding demo crane HMI layout');
+      this.logger.log('Seeding P03A21 welding pendant HMI layout');
       await this.seed();
     }
     await this.ensureRuntimeRegisters();
-    await this.ensureTrolleyFeedback();
-    await this.ensureTrolleyOverlay();
     await this.ensureSafetyRoles();
   }
 
-  /** Rows the safety poller looks up by name. Never overwrites a saved address. */
+  /** Safety + crane leftovers the poller still resolves by name. */
   private async ensureRuntimeRegisters(): Promise<void> {
     const extras: Array<[string, number, RegisterMap['kind'], string, string]> =
       [
         ['coil.deadman', DEMO_CRANE_MAP.coils.deadman, 'coil', 'bool', 'rw'],
-        [
-          'coil.bridgeFwd',
-          DEMO_CRANE_MAP.coils.bridgeFwd,
-          'coil',
-          'bool',
-          'rw',
-        ],
-        [
-          'coil.bridgeRev',
-          DEMO_CRANE_MAP.coils.bridgeRev,
-          'coil',
-          'bool',
-          'rw',
-        ],
+        ['coil.eStop', DEMO_CRANE_MAP.coils.eStop, 'coil', 'bool', 'rw'],
         [
           'holding.heartbeat',
           DEMO_CRANE_MAP.holdings.heartbeat,
@@ -113,28 +88,6 @@ export class HmiSeedService implements OnModuleInit {
           'bool',
           'r',
         ],
-        ['coil.eStop', DEMO_CRANE_MAP.coils.eStop, 'coil', 'bool', 'rw'],
-        [
-          'holding.hoistHeightMm',
-          DEMO_CRANE_MAP.holdings.hoistHeightMm,
-          'holding',
-          'uint16',
-          'r',
-        ],
-        [
-          'holding.loadKg',
-          DEMO_CRANE_MAP.holdings.loadKg,
-          'holding',
-          'uint16',
-          'r',
-        ],
-        [
-          'holding.trolleyPosition',
-          DEMO_CRANE_MAP.holdings.trolleyPosition,
-          'holding',
-          'uint16',
-          'r',
-        ],
       ];
     for (const [name, address, kind, dataType, rw] of extras) {
       await this.upsertRegister(name, address, kind, dataType, rw);
@@ -150,104 +103,32 @@ export class HmiSeedService implements OnModuleInit {
   ): Promise<RegisterMap> {
     let row = await this.registers.findOne({ where: { name } });
     const nodeId = DEMO_NODE_IDS[name] ?? null;
-    const trended = TRENDED.has(name);
     if (!row) {
-      row = await this.registers.save(
-        this.registers.create({
-          name,
-          address,
-          kind,
-          dataType,
-          rw,
-          scale: 1,
-          trended,
-          nodeId,
-        }),
-      );
-      return row;
-    }
-    let dirty = false;
-    if (trended && !row.trended) {
-      row.trended = true;
-      dirty = true;
+      try {
+        row = await this.registers.save(
+          this.registers.create({
+            name,
+            address,
+            kind,
+            dataType,
+            rw,
+            scale: 1,
+            trended: false,
+            nodeId,
+          }),
+        );
+        return row;
+      } catch {
+        // Parallel seed races can hit UNIQUE(name); re-read the winner.
+        row = await this.registers.findOne({ where: { name } });
+        if (!row) throw new Error(`Failed to upsert register ${name}`);
+      }
     }
     if (nodeId && !row.nodeId) {
       row.nodeId = nodeId;
-      dirty = true;
+      row = await this.registers.save(row);
     }
-    if (dirty) row = await this.registers.save(row);
     return row;
-  }
-
-  /**
-   * TP-15: Trolley L/R must show motor run/idle + trolley position on the
-   * matrix badges (same pattern as hoist height). Force-correct bindings so
-   * older DBs / wrong Config saves still light up on boot.
-   */
-  private async ensureTrolleyFeedback(): Promise<void> {
-    const motor = await this.registers.findOne({
-      where: { name: 'discrete.motorRunning' },
-    });
-    const position = await this.registers.findOne({
-      where: { name: 'holding.trolleyPosition' },
-    });
-    if (!motor && !position) return;
-    const rows = await this.cells.find({
-      relations: {
-        primaryRegister: true,
-        feedbackRegister: true,
-        statusRegister: true,
-      },
-    });
-    for (const cell of rows) {
-      const name = cell.primaryRegister?.name;
-      if (name !== 'coil.trolleyLeft' && name !== 'coil.trolleyRight') continue;
-      let dirty = false;
-      if (motor && cell.feedbackRegister?.id !== motor.id) {
-        cell.feedbackRegister = motor;
-        dirty = true;
-      }
-      if (position && cell.statusRegister?.id !== position.id) {
-        cell.statusRegister = position;
-        dirty = true;
-      }
-      if (dirty) await this.cells.save(cell);
-    }
-  }
-
-  /** TP-15: plant graphic gets a trolley travel overlay when missing. */
-  private async ensureTrolleyOverlay(): Promise<void> {
-    const position = await this.registers.findOne({
-      where: { name: 'holding.trolleyPosition' },
-    });
-    if (!position) return;
-    const background = await this.backgrounds.findOne({
-      where: { active: true },
-    });
-    if (!background) return;
-    const existing = await this.overlays.find({
-      where: { background: { id: background.id } },
-      relations: { register: true },
-    });
-    if (
-      existing.some(
-        (row) =>
-          row.register?.name === 'holding.trolleyPosition' ||
-          row.label.trim().toLowerCase() === 'trolley',
-      )
-    ) {
-      return;
-    }
-    await this.overlays.save(
-      this.overlays.create({
-        label: 'Trolley',
-        xPct: 72,
-        yPct: 48,
-        format: '{value} mm',
-        background,
-        register: position,
-      }),
-    );
   }
 
   private async ensureSafetyRoles(): Promise<void> {
@@ -265,173 +146,328 @@ export class HmiSeedService implements OnModuleInit {
     );
   }
 
+  /** Admin reset: wipe cells/overlays and reseed P03A21 (keeps registers). */
+  async resetP03a21Demo(): Promise<{ ok: true; cells: number }> {
+    await this.overlays.createQueryBuilder().delete().execute();
+    await this.cells.createQueryBuilder().delete().execute();
+    await this.seed();
+    const cells = await this.cells.count();
+    this.logger.log(`P03A21 demo reset complete (${cells} cells)`);
+    return { ok: true, cells };
+  }
+
   async seed(): Promise<void> {
-    const hoistUp = await this.upsertRegister(
-      'coil.hoistUp',
-      DEMO_CRANE_MAP.coils.hoistUp,
-      'coil',
-      'bool',
-      'rw',
-    );
-    const hoistDown = await this.upsertRegister(
-      'coil.hoistDown',
-      DEMO_CRANE_MAP.coils.hoistDown,
-      'coil',
-      'bool',
-      'rw',
-    );
-    const trolleyLeft = await this.upsertRegister(
-      'coil.trolleyLeft',
-      DEMO_CRANE_MAP.coils.trolleyLeft,
-      'coil',
-      'bool',
-      'rw',
-    );
-    const trolleyRight = await this.upsertRegister(
-      'coil.trolleyRight',
-      DEMO_CRANE_MAP.coils.trolleyRight,
-      'coil',
-      'bool',
-      'rw',
-    );
+    await this.ensureRuntimeRegisters();
+
+    const di = async (key: keyof typeof DEMO_P03A21_MAP.di) =>
+      this.upsertRegister(
+        pendantDiName(key),
+        DEMO_P03A21_MAP.di[key],
+        'coil',
+        'bool',
+        'rw',
+      );
+    const lamp = async (key: keyof typeof DEMO_P03A21_MAP.do) =>
+      this.upsertRegister(
+        pendantDoName(key),
+        DEMO_P03A21_MAP.do[key],
+        'coil',
+        'bool',
+        'rw',
+      );
+
     const eStop = await this.upsertRegister(
       'coil.eStop',
-      DEMO_CRANE_MAP.coils.eStop,
+      DEMO_P03A21_MAP.safety.eStop,
       'coil',
       'bool',
       'rw',
     );
-    const height = await this.upsertRegister(
-      'holding.hoistHeightMm',
-      DEMO_CRANE_MAP.holdings.hoistHeightMm,
-      'holding',
-      'uint16',
-      'r',
-    );
-    const loadKg = await this.upsertRegister(
-      'holding.loadKg',
-      DEMO_CRANE_MAP.holdings.loadKg,
-      'holding',
-      'uint16',
-      'r',
-    );
-    const motorRunning = await this.upsertRegister(
-      'discrete.motorRunning',
-      DEMO_CRANE_MAP.discretes.motorRunning,
-      'discrete',
-      'bool',
-      'r',
-    );
-    const trolleyPosition = await this.upsertRegister(
-      'holding.trolleyPosition',
-      DEMO_CRANE_MAP.holdings.trolleyPosition,
-      'holding',
-      'uint16',
-      'r',
-    );
 
-    const bg = await this.backgrounds.save(
-      this.backgrounds.create({
-        name: 'demo-crane',
-        active: true,
-        cssBackground:
-          'linear-gradient(160deg, #1a2332 0%, #0f1419 45%, #1e2a1e 100%)',
-        imageUrl: null,
-      }),
-    );
-
-    await this.overlays.save([
-      this.overlays.create({
-        label: 'Height',
-        xPct: 18,
-        yPct: 22,
-        format: '{value} mm',
-        background: bg,
-        register: height,
-      }),
-      this.overlays.create({
-        label: 'Load',
-        xPct: 72,
-        yPct: 22,
-        format: '{value} kg',
-        background: bg,
-        register: loadKg,
-      }),
-      this.overlays.create({
-        label: 'Motor',
-        xPct: 45,
-        yPct: 70,
-        format: '{value}',
-        background: bg,
-        register: motorRunning,
-      }),
-      this.overlays.create({
-        label: 'Trolley',
-        xPct: 72,
-        yPct: 48,
-        format: '{value} mm',
-        background: bg,
-        register: trolleyPosition,
-      }),
+    const [
+      buttonsActiveDi,
+      teachPipeDi,
+      teachWeldDi,
+      teachSeamDi,
+      seamTrackDi,
+      moveHomeDi,
+      heightRegDi,
+      axisFastDi,
+      moveWeldDi,
+      enableDi,
+      owcvaDown,
+      owcvaUp,
+      owvaUp,
+      owvaDown,
+      owhaBack,
+      owhaFwd,
+      owcaBack,
+      owcaFwd,
+      owwacUp,
+      owwacDown,
+      owwdcUp,
+      owwdcDown,
+      owffClose,
+      owffOpen,
+    ] = await Promise.all([
+      di('buttonsActive'),
+      di('teachPipeMiddle'),
+      di('teachWeldingPosition'),
+      di('teachSeamTrackingLaser'),
+      di('seamTrackingOnOff'),
+      di('moveHomePosition'),
+      di('owvaHeightReg'),
+      di('axisFastSlowly'),
+      di('moveWeldingPosition'),
+      di('enable'),
+      di('owcvaDown'),
+      di('owcvaUp'),
+      di('owvaUp'),
+      di('owvaDown'),
+      di('owhaBack'),
+      di('owhaFwd'),
+      di('owcaBack'),
+      di('owcaFwd'),
+      di('owwacUp'),
+      di('owwacDown'),
+      di('owwdcUp'),
+      di('owwdcDown'),
+      di('owffClose'),
+      di('owffOpen'),
     ]);
 
-    const cellDefs: Array<{
+    const [
+      buttonsActiveLamp,
+      teachSeamLamp,
+      teachWeldLamp,
+      seamTrackLamp,
+      moveHomeLamp,
+      heightRegLamp,
+      axisFastLamp,
+      moveWeldLamp,
+      owcvaLamp,
+      owvaLamp,
+      owhaLamp,
+      owcaLamp,
+      owwacLamp,
+      owwdcLamp,
+      owffLamp,
+    ] = await Promise.all([
+      lamp('buttonsActive'),
+      lamp('teachSeamTrackingLaser'),
+      lamp('teachWeldingPosition'),
+      lamp('seamTrackingOnOff'),
+      lamp('moveHomePosition'),
+      lamp('owvaHeightReg'),
+      lamp('axisFastSlowly'),
+      lamp('moveWeldingPosition'),
+      lamp('owcvaSelector'),
+      lamp('owvaSelector'),
+      lamp('owhaSelector'),
+      lamp('owcaSelector'),
+      lamp('owwacSelector'),
+      lamp('owwdcSelector'),
+      lamp('owffSelector'),
+    ]);
+    // No dedicated teach-pipe lamp on the drawing; reuse seam-tracking lamp DO.
+    const teachPipeLamp = teachSeamLamp;
+
+    const bg = await this.backgrounds.findOne({
+      where: { name: 'demo-p03a21' },
+    });
+    if (!bg) {
+      await this.backgrounds.update({ active: true }, { active: false });
+      await this.backgrounds.save(
+        this.backgrounds.create({
+          name: 'demo-p03a21',
+          active: true,
+          cssBackground:
+            'linear-gradient(165deg, #2a2a2e 0%, #1a1a1c 40%, #3d3a2e 100%)',
+          imageUrl: null,
+        }),
+      );
+    } else if (!bg.active) {
+      await this.backgrounds.update({ active: true }, { active: false });
+      bg.active = true;
+      await this.backgrounds.save(bg);
+    }
+
+    type CellDef = {
       row: number;
       col: number;
       label: string;
       style: string;
       primary: RegisterMap;
+      secondary?: RegisterMap;
       feedback?: RegisterMap;
-      status?: RegisterMap;
       isMotion?: boolean;
       requiresSafeAction?: boolean;
-    }> = [
+      variableSpeed?: boolean;
+    };
+
+    const cellDefs: CellDef[] = [
+      // Row 0 — short labels so the 3-col Operator matrix fits.
+      {
+        row: 0,
+        col: 0,
+        label: 'Buttons active',
+        style: 'pushbutton',
+        primary: buttonsActiveDi,
+        feedback: buttonsActiveLamp,
+      },
       {
         row: 0,
         col: 1,
-        label: 'Hoist Up',
-        style: 'motion',
-        primary: hoistUp,
-        feedback: motorRunning,
-        status: height,
-        isMotion: true,
+        label: 'Teach Pipe Middle',
+        style: 'pushbutton',
+        primary: teachPipeDi,
+        feedback: teachPipeLamp,
       },
+      {
+        row: 0,
+        col: 2,
+        label: 'Teach Welding Pos.',
+        style: 'pushbutton',
+        primary: teachWeldDi,
+        feedback: teachWeldLamp,
+      },
+      // Row 1
       {
         row: 1,
         col: 0,
-        label: 'Trolley L',
-        style: 'motion',
-        primary: trolleyLeft,
-        feedback: motorRunning,
-        status: trolleyPosition,
-        isMotion: true,
+        label: 'Teach Seam Laser',
+        style: 'pushbutton',
+        primary: teachSeamDi,
+        feedback: teachSeamLamp,
       },
       {
         row: 1,
         col: 1,
+        label: 'OWFF close/open',
+        style: 'selector',
+        primary: owffClose,
+        secondary: owffOpen,
+        feedback: owffLamp,
+        isMotion: false,
+        variableSpeed: false,
+      },
+      {
+        row: 1,
+        col: 2,
+        label: 'Seam Tracking',
+        style: 'pushbutton',
+        primary: seamTrackDi,
+        feedback: seamTrackLamp,
+      },
+      // Row 2
+      {
+        row: 2,
+        col: 0,
+        label: 'Move Home',
+        style: 'pushbutton',
+        primary: moveHomeDi,
+        feedback: moveHomeLamp,
+      },
+      {
+        row: 2,
+        col: 1,
+        label: 'OWCVA down/up',
+        style: 'selector',
+        primary: owcvaDown,
+        secondary: owcvaUp,
+        feedback: owcvaLamp,
+        isMotion: true,
+      },
+      {
+        row: 2,
+        col: 2,
+        label: 'OWHA back/fwd',
+        style: 'selector',
+        primary: owhaBack,
+        secondary: owhaFwd,
+        feedback: owhaLamp,
+        isMotion: true,
+      },
+      // Row 3
+      {
+        row: 3,
+        col: 0,
+        label: 'Height Reg.',
+        style: 'pushbutton',
+        primary: heightRegDi,
+        feedback: heightRegLamp,
+      },
+      {
+        row: 3,
+        col: 1,
+        label: 'Axis fast/slow',
+        style: 'pushbutton',
+        primary: axisFastDi,
+        feedback: axisFastLamp,
+      },
+      {
+        row: 3,
+        col: 2,
+        label: 'OWVA up/down',
+        style: 'selector',
+        primary: owvaUp,
+        secondary: owvaDown,
+        feedback: owvaLamp,
+        isMotion: true,
+      },
+      // Row 4
+      {
+        row: 4,
+        col: 0,
+        label: 'Move Welding Pos.',
+        style: 'pushbutton',
+        primary: moveWeldDi,
+        feedback: moveWeldLamp,
+      },
+      {
+        row: 4,
+        col: 1,
+        label: 'OWWAC up/down',
+        style: 'selector',
+        primary: owwacUp,
+        secondary: owwacDown,
+        feedback: owwacLamp,
+        isMotion: true,
+      },
+      {
+        row: 4,
+        col: 2,
+        label: 'OWWDC up/down',
+        style: 'selector',
+        primary: owwdcUp,
+        secondary: owwdcDown,
+        feedback: owwdcLamp,
+        isMotion: true,
+      },
+      // Row 5 — STOP docks out (hole at 5,0); Enable; OWCA
+      {
+        row: 5,
+        col: 0,
         label: 'STOP',
         style: 'estop',
         primary: eStop,
         requiresSafeAction: true,
       },
       {
-        row: 1,
-        col: 2,
-        label: 'Trolley R',
-        style: 'motion',
-        primary: trolleyRight,
-        feedback: motorRunning,
-        status: trolleyPosition,
-        isMotion: true,
+        row: 5,
+        col: 1,
+        label: 'Enable',
+        style: 'enable',
+        primary: enableDi,
       },
       {
-        row: 2,
-        col: 1,
-        label: 'Hoist Down',
-        style: 'motion',
-        primary: hoistDown,
-        feedback: motorRunning,
-        status: height,
+        row: 5,
+        col: 2,
+        label: 'OWCA back/fwd',
+        style: 'selector',
+        primary: owcaBack,
+        secondary: owcaFwd,
+        feedback: owcaLamp,
         isMotion: true,
       },
     ];
@@ -445,15 +481,18 @@ export class HmiSeedService implements OnModuleInit {
           label: def.label,
           style: def.style,
           primaryRegister: def.primary,
+          secondaryRegister: def.secondary ?? null,
           feedbackRegister: def.feedback ?? null,
-          statusRegister: def.status ?? null,
+          statusRegister: null,
           isMotion,
           requiresSafeAction: def.requiresSafeAction ?? false,
-          variableSpeed: isMotion,
+          variableSpeed: def.variableSpeed ?? isMotion,
           slowSpeedPct: 30,
           fastSpeedPct: 100,
         }),
       );
     }
+
+    await this.ensureSafetyRoles();
   }
 }

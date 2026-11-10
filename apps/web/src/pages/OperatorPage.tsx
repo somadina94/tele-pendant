@@ -9,10 +9,13 @@ import {
   tagValueForRegister,
 } from '../lib/operator-helpers';
 import {
+  cellRequiresControlLease,
+  cellUsesHoldToRun,
   isOperatorScreenReady,
   MATRIX_CELL_STATE_CODE,
   MATRIX_CELL_STATE_I18N,
   operatorNeedsLiveTags,
+  parseSelectorSideLabels,
   resolveMatrixCellUiState,
   type MatrixCellUiState,
 } from '@tele-pendant/shared';
@@ -87,7 +90,11 @@ export function OperatorPage() {
   const [tags, setTags] = useState<LiveTags | null>(null);
   const [safety, setSafety] = useState<HmiLayout['safety'] | null>(null);
   const [holdingCellId, setHoldingCellId] = useState<string | null>(null);
+  const [holdingDirection, setHoldingDirection] = useState<'a' | 'b' | null>(
+    null,
+  );
   const heldRef = useRef<string | null>(null);
+  const heldDirectionRef = useRef<'a' | 'b' | null>(null);
   const [jogSpeed, setJogSpeed] = useState<'slow' | 'fast'>('fast');
   const jogSpeedRef = useRef<'slow' | 'fast'>('fast');
   const [safePin, setSafePin] = useState('');
@@ -244,9 +251,14 @@ export function OperatorPage() {
   }, [applyLiveTags]);
 
   // Match the local working hold path: WS deadman pulse only (no HTTP flood).
+  // Only motion/jog holds refresh deadman — Enable/PB holds must not.
   useEffect(() => {
     const socket = getRealtimeSocket();
     if (!holdingCellId) return;
+    const heldCell = layoutQuery.data?.cells.find(
+      (c) => c.id === holdingCellId,
+    );
+    if (!heldCell || !cellRequiresControlLease(heldCell)) return;
     holdPulseCount.current = 0;
     const pulse = () => {
       holdPulseCount.current += 1;
@@ -263,7 +275,7 @@ export function OperatorPage() {
     pulse();
     const id = window.setInterval(pulse, 400);
     return () => window.clearInterval(id);
-  }, [holdingCellId]);
+  }, [holdingCellId, layoutQuery.data?.cells]);
 
   const activate = useMutation({
     mutationFn: (args: {
@@ -271,11 +283,13 @@ export function OperatorPage() {
       value: boolean;
       safeActionPin?: string;
       speed?: 'slow' | 'fast';
+      direction?: 'a' | 'b';
     }) =>
       apiPost(`/hmi/cells/${args.id}/activate`, {
         value: args.value,
         safeActionPin: args.safeActionPin,
         ...(args.speed ? { speed: args.speed } : {}),
+        ...(args.direction ? { direction: args.direction } : {}),
       }),
     onError: (err: Error) => setMessage(err.message),
     onSuccess: () => {
@@ -307,9 +321,10 @@ export function OperatorPage() {
     return { rows, cols, cells };
   }, [layoutQuery.data]);
 
-  async function pressCell(cell: CellDto) {
+  async function pressCell(cell: CellDto, direction?: 'a' | 'b') {
     setMessage(null);
-    if (cell.isMotion && !controlRef.current?.youHold) {
+    const needsLease = cellRequiresControlLease(cell);
+    if (needsLease && !controlRef.current?.youHold) {
       setMessage(
         controlRef.current?.held
           ? `${t('controlHeldBy')} ${controlRef.current.holderDisplayName || controlRef.current.holderUserId}`
@@ -317,16 +332,20 @@ export function OperatorPage() {
       );
       return;
     }
+    const holdToRun = cellUsesHoldToRun(cell);
     const pressGen = holdGen.current;
-    if (cell.isMotion) {
+    if (holdToRun) {
       motionDebug('hold.press', {
         cellId: cell.id,
         label: cell.label,
+        direction: direction ?? null,
         speed: jogSpeedRef.current,
       });
       heldRef.current = cell.id;
+      heldDirectionRef.current = direction ?? null;
       setHoldingCellId(cell.id);
-      pulseDeadman();
+      setHoldingDirection(direction ?? null);
+      if (needsLease) pulseDeadman();
     }
     const speed =
       cell.isMotion && (cell.variableSpeed ?? true)
@@ -334,26 +353,32 @@ export function OperatorPage() {
         : undefined;
     const t0 = Date.now();
     try {
-      await activate.mutateAsync({ id: cell.id, value: true, speed });
-      if (cell.isMotion && holdGen.current !== pressGen) {
+      await activate.mutateAsync({
+        id: cell.id,
+        value: true,
+        speed,
+        ...(direction ? { direction } : {}),
+      });
+      if (holdToRun && holdGen.current !== pressGen) {
         // Released while activate(true) was in flight — drop the coil.
         void activate
           .mutateAsync({
             id: cell.id,
             value: false,
             speed,
+            ...(direction ? { direction } : {}),
           })
           .catch(() => undefined);
         return;
       }
-      if (cell.isMotion) {
+      if (holdToRun) {
         motionDebug('hold.activate-true', {
           cellId: cell.id,
           ms: Date.now() - t0,
         });
       }
     } catch (err) {
-      if (cell.isMotion) {
+      if (holdToRun) {
         motionDebug('hold.activate-true.fail', {
           cellId: cell.id,
           ms: Date.now() - t0,
@@ -362,33 +387,46 @@ export function OperatorPage() {
       }
       if (heldRef.current === cell.id && holdGen.current === pressGen) {
         heldRef.current = null;
+        heldDirectionRef.current = null;
         setHoldingCellId(null);
-        releaseDeadman();
+        setHoldingDirection(null);
+        if (needsLease) releaseDeadman();
       }
     }
   }
 
-  function releaseCell(cell: CellDto) {
-    if (!cell.isMotion) return;
+  function releaseCell(cell: CellDto, direction?: 'a' | 'b') {
+    if (!cellUsesHoldToRun(cell)) return;
     const mine = heldRef.current === cell.id;
-    if (heldRef.current === cell.id) heldRef.current = null;
+    const heldDir = heldDirectionRef.current;
+    if (direction && heldDir && direction !== heldDir) return;
+    if (heldRef.current === cell.id) {
+      heldRef.current = null;
+      heldDirectionRef.current = null;
+    }
     setHoldingCellId((current) => (current === cell.id ? null : current));
+    setHoldingDirection((current) =>
+      current && (!direction || current === direction) ? null : current,
+    );
     if (!mine) return;
     holdGen.current += 1;
     motionDebug('hold.release', {
       cellId: cell.id,
       label: cell.label,
+      direction: direction ?? heldDir,
       pulses: holdPulseCount.current,
     });
-    releaseDeadman();
+    if (cellRequiresControlLease(cell)) releaseDeadman();
     // Fire-and-forget: awaiting activate-false stacked Modbus work behind the
     // next press and caused live-tag jumps in prod (700–2500ms).
     const t0 = Date.now();
+    const releaseDir = direction ?? heldDir ?? undefined;
     void activate
       .mutateAsync({
         id: cell.id,
         value: false,
         speed: (cell.variableSpeed ?? true) ? jogSpeedRef.current : undefined,
+        ...(releaseDir ? { direction: releaseDir } : {}),
       })
       .then(() => {
         motionDebug('hold.activate-false', {
@@ -405,13 +443,23 @@ export function OperatorPage() {
       });
   }
 
+  async function clearSelector(cell: CellDto) {
+    setMessage(null);
+    try {
+      await activate.mutateAsync({ id: cell.id, value: false });
+    } catch {
+      // Best-effort center clear.
+    }
+  }
+
   function finishCellPointer(
     cell: CellDto,
     target: HTMLElement,
     pointerId: number,
+    direction?: 'a' | 'b',
   ) {
     releasePointerIfCaptured(target, pointerId);
-    void releaseCell(cell);
+    void releaseCell(cell, direction);
   }
 
   useEffect(() => {
@@ -419,13 +467,17 @@ export function OperatorPage() {
       const id = heldRef.current;
       if (!id) return;
       const cell = layoutQuery.data?.cells.find((row) => row.id === id);
+      const dir = heldDirectionRef.current;
       heldRef.current = null;
+      heldDirectionRef.current = null;
       setHoldingCellId(null);
+      setHoldingDirection(null);
       releaseDeadman();
-      if (!cell?.isMotion) return;
-      void apiPost(`/hmi/cells/${id}/activate`, { value: false }).catch(
-        () => undefined,
-      );
+      if (!cell || !cellUsesHoldToRun(cell)) return;
+      void apiPost(`/hmi/cells/${id}/activate`, {
+        value: false,
+        ...(dir ? { direction: dir } : {}),
+      }).catch(() => undefined);
     };
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') dropHeld();
@@ -541,7 +593,145 @@ export function OperatorPage() {
     });
     const StateIcon = CELL_STATE_ICON[cellState];
     const stateLabel = t(MATRIX_CELL_STATE_I18N[cellState]);
+    const stateCode = MATRIX_CELL_STATE_CODE[cellState];
     const isEstop = cell.style === 'estop';
+    const needsLease = cellRequiresControlLease(cell);
+    const holdToRun = cellUsesHoldToRun(cell);
+    const feedbackRaw = cell.feedbackRegister
+      ? tagValueForRegister(tags, cell.feedbackRegister.name)
+      : undefined;
+    const feedbackIsBool =
+      typeof feedbackRaw === 'boolean' ||
+      feedbackRaw === 0 ||
+      feedbackRaw === 1;
+    const lampOn = Boolean(feedbackRaw);
+    const statusChip = (
+      <span className="matrix-cell-trailing">
+        {cell.feedbackRegister && feedbackIsBool ? (
+          <span
+            className={cn('matrix-lamp', lampOn && 'is-on')}
+            title={lampOn ? 'Lamp on' : 'Lamp off'}
+            data-lamp={lampOn ? 'on' : 'off'}
+            aria-hidden
+          />
+        ) : null}
+        {cell.feedbackRegister && !feedbackIsBool ? (
+          <span className="matrix-cell-meta">F {String(feedbackRaw)}</span>
+        ) : null}
+        {cell.statusRegister ? (
+          <span className="matrix-cell-meta">
+            S {String(tagValueForRegister(tags, cell.statusRegister.name))}
+          </span>
+        ) : null}
+        <span className="matrix-cell-state" title={stateLabel}>
+          <StateIcon className="size-2.5 shrink-0" strokeWidth={2.5} />
+          {stateCode}
+        </span>
+      </span>
+    );
+
+    if (cell.style === 'selector') {
+      const { sideA, sideB } = parseSelectorSideLabels(cell.label);
+      const latch = !holdToRun;
+      const aActive =
+        holdingCellId === cell.id && holdingDirection === 'a'
+          ? true
+          : Boolean(tagValueForRegister(tags, cell.primaryRegister?.name));
+      const bActive =
+        holdingCellId === cell.id && holdingDirection === 'b'
+          ? true
+          : Boolean(tagValueForRegister(tags, cell.secondaryRegister?.name));
+      return (
+        <div
+          key={cell.id}
+          className={cn(
+            'matrix-cell matrix-selector flex h-full min-h-11 flex-col gap-0.5',
+            `state-${cellState}`,
+          )}
+          data-cell-state={cellState}
+          data-touch-min="44"
+          title={`${cell.label} · ${stateCode}: ${stateLabel}`}
+        >
+          <div className="matrix-selector-head">
+            <span className="matrix-cell-label">{cell.label}</span>
+            {statusChip}
+          </div>
+          <div className="matrix-selector-rocker">
+            {(['a', 'b'] as const).map((dir) => {
+              const caption = dir === 'a' ? sideA : sideB;
+              const active = dir === 'a' ? aActive : bActive;
+              const sideVariant = active ? 'default' : 'secondary';
+              return (
+                <Button
+                  key={dir}
+                  type="button"
+                  variant={sideVariant}
+                  size="sm"
+                  className={cn(
+                    'matrix-selector-side h-9 min-h-9 flex-1 px-1.5',
+                    active && 'is-active',
+                  )}
+                  disabled={needsLease && !youHold}
+                  aria-label={`${cell.label} ${caption}`}
+                  aria-pressed={active}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    if (needsLease && !youHold) {
+                      void pressCell(cell, dir);
+                      return;
+                    }
+                    trySetPointerCapture(e.currentTarget, e.pointerId);
+                    void pressCell(cell, dir);
+                  }}
+                  onPointerMove={(e) => {
+                    if (heldRef.current !== cell.id || !holdToRun) return;
+                    if (
+                      pointerLeftElement(e.currentTarget, e.clientX, e.clientY)
+                    ) {
+                      finishCellPointer(
+                        cell,
+                        e.currentTarget,
+                        e.pointerId,
+                        dir,
+                      );
+                    }
+                  }}
+                  onPointerUp={(e) =>
+                    finishCellPointer(cell, e.currentTarget, e.pointerId, dir)
+                  }
+                  onPointerLeave={(e) =>
+                    finishCellPointer(cell, e.currentTarget, e.pointerId, dir)
+                  }
+                  onPointerCancel={(e) =>
+                    finishCellPointer(cell, e.currentTarget, e.pointerId, dir)
+                  }
+                  onLostPointerCapture={() => {
+                    if (heldRef.current === cell.id && holdToRun) {
+                      void releaseCell(cell, dir);
+                    }
+                  }}
+                >
+                  {caption}
+                </Button>
+              );
+            })}
+            {latch ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="matrix-selector-center h-9 min-h-9 px-1.5"
+                aria-label={`${cell.label} center`}
+                onClick={() => void clearSelector(cell)}
+              >
+                ·
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <Button
         key={cell.id}
@@ -551,14 +741,15 @@ export function OperatorPage() {
         data-touch-min="44"
         data-stop-dock={isEstop ? 'true' : undefined}
         className={cn(
-          'matrix-cell flex h-auto min-h-11 flex-row flex-nowrap items-center justify-between gap-2 whitespace-nowrap',
+          'matrix-cell flex h-full min-h-11 flex-row items-center justify-between gap-1.5 whitespace-normal',
           `state-${cellState}`,
           isEstop && 'estop',
+          cell.style === 'enable' && 'matrix-enable',
         )}
-        disabled={cell.isMotion && !youHold}
+        disabled={needsLease && !youHold}
         onPointerDown={(e) => {
           e.preventDefault();
-          if (cell.isMotion && !youHold) {
+          if (needsLease && !youHold) {
             void pressCell(cell);
             return;
           }
@@ -566,7 +757,7 @@ export function OperatorPage() {
           void pressCell(cell);
         }}
         onPointerMove={(e) => {
-          if (heldRef.current !== cell.id || !cell.isMotion) return;
+          if (heldRef.current !== cell.id || !holdToRun) return;
           if (pointerLeftElement(e.currentTarget, e.clientX, e.clientY)) {
             finishCellPointer(cell, e.currentTarget, e.pointerId);
           }
@@ -581,44 +772,27 @@ export function OperatorPage() {
           finishCellPointer(cell, e.currentTarget, e.pointerId)
         }
         onLostPointerCapture={() => {
-          if (heldRef.current === cell.id && cell.isMotion) {
+          if (heldRef.current === cell.id && holdToRun) {
             void releaseCell(cell);
           }
         }}
         aria-label={cell.label}
-        aria-description={`${MATRIX_CELL_STATE_CODE[cellState]}: ${stateLabel}`}
-        title={`${MATRIX_CELL_STATE_CODE[cellState]} · ${stateLabel}`}
+        aria-description={`${stateCode}: ${stateLabel}`}
+        title={`${cell.label} · ${stateCode}: ${stateLabel}`}
       >
         <span className="matrix-cell-label">{cell.label}</span>
-        <span className="matrix-cell-trailing">
-          <span className="matrix-cell-state">
-            <StateIcon className="size-2.5 shrink-0" strokeWidth={2.5} />
-            {stateLabel}
-          </span>
-          {(cell.feedbackRegister || cell.statusRegister) && (
-            <span className="matrix-cell-meta">
-              {cell.feedbackRegister
-                ? `F ${String(
-                    tagValueForRegister(tags, cell.feedbackRegister.name),
-                  )}`
-                : null}
-              {cell.feedbackRegister && cell.statusRegister ? ' · ' : null}
-              {cell.statusRegister
-                ? `S ${String(
-                    tagValueForRegister(tags, cell.statusRegister.name),
-                  )}`
-                : null}
-            </span>
-          )}
-        </span>
+        {statusChip}
       </Button>
     );
   }
 
   return (
     <div
-      className="operator-shell mx-auto max-w-5xl gap-2 md:gap-3"
+      className="operator-shell mx-auto max-w-6xl gap-2 md:gap-3"
       data-feat="hmi-shell"
+      data-pendant={
+        layout.background?.name?.includes('p03a21') ? 'p03a21' : undefined
+      }
     >
       <div className="operator-body">
         <HelpTip id="tour.operator.banner">
@@ -706,7 +880,14 @@ export function OperatorPage() {
               </div>
               {!useCustomGraphic ? (
                 <div className="plant-mimic-stage" aria-hidden={false}>
-                  <CraneMimic tags={tags} safety={safety ?? layout.safety} />
+                  {tags?.hoistHeightMm != null ||
+                  tags?.values?.['holding.hoistHeightMm'] != null ? (
+                    <CraneMimic tags={tags} safety={safety ?? layout.safety} />
+                  ) : (
+                    <div className="plant-mimic-idle px-4 py-6 text-center text-sm text-muted-foreground">
+                      {layout.background?.name ?? 'P03A21'} pendant demo
+                    </div>
+                  )}
                 </div>
               ) : null}
               <div className="plant-overlay-stage">
@@ -728,37 +909,40 @@ export function OperatorPage() {
                     </div>
                   ))}
               </div>
-              <div className="plant-readout">
-                <div className="plant-metric">
-                  <span className="plant-metric-label">Height</span>
-                  <span className="plant-metric-value">
-                    {tags?.hoistHeightMm ?? '—'}
-                  </span>
-                  <span className="plant-metric-unit">mm</span>
+              {tags?.hoistHeightMm != null ||
+              tags?.values?.['holding.hoistHeightMm'] != null ? (
+                <div className="plant-readout">
+                  <div className="plant-metric">
+                    <span className="plant-metric-label">Height</span>
+                    <span className="plant-metric-value">
+                      {tags?.hoistHeightMm ?? '—'}
+                    </span>
+                    <span className="plant-metric-unit">mm</span>
+                  </div>
+                  <div className="plant-metric">
+                    <span className="plant-metric-label">Trolley</span>
+                    <span className="plant-metric-value">
+                      {tags?.trolleyPositionMm ??
+                        tagValueForRegister(tags, 'holding.trolleyPosition')}
+                    </span>
+                    <span className="plant-metric-unit">mm</span>
+                  </div>
+                  <div className="plant-metric">
+                    <span className="plant-metric-label">Load</span>
+                    <span className="plant-metric-value">
+                      {tags?.loadKg ?? '—'}
+                    </span>
+                    <span className="plant-metric-unit">kg</span>
+                  </div>
+                  <div className="plant-metric">
+                    <span className="plant-metric-label">Motor</span>
+                    <span className="plant-metric-value">
+                      {tags?.motorRunning ? 'RUN' : 'IDLE'}
+                    </span>
+                    <span className="plant-metric-unit">status</span>
+                  </div>
                 </div>
-                <div className="plant-metric">
-                  <span className="plant-metric-label">Trolley</span>
-                  <span className="plant-metric-value">
-                    {tags?.trolleyPositionMm ??
-                      tagValueForRegister(tags, 'holding.trolleyPosition')}
-                  </span>
-                  <span className="plant-metric-unit">mm</span>
-                </div>
-                <div className="plant-metric">
-                  <span className="plant-metric-label">Load</span>
-                  <span className="plant-metric-value">
-                    {tags?.loadKg ?? '—'}
-                  </span>
-                  <span className="plant-metric-unit">kg</span>
-                </div>
-                <div className="plant-metric">
-                  <span className="plant-metric-label">Motor</span>
-                  <span className="plant-metric-value">
-                    {tags?.motorRunning ? 'RUN' : 'IDLE'}
-                  </span>
-                  <span className="plant-metric-unit">status</span>
-                </div>
-              </div>
+              ) : null}
             </div>
           </HelpTip>
 

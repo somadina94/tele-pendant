@@ -4,6 +4,7 @@ Evidence map for tomorrow’s review. Tick each row with the linked screen, API,
 
 | JD theme | Evidence | Status |
 | -------- | -------- | ------ |
+| Milestone-1 soft pendant (P03A21) | Operator grid matches photo layout; rocker selectors write 2 coils; illuminated PB + lamp DO; Enable gate for jog; admin `POST /hmi/demo/p03a21/reset`; map in `pendant-p03a21-map.ts` | Software delivered (demo Modbus coils; not exact Siemens PLC addresses) |
 | Operator cell triad (command + feedback + status) | Web `/operator` matrix cells; Expo Operator screen; seed in `hmi-seed.service.ts` | Software delivered |
 | Local face auth with challenge liveness | `/face`, Expo Face; `face.util.ts` challenge + AES via `FACE_TEMPLATE_KEY`; `FACE_LIMITATIONS.md` | Software delivered (not ISO-certified) |
 | Auth / face rate limits + hardening | `@Throttle` on login + face; Helmet/JWT/roles; Security sections in manuals | Software delivered |
@@ -26,4 +27,4 @@ Evidence map for tomorrow’s review. Tick each row with the linked screen, API,
 pnpm verify
 ```
 
-Manual smoke: Operator triad live F/S readouts → Face 3-step enroll/login → Assistant ask with **no** `CURSOR_API_KEY` → language picker fr/de → Admin protocol toggle matches `DRIVERS.md`.
+Manual smoke: Admin reset P03A21 → Operator labels match photo grid → rocker writes two coils → Enable required for jog → illuminated PB lamp → Face 3-step enroll/login → Assistant ask with **no** `CURSOR_API_KEY` → language picker fr/de → Admin protocol toggle matches `DRIVERS.md`.

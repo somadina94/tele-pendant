@@ -992,6 +992,7 @@ function CellForm({
     slowSpeedPct?: number;
     fastSpeedPct?: number;
     primaryRegisterId: string;
+    secondaryRegisterId: string;
     feedbackRegisterId: string;
     statusRegisterId: string;
   }) => Promise<void>;
@@ -1018,6 +1019,9 @@ function CellForm({
   const [primaryRegisterId, setPrimary] = useState(
     cell?.primaryRegister?.id ?? primaryDefault,
   );
+  const [secondaryRegisterId, setSecondary] = useState(
+    cell?.secondaryRegister?.id ?? '',
+  );
   const [feedbackRegisterId, setFeedback] = useState(
     cell?.feedbackRegister?.id ?? '',
   );
@@ -1039,15 +1043,23 @@ function CellForm({
       <SelectField
         label="Style"
         value={
-          style === 'estop'
-            ? 'estop'
-            : style === 'secondary'
-              ? 'secondary'
-              : 'default'
+          [
+            'estop',
+            'secondary',
+            'selector',
+            'pushbutton',
+            'enable',
+            'default',
+          ].includes(style)
+            ? style
+            : 'default'
         }
         options={[
           { value: 'default', label: 'default' },
           { value: 'secondary', label: 'secondary' },
+          { value: 'pushbutton', label: 'pushbutton' },
+          { value: 'selector', label: 'selector (rocker)' },
+          { value: 'enable', label: 'enable' },
           { value: 'estop', label: 'estop (STOP)' },
         ]}
         onChange={setStyle}
@@ -1057,6 +1069,12 @@ function CellForm({
         value={primaryRegisterId || regOpts[0]?.value || ''}
         options={regOpts}
         onChange={setPrimary}
+      />
+      <SelectField
+        label="Secondary register (selector B)"
+        value={secondaryRegisterId || NONE_REGISTER}
+        options={optionalRegOpts}
+        onChange={(id) => setSecondary(id === NONE_REGISTER ? '' : id)}
       />
       <SelectField
         label="Feedback register"
@@ -1126,6 +1144,7 @@ function CellForm({
                 }
               : {}),
             primaryRegisterId,
+            secondaryRegisterId,
             feedbackRegisterId,
             statusRegisterId,
           })

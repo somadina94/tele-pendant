@@ -24,4 +24,13 @@ export class ActivateCellDto {
   @IsOptional()
   @IsBoolean()
   refresh?: boolean;
+
+  /**
+   * P03A21 selector rocker: which side to assert.
+   * `a` → primaryRegister, `b` → secondaryRegister. Omit for single-coil cells.
+   */
+  @ApiPropertyOptional({ enum: ['a', 'b'], example: 'a' })
+  @IsOptional()
+  @IsIn(['a', 'b'])
+  direction?: 'a' | 'b';
 }

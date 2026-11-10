@@ -71,6 +71,11 @@ export default defineConfig({
         'src/**/*.{test,spec}.{ts,tsx}',
         // Intentionally inert under MODE=test; keep out of the 100% gate.
         'src/lib/motion-debug.ts',
+        // Re-export shims — logic is covered in @tele-pendant/shared (or account-menu).
+        'src/lib/assistant-suggestions.ts',
+        'src/lib/live-tags.ts',
+        'src/lib/operator-helpers.ts',
+        'src/components/admin-user-menu.tsx',
       ],
       thresholds: {
         statements: 100,

@@ -154,6 +154,8 @@ export interface CellDto {
   slowSpeedPct?: number;
   fastSpeedPct?: number;
   primaryRegister?: RegisterRef | null;
+  /** Selector direction B (primary = A). */
+  secondaryRegister?: RegisterRef | null;
   feedbackRegister?: RegisterRef | null;
   statusRegister?: RegisterRef | null;
 }

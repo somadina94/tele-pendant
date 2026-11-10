@@ -461,8 +461,42 @@ export function AdminPage() {
           <Card>
             <CardHeader>
               <CardTitle>{t('cellsTitle')}</CardTitle>
+              <CardDescription>
+                Milestone-1 demo uses the Siemens P03A21 welding pendant layout.
+                Existing databases keep their cells until an admin resets.
+              </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
+              {role === 'admin' ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      void (async () => {
+                        const ok = window.confirm(
+                          'Replace all Operator cells with the P03A21 pendant demo layout?',
+                        );
+                        if (!ok) return;
+                        try {
+                          const result = await apiPost<{
+                            ok: boolean;
+                            cells: number;
+                          }>('/hmi/demo/p03a21/reset', {});
+                          await refreshLayout();
+                          toastOk(
+                            `P03A21 demo loaded (${result.cells} cells).`,
+                          );
+                        } catch (err) {
+                          toastErr(noteText(err));
+                        }
+                      })();
+                    }}
+                  >
+                    Reset P03A21 demo layout
+                  </Button>
+                </div>
+              ) : null}
               {cells.map((cell) => (
                 <CellEditor
                   key={cell.id}
@@ -479,6 +513,7 @@ export function AdminPage() {
                     slowSpeedPct: cell.slowSpeedPct ?? 30,
                     fastSpeedPct: cell.fastSpeedPct ?? 100,
                     primaryRegisterId: cell.primaryRegister?.id ?? '',
+                    secondaryRegisterId: cell.secondaryRegister?.id ?? '',
                     feedbackRegisterId: cell.feedbackRegister?.id ?? '',
                     statusRegisterId: cell.statusRegister?.id ?? '',
                   }}
@@ -514,6 +549,7 @@ export function AdminPage() {
                     slowSpeedPct: 30,
                     fastSpeedPct: 100,
                     primaryRegisterId: registers[0]?.id ?? '',
+                    secondaryRegisterId: '',
                     feedbackRegisterId: '',
                     statusRegisterId: '',
                   }}
@@ -1350,6 +1386,7 @@ interface CellForm {
   slowSpeedPct: number;
   fastSpeedPct: number;
   primaryRegisterId: string;
+  secondaryRegisterId: string;
   feedbackRegisterId: string;
   statusRegisterId: string;
 }
@@ -1420,6 +1457,9 @@ function CellEditor({
   const [primaryRegisterId, setPrimaryRegisterId] = useState(
     initial.primaryRegisterId,
   );
+  const [secondaryRegisterId, setSecondaryRegisterId] = useState(
+    initial.secondaryRegisterId,
+  );
   const [feedbackRegisterId, setFeedbackRegisterId] = useState(
     initial.feedbackRegisterId,
   );
@@ -1445,6 +1485,7 @@ function CellEditor({
         slowSpeedPct: Number(slowSpeedPct) || 30,
         fastSpeedPct: Number(fastSpeedPct) || 100,
         primaryRegisterId,
+        secondaryRegisterId: secondaryRegisterId || '',
         feedbackRegisterId,
         statusRegisterId,
       });
@@ -1524,6 +1565,13 @@ function CellEditor({
         registers={registers}
         allowEmpty={false}
         onChange={setPrimaryRegisterId}
+      />
+      <RegisterSelect
+        label={`${noteKey} secondary (selector B)`}
+        value={secondaryRegisterId}
+        registers={registers}
+        allowEmpty
+        onChange={setSecondaryRegisterId}
       />
       <RegisterSelect
         label={`${noteKey} feedback`}

@@ -48,6 +48,11 @@ export type {
   MatrixCellTagsLike,
   MatrixCellUiState,
 } from './matrix-cell-state';
+export {
+  cellRequiresControlLease,
+  cellUsesHoldToRun,
+  parseSelectorSideLabels,
+} from './selector-rocker';
 export { tourStepsFor } from './tour';
 export type { TourScreen } from './tour';
 export { ASSISTANT_SUGGESTION_GROUPS } from './assistant-suggestions';

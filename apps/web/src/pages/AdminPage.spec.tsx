@@ -442,6 +442,58 @@ describe('AdminPage', () => {
     await screen.findByText('duplicate');
   });
 
+  it('resets the P03A21 demo layout from cells config', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') return [];
+      return layout;
+    });
+    const post = vi.spyOn(api, 'apiPost').mockResolvedValue({
+      ok: true,
+      cells: 18,
+    });
+    const toast = await import('@/lib/toast');
+    const okSpy = vi
+      .spyOn(toast, 'toastOk')
+      .mockImplementation(() => undefined);
+    const errSpy = vi
+      .spyOn(toast, 'toastErr')
+      .mockImplementation(() => undefined);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    unmountAdmin();
+    const view = renderWithProviders(<AdminPage />, {
+      route: '/admin?section=cells',
+      role: 'admin',
+    });
+    unmountAdmin = view.unmount;
+    expect(
+      await screen.findByRole('button', { name: 'Reset P03A21 demo layout' }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reset P03A21 demo layout' }),
+    );
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/hmi/demo/p03a21/reset', {}),
+    );
+    await waitFor(() =>
+      expect(okSpy).toHaveBeenCalledWith('P03A21 demo loaded (18 cells).'),
+    );
+
+    confirmSpy.mockReturnValue(false);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reset P03A21 demo layout' }),
+    );
+    expect(post).toHaveBeenCalledTimes(1);
+
+    post.mockRejectedValueOnce(new Error('reset failed'));
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reset P03A21 demo layout' }),
+    );
+    await waitFor(() => expect(errSpy).toHaveBeenCalledWith('reset failed'));
+    confirmSpy.mockRestore();
+  });
+
   it('saves cells, labels, and the background', async () => {
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
       if (path === '/plc/health') return plcHealthMock;

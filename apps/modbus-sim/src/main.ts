@@ -1,5 +1,6 @@
 import * as Modbus from 'jsmodbus';
 import net from 'net';
+import { DEMO_P03A21_MAP } from '@tele-pendant/modbus-core';
 import { getBit, setBit } from './bits';
 import { createDemoCraneBuffers, DEMO_CRANE_MAP } from './demo-crane';
 
@@ -8,6 +9,78 @@ const host = process.env.MODBUS_SIM_HOST ?? '127.0.0.1';
 
 const buffers = createDemoCraneBuffers();
 setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.commsOk, true);
+
+/** Echo pendant DI → DO lamps (illuminated PB / selector feedback). */
+const LAMP_ECHO: Array<{ di: number[]; do: number }> = [
+  {
+    di: [DEMO_P03A21_MAP.di.buttonsActive],
+    do: DEMO_P03A21_MAP.do.buttonsActive,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.teachSeamTrackingLaser],
+    do: DEMO_P03A21_MAP.do.teachSeamTrackingLaser,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.seamTrackingOnOff],
+    do: DEMO_P03A21_MAP.do.seamTrackingOnOff,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.moveWeldingPosition],
+    do: DEMO_P03A21_MAP.do.moveWeldingPosition,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.owcvaDown, DEMO_P03A21_MAP.di.owcvaUp],
+    do: DEMO_P03A21_MAP.do.owcvaSelector,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.moveHomePosition],
+    do: DEMO_P03A21_MAP.do.moveHomePosition,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.owvaUp, DEMO_P03A21_MAP.di.owvaDown],
+    do: DEMO_P03A21_MAP.do.owvaSelector,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.moveWeldingPosition],
+    do: DEMO_P03A21_MAP.do.moveWeldingPositionAlt,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.owhaBack, DEMO_P03A21_MAP.di.owhaFwd],
+    do: DEMO_P03A21_MAP.do.owhaSelector,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.axisFastSlowly],
+    do: DEMO_P03A21_MAP.do.axisFastSlowly,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.owcaBack, DEMO_P03A21_MAP.di.owcaFwd],
+    do: DEMO_P03A21_MAP.do.owcaSelector,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.owwacUp, DEMO_P03A21_MAP.di.owwacDown],
+    do: DEMO_P03A21_MAP.do.owwacSelector,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.owvaHeightReg],
+    do: DEMO_P03A21_MAP.do.owvaHeightReg,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.owwdcUp, DEMO_P03A21_MAP.di.owwdcDown],
+    do: DEMO_P03A21_MAP.do.owwdcSelector,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.teachWeldingPosition],
+    do: DEMO_P03A21_MAP.do.teachWeldingPosition,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.owffClose, DEMO_P03A21_MAP.di.owffOpen],
+    do: DEMO_P03A21_MAP.do.owffSelector,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.teachPipeMiddle],
+    do: DEMO_P03A21_MAP.do.teachSeamTrackingLaser,
+  },
+];
 
 const netServer = new net.Server();
 new Modbus.server.TCP(netServer, {
@@ -25,6 +98,12 @@ setInterval(() => {
   const left = getBit(buffers.coils, DEMO_CRANE_MAP.coils.trolleyLeft);
   const right = getBit(buffers.coils, DEMO_CRANE_MAP.coils.trolleyRight);
 
+  // P03A21 lamp echo (independent of crane motion).
+  for (const echo of LAMP_ECHO) {
+    const lit = echo.di.some((addr) => getBit(buffers.coils, addr));
+    setBit(buffers.coils, echo.do, lit);
+  }
+
   let height = buffers.holding.readUInt16BE(
     DEMO_CRANE_MAP.holdings.hoistHeightMm * 2,
   );
@@ -38,6 +117,11 @@ setInterval(() => {
     setBit(buffers.coils, DEMO_CRANE_MAP.coils.hoistDown, false);
     setBit(buffers.coils, DEMO_CRANE_MAP.coils.trolleyLeft, false);
     setBit(buffers.coils, DEMO_CRANE_MAP.coils.trolleyRight, false);
+    // Clear pendant jog DIs on e-stop.
+    for (const addr of Object.values(DEMO_P03A21_MAP.di) as number[]) {
+      if (addr === DEMO_P03A21_MAP.di.enable) continue;
+      setBit(buffers.coils, addr, false);
+    }
     setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.motorRunning, false);
     buffers.holding.writeUInt16BE(1, DEMO_CRANE_MAP.holdings.safeState * 2);
     return;
@@ -75,9 +159,12 @@ setInterval(() => {
 }, 200);
 
 netServer.listen(port, host, () => {
-  console.log(`[modbus-sim] demo crane listening on ${host}:${port}`);
+  console.log(`[modbus-sim] demo crane + P03A21 pendant on ${host}:${port}`);
   console.log(
     `[modbus-sim] hoistUp coil=${DEMO_CRANE_MAP.coils.hoistUp}, height holding=${DEMO_CRANE_MAP.holdings.hoistHeightMm}`,
+  );
+  console.log(
+    `[modbus-sim] P03A21 enable DI=${DEMO_P03A21_MAP.di.enable}, eStop=${DEMO_P03A21_MAP.safety.eStop}`,
   );
 });
 

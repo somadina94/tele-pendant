@@ -8,14 +8,21 @@ For step-by-step click tests, use [USER_MANUAL.md](./USER_MANUAL.md). For instal
 
 ## What is Tele-Pendant?
 
-Tele-Pendant is a **remote control panel** for industrial equipment (the demo is a **crane**). You use it on:
+Tele-Pendant is a **remote control panel** for industrial equipment. The **milestone-1 client demo** is a soft copy of the Siemens **P03A21** welding pendant (pushbuttons, rocker selectors, Enable, STOP). An older **crane** layout remains available for regression. You use it on:
 
 - A **web browser** on a computer or tablet
 - A **phone app** (Expo) that talks to the same server
 
-The app does **not** move the crane by itself. It sends instructions to a **PLC** (the machine’s brain) over a network link. In training, a **simulator** pretends to be that PLC so you can practice safely.
+The app does **not** move equipment by itself. It sends instructions to a **PLC** (the machine’s brain) over a network link. In training, a **simulator** pretends to be that PLC so you can practice safely.
 
-Think of it as: **sign in → see a picture of the plant → press buttons → numbers update live**.
+Think of it as: **sign in → see a picture of the plant → press buttons / rockers → lamps and tags update live**.
+
+### P03A21 walkthrough (milestone-1)
+
+1. Admin: **Config → Cells → Reset P03A21 demo layout** (or empty DB seed on first boot).
+2. Operator: claim control, hold **Enable**, then use jog rockers (each rocker writes **two** PLC inputs with mutual exclusion).
+3. Illuminated pushbuttons show lamp feedback from DO coils when pressed.
+4. **STOP** docks at the bottom and latches e-stop; unlabeled spares stay empty holes.
 
 ---
 

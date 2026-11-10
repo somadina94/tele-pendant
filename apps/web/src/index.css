@@ -312,8 +312,9 @@
   @apply text-[9px] uppercase tracking-[0.14em] text-white/40;
 }
 .matrix-grid {
-  @apply relative z-0 grid w-full gap-1.5 md:gap-2;
+  @apply relative z-0 grid w-full gap-1 md:gap-1.5;
   grid-auto-rows: minmax(2.75rem, auto);
+  align-items: stretch;
 }
 .matrix-grid > .matrix-cell,
 .matrix-grid > .matrix-grid-hole {
@@ -329,10 +330,10 @@
   @apply max-md:hidden min-h-11 md:min-h-11;
 }
 .matrix-cell {
-  /* FEAT-A3: ≥44px targets; single horizontal label · state · meta row.
+  /* FEAT-A3: ≥44px targets; compact label + state chip for dense pendants.
    * Layout utilities also live on the Button className so twMerge beats
    * buttonVariants (inline-flex / whitespace-nowrap / gap-2 / h-9). */
-  @apply min-h-11 w-full touch-none select-none overflow-hidden px-3 py-2 text-sm md:min-h-11 md:px-3.5 md:py-2.5 md:text-sm;
+  @apply min-h-11 w-full touch-none select-none overflow-hidden px-2 py-1.5 text-xs md:min-h-11 md:px-2.5 md:py-2 md:text-[13px];
   /* FEAT-A1 colour tokens — always paired with .matrix-cell-state text. */
   --matrix-state-idle-bg: hsl(210 40% 96%);
   --matrix-state-idle-fg: hsl(215 25% 27%);
@@ -361,17 +362,52 @@
   --matrix-state-fault-fg: hsl(271 80% 78%);
   --matrix-state-fault-bd: hsl(271 55% 52%);
 }
+.matrix-selector {
+  @apply rounded-md border px-1.5 py-1;
+}
+.matrix-selector-head {
+  @apply flex min-w-0 items-start justify-between gap-1;
+}
+.matrix-selector-rocker {
+  @apply flex w-full items-stretch gap-0.5;
+}
+.matrix-selector-side {
+  @apply text-[10px] font-semibold uppercase tracking-wide md:text-[11px];
+}
+.matrix-enable {
+  @apply ring-1 ring-emerald-600/40;
+}
 .matrix-cell-label {
-  @apply min-w-0 truncate text-left font-semibold leading-none;
+  @apply min-w-0 flex-1 text-left font-semibold leading-snug;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 .matrix-cell-trailing {
-  @apply flex min-w-0 shrink-0 items-center gap-1.5;
+  @apply flex shrink-0 items-center gap-1;
+}
+.matrix-lamp {
+  @apply inline-block size-2 shrink-0 rounded-full bg-muted-foreground/35;
+}
+.matrix-lamp.is-on {
+  @apply bg-emerald-400 shadow-[0_0_0_2px_rgba(52,211,153,0.35)];
 }
 .matrix-cell-meta {
   @apply max-w-[9rem] truncate text-right text-[10px] font-normal leading-none opacity-80;
 }
 .matrix-cell-state {
-  @apply inline-flex shrink-0 items-center gap-0.5 truncate rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide;
+  @apply inline-flex shrink-0 items-center gap-0.5 truncate rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide md:text-[10px];
+}
+/* Pendant demo: give the matrix more of the viewport; plant stays compact. */
+.operator-shell[data-pendant='p03a21'] .operator-plant-slot .plant-graphic {
+  min-height: 7.5rem;
+}
+.operator-shell[data-pendant='p03a21'] .operator-matrix-card {
+  @apply flex-1;
+}
+.operator-shell[data-pendant='p03a21'] .operator-matrix-toolbar-wrap {
+  @apply overflow-y-auto;
 }
 .matrix-cell.state-idle:not(.estop) {
   background-color: var(--matrix-state-idle-bg) !important;

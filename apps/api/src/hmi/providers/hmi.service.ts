@@ -26,6 +26,7 @@ import {
   hmiAssetPublicPath,
   hmiAssetsDirectory,
 } from '../hmi-assets';
+import { pendantDiName } from '@tele-pendant/modbus-core';
 
 type Actor = AuditActor;
 
@@ -292,12 +293,24 @@ export class HmiService {
       speed?: 'slow' | 'fast';
       /** Hold refresh: rewrite coil without flooding audit. */
       refresh?: boolean;
+      /** Selector rocker: a = primary, b = secondary. */
+      direction?: 'a' | 'b';
     },
   ) {
     const started = Date.now();
     const cell = await this.cells.findOne({ where: { id: cellId } });
     if (!cell?.primaryRegister) {
       throw new NotFoundException('Cell or primary register not found');
+    }
+
+    const isSelector = cell.style === 'selector';
+    if (isSelector && value && !opts.direction) {
+      throw new BadRequestException(
+        'Selector cells require direction a or b when asserting',
+      );
+    }
+    if (isSelector && opts.direction === 'b' && !cell.secondaryRegister) {
+      throw new BadRequestException('Selector cell has no secondary register');
     }
 
     if (
@@ -316,6 +329,10 @@ export class HmiService {
       );
     }
 
+    if (isSelector && cell.isMotion && value) {
+      await this.assertEnableHeldForJog();
+    }
+
     // STOP is one press. The PIN is only required to reset e-stop.
     const isEStopCell =
       cell.requiresSafeAction ||
@@ -327,23 +344,55 @@ export class HmiService {
 
     const speedMode = opts.speed === 'slow' ? 'slow' : 'fast';
     const usesVariableSpeed = cell.isMotion && (cell.variableSpeed ?? true);
-    const reg = cell.primaryRegister;
+    const activeReg =
+      isSelector && opts.direction === 'b' && cell.secondaryRegister
+        ? cell.secondaryRegister
+        : cell.primaryRegister;
+    const otherReg =
+      isSelector && cell.secondaryRegister
+        ? opts.direction === 'b'
+          ? cell.primaryRegister
+          : cell.secondaryRegister
+        : null;
+
+    const writeCoilLike = async (
+      reg: NonNullable<Cell['primaryRegister']>,
+      on: boolean,
+    ) => {
+      if (reg.kind === 'coil') {
+        await this.plcService.writeCoil(reg.address, on);
+        if (cell.isMotion) {
+          if (on) this.safetyState.noteMotionCoilAsserted(reg.address);
+          else this.safetyState.noteMotionCoilCleared(reg.address);
+        }
+      } else if (reg.kind === 'holding') {
+        await this.plcService.writeHolding(reg.address, on ? 1 : 0);
+      } else {
+        throw new ForbiddenException('Register is read-only');
+      }
+    };
 
     const writeMotion = async () => {
       // Hold refresh only re-asserts the coil — skip jog rewrite.
       if (usesVariableSpeed && value && !opts.refresh) {
         await this.writeJogSpeedPct(cell, speedMode);
       }
-      if (reg.kind === 'coil') {
-        await this.plcService.writeCoil(reg.address, value);
-        if (cell.isMotion) {
-          if (value) this.safetyState.noteMotionCoilAsserted(reg.address);
-          else this.safetyState.noteMotionCoilCleared(reg.address);
+      if (isSelector) {
+        if (value) {
+          // Mutual exclusion: assert one side, clear the other.
+          if (otherReg) await writeCoilLike(otherReg, false);
+          await writeCoilLike(activeReg, true);
+        } else if (opts.direction) {
+          await writeCoilLike(activeReg, false);
+        } else {
+          // Center / full release: clear both sides.
+          await writeCoilLike(cell.primaryRegister!, false);
+          if (cell.secondaryRegister) {
+            await writeCoilLike(cell.secondaryRegister, false);
+          }
         }
-      } else if (reg.kind === 'holding') {
-        await this.plcService.writeHolding(reg.address, value ? 1 : 0);
       } else {
-        throw new ForbiddenException('Register is read-only');
+        await writeCoilLike(activeReg, value);
       }
       if (usesVariableSpeed && !value) {
         await this.writeJogSpeedPct(cell, null);
@@ -367,9 +416,13 @@ export class HmiService {
           userDisplayName: opts.userDisplayName ?? null,
           action: 'cell.activate',
           resource: cell.label,
-          details: usesVariableSpeed
-            ? `${cell.label}=${value};speed=${value ? speedMode : 'off'}`
-            : `${cell.label}=${value}`,
+          details: [
+            `${cell.label}=${value}`,
+            usesVariableSpeed ? `speed=${value ? speedMode : 'off'}` : null,
+            opts.direction ? `dir=${opts.direction}` : null,
+          ]
+            .filter(Boolean)
+            .join(';'),
           ip: opts.ip,
           result: 'success',
         })
@@ -386,6 +439,7 @@ export class HmiService {
         label: cell.label,
         value,
         refresh: Boolean(opts.refresh),
+        direction: opts.direction ?? null,
         speed: usesVariableSpeed && value ? speedMode : null,
         ms: Date.now() - started,
         userId: opts.userId ?? null,
@@ -396,8 +450,22 @@ export class HmiService {
       ok: true,
       cellId: cell.id,
       value,
+      ...(opts.direction ? { direction: opts.direction } : {}),
       ...(usesVariableSpeed && value ? { speed: speedMode } : {}),
     };
+  }
+
+  /** P03A21: jog selectors require the Enable switch coil held. */
+  private async assertEnableHeldForJog(): Promise<void> {
+    const enable = await this.registers.findOneBy({
+      name: pendantDiName('enable'),
+    });
+    if (!enable || enable.kind !== 'coil') return;
+    const driver = this.plcService.getDriver();
+    const [on] = await driver.readCoils(enable.address, 1);
+    if (!on) {
+      throw new ForbiddenException('Hold Enable before using jog selectors');
+    }
   }
 
   /** FEAT-A2: write holding.speedPct for slow/fast jog (0 clears). */
@@ -603,6 +671,14 @@ export class HmiService {
       throw new BadRequestException('Row and column must be integers 0 to 32');
     }
     const primaryRegister = await this.registerById(input.primaryRegisterId);
+    const secondaryRegister = await this.optionalRegister(
+      input.secondaryRegisterId,
+    );
+    if (style === 'selector' && !secondaryRegister) {
+      throw new BadRequestException(
+        'Selector cells require a secondaryRegisterId',
+      );
+    }
     const slowSpeedPct = clampSpeedPct(input.slowSpeedPct, 30);
     const fastSpeedPct = clampSpeedPct(input.fastSpeedPct, 100);
     if (slowSpeedPct > fastSpeedPct) {
@@ -621,6 +697,7 @@ export class HmiService {
       slowSpeedPct,
       fastSpeedPct,
       primaryRegister,
+      secondaryRegister,
       feedbackRegister: await this.optionalRegister(input.feedbackRegisterId),
       statusRegister: await this.optionalRegister(input.statusRegisterId),
     };
@@ -676,6 +753,7 @@ interface CellInput {
   slowSpeedPct?: number;
   fastSpeedPct?: number;
   primaryRegisterId: string;
+  secondaryRegisterId?: string | null;
   feedbackRegisterId?: string | null;
   statusRegisterId?: string | null;
 }

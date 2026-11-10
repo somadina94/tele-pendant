@@ -51,6 +51,14 @@ export class Cell {
   @JoinColumn({ name: 'primary_register_id' })
   primaryRegister?: RegisterMap | null;
 
+  /**
+   * P03A21 selectors: second PLC input (direction B).
+   * Primary = direction A (up/open/fwd); secondary = direction B (down/close/back).
+   */
+  @ManyToOne(() => RegisterMap, { nullable: true, eager: true })
+  @JoinColumn({ name: 'secondary_register_id' })
+  secondaryRegister?: RegisterMap | null;
+
   @ManyToOne(() => RegisterMap, { nullable: true, eager: true })
   @JoinColumn({ name: 'feedback_register_id' })
   feedbackRegister?: RegisterMap | null;

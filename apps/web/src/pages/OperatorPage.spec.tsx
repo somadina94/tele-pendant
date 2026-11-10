@@ -1246,7 +1246,7 @@ describe('OperatorPage', () => {
     await waitFor(() =>
       expect(hoist).toHaveAttribute('data-cell-state', 'blocked'),
     );
-    expect(hoist).toHaveTextContent(/blocked/i);
+    expect(hoist).toHaveTextContent(/BLOCK/);
     expect(stop).toHaveAttribute('data-cell-state', 'running');
 
     tagsHandler({
@@ -1257,7 +1257,7 @@ describe('OperatorPage', () => {
     await waitFor(() =>
       expect(hoist).toHaveAttribute('data-cell-state', 'fault'),
     );
-    expect(hoist).toHaveTextContent(/fault/i);
+    expect(hoist).toHaveTextContent(/FAULT/);
   });
 
   it('releases exclusive control from the banner (FEAT-A5)', async () => {
@@ -1711,5 +1711,489 @@ describe('OperatorPage', () => {
       (c) => c[0] === 'safety.state',
     )?.[1] as (p: unknown) => void;
     safetyHandler({ mode: 'normal', control: undefined });
+  });
+
+  it('renders selector rockers with direction activate and center clear', async () => {
+    const selectorLayout = {
+      ...layout,
+      matrix: { rows: 1, cols: 2 },
+      background: {
+        id: 'bg-p',
+        name: 'demo-p03a21',
+        cssBackground: 'gray',
+        imageUrl: null,
+      },
+      cells: [
+        {
+          id: 'sel-motion',
+          row: 0,
+          col: 0,
+          label: 'OWVA up/down',
+          style: 'selector',
+          isMotion: true,
+          requiresSafeAction: false,
+          variableSpeed: true,
+          primaryRegister: {
+            id: 'pa',
+            name: 'coil.p03a21.di.owvaUp',
+            address: 26,
+            kind: 'coil',
+          },
+          secondaryRegister: {
+            id: 'pb',
+            name: 'coil.p03a21.di.owvaDown',
+            address: 27,
+            kind: 'coil',
+          },
+          feedbackRegister: {
+            id: 'fl',
+            name: 'coil.p03a21.do.owvaSelector',
+            address: 56,
+            kind: 'coil',
+          },
+          statusRegister: null,
+        },
+        {
+          id: 'sel-latch',
+          row: 0,
+          col: 1,
+          label: 'OWFF close/open',
+          style: 'selector',
+          isMotion: false,
+          requiresSafeAction: false,
+          variableSpeed: false,
+          primaryRegister: {
+            id: 'pc',
+            name: 'coil.p03a21.di.owffClose',
+            address: 40,
+            kind: 'coil',
+          },
+          secondaryRegister: {
+            id: 'pd',
+            name: 'coil.p03a21.di.owffOpen',
+            address: 41,
+            kind: 'coil',
+          },
+          feedbackRegister: null,
+          statusRegister: null,
+        },
+      ],
+    };
+    const pendantTags = {
+      ...defaultTags,
+      hoistHeightMm: undefined as unknown as number,
+      values: {},
+    };
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === 'tags.update') handler(pendantTags);
+      },
+    );
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return pendantTags as never;
+      return selectorLayout as never;
+    });
+    const posts: Array<{ path: string; body: unknown }> = [];
+    mockPostWithControl(async (path, body) => {
+      posts.push({ path, body });
+      if (
+        String(path).includes('sel-latch') &&
+        (body as { value?: boolean }).value === false
+      ) {
+        throw new Error('center failed');
+      }
+      return { ok: true };
+    });
+
+    renderOperator(<OperatorPage />);
+    expect(await screen.findByText('OWVA up/down')).toBeInTheDocument();
+    expect(screen.getByText(/pendant demo/i)).toBeInTheDocument();
+
+    const up = screen.getByRole('button', { name: 'OWVA up/down up' });
+    const down = screen.getByRole('button', { name: 'OWVA up/down down' });
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => true);
+
+    fireEvent.pointerDown(up);
+    await waitFor(() =>
+      expect(
+        posts.some(
+          (p) =>
+            p.path === '/hmi/cells/sel-motion/activate' &&
+            (p.body as { direction?: string; value?: boolean }).direction ===
+              'a' &&
+            (p.body as { value?: boolean }).value === true,
+        ),
+      ).toBe(true),
+    );
+    fireEvent.pointerUp(up);
+    await waitFor(() =>
+      expect(
+        posts.some(
+          (p) =>
+            p.path === '/hmi/cells/sel-motion/activate' &&
+            (p.body as { direction?: string; value?: boolean }).direction ===
+              'a' &&
+            (p.body as { value?: boolean }).value === false,
+        ),
+      ).toBe(true),
+    );
+
+    fireEvent.pointerDown(down);
+    fireEvent.pointerMove(down, { clientX: -100, clientY: -100 });
+    await waitFor(() =>
+      expect(
+        posts.some(
+          (p) =>
+            p.path === '/hmi/cells/sel-motion/activate' &&
+            (p.body as { direction?: string }).direction === 'b',
+        ),
+      ).toBe(true),
+    );
+
+    fireEvent.pointerDown(up);
+    fireEvent.pointerLeave(up);
+    fireEvent.pointerDown(down);
+    fireEvent.pointerCancel(down);
+    fireEvent.pointerDown(up);
+    fireEvent(up, new Event('lostpointercapture', { bubbles: true }));
+
+    const close = screen.getByRole('button', {
+      name: 'OWFF close/open close',
+    });
+    fireEvent.pointerDown(close);
+    await waitFor(() =>
+      expect(
+        posts.some(
+          (p) =>
+            p.path === '/hmi/cells/sel-latch/activate' &&
+            (p.body as { direction?: string; value?: boolean }).direction ===
+              'a' &&
+            (p.body as { value?: boolean }).value === true,
+        ),
+      ).toBe(true),
+    );
+
+    const center = screen.getByRole('button', {
+      name: 'OWFF close/open center',
+    });
+    fireEvent.click(center);
+    await waitFor(() =>
+      expect(
+        posts.some(
+          (p) =>
+            p.path === '/hmi/cells/sel-latch/activate' &&
+            (p.body as { value?: boolean }).value === false &&
+            !(p.body as { direction?: string }).direction,
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it('covers enable hold, lit lamps, and crane readout fallbacks', async () => {
+    const pendantLayout = {
+      ...layout,
+      matrix: { rows: 1, cols: 2 },
+      background: {
+        id: 'bg-p',
+        name: 'demo-p03a21',
+        cssBackground: 'gray',
+        imageUrl: null,
+      },
+      cells: [
+        {
+          id: 'en1',
+          row: 0,
+          col: 0,
+          label: 'Enable',
+          style: 'enable',
+          isMotion: false,
+          requiresSafeAction: false,
+          primaryRegister: {
+            id: 'pe',
+            name: 'coil.p03a21.di.enable',
+            address: 43,
+            kind: 'coil',
+          },
+          feedbackRegister: {
+            id: 'fe',
+            name: 'coil.p03a21.do.buttonsActive',
+            address: 50,
+            kind: 'coil',
+          },
+          statusRegister: null,
+        },
+        {
+          id: 'sel1',
+          row: 0,
+          col: 1,
+          label: 'OWVA up/down',
+          style: 'selector',
+          isMotion: true,
+          requiresSafeAction: false,
+          variableSpeed: false,
+          primaryRegister: {
+            id: 'pa',
+            name: 'coil.p03a21.di.owvaUp',
+            address: 26,
+            kind: 'coil',
+          },
+          secondaryRegister: {
+            id: 'pb',
+            name: 'coil.p03a21.di.owvaDown',
+            address: 27,
+            kind: 'coil',
+          },
+          feedbackRegister: {
+            id: 'fl',
+            name: 'coil.p03a21.do.owvaSelector',
+            address: 56,
+            kind: 'coil',
+          },
+          statusRegister: null,
+        },
+      ],
+    };
+    const litTags = {
+      hoistHeightMm: undefined as unknown as number,
+      loadKg: undefined as unknown as number,
+      speedPct: 0,
+      motorRunning: false,
+      fault: false,
+      commsOk: true,
+      trolleyPositionMm: undefined as unknown as number,
+      values: {
+        'holding.hoistHeightMm': 100,
+        'coil.p03a21.do.buttonsActive': false,
+        'coil.p03a21.do.owvaSelector': true,
+        'coil.p03a21.di.owvaUp': true,
+        'coil.p03a21.di.owvaDown': false,
+      },
+      at: new Date().toISOString(),
+    };
+    socket.on.mockImplementation(
+      (event: string, handler: (p: unknown) => void) => {
+        if (event === 'tags.update') handler(litTags);
+      },
+    );
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return litTags as never;
+      return pendantLayout as never;
+    });
+    mockPostWithControl(async () => ({ ok: true }));
+    renderOperator(<OperatorPage />);
+    expect(
+      await screen.findByRole('button', { name: 'Enable' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    const enable = screen.getByRole('button', { name: 'Enable' });
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(enable);
+    fireEvent.pointerUp(enable);
+    expect(screen.getByTitle('Lamp off')).toBeInTheDocument();
+    expect(screen.getByTitle('Lamp on')).toBeInTheDocument();
+    const up = screen.getByRole('button', { name: 'OWVA up/down up' });
+    expect(up).toHaveAttribute('aria-pressed', 'true');
+    up.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 40,
+        bottom: 40,
+        width: 40,
+        height: 40,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    fireEvent.pointerDown(up);
+    await waitFor(() => expect(up.className).toMatch(/is-active/));
+    // Stay inside the rocker (alternate of pointerLeftElement).
+    fireEvent.pointerMove(up, { clientX: 10, clientY: 10 });
+    // pagehide while still holding a directional rocker.
+    window.dispatchEvent(new Event('pagehide'));
+    await waitFor(() =>
+      expect(api.apiPost).toHaveBeenCalledWith(
+        '/hmi/cells/sel1/activate',
+        expect.objectContaining({ value: false, direction: 'a' }),
+      ),
+    );
+
+    // Leave-while-held path after a fresh press.
+    fireEvent.pointerDown(up);
+    await waitFor(() => expect(up.className).toMatch(/is-active/));
+    fireEvent.pointerMove(up, { clientX: 500, clientY: 500 });
+    fireEvent(up, new Event('lostpointercapture', { bubbles: true }));
+
+    // Failed activate on enable clears without deadman release.
+    mockPostWithControl(async (path) => {
+      if (String(path).includes('/hmi/cells/en1/activate')) {
+        throw new Error('enable fail');
+      }
+      return { ok: true };
+    });
+    fireEvent.pointerDown(enable);
+    await screen.findByText('enable fail');
+  });
+
+  it('ignores opposite-side release and latch pointer moves on selectors', async () => {
+    const selectorLayout = {
+      ...layout,
+      matrix: { rows: 1, cols: 2 },
+      cells: [
+        {
+          id: 'sel-motion',
+          row: 0,
+          col: 0,
+          label: 'OWVA up/down',
+          style: 'selector',
+          isMotion: true,
+          requiresSafeAction: false,
+          variableSpeed: false,
+          primaryRegister: {
+            id: 'pa',
+            name: 'coil.p03a21.di.owvaUp',
+            address: 26,
+            kind: 'coil',
+          },
+          secondaryRegister: {
+            id: 'pb',
+            name: 'coil.p03a21.di.owvaDown',
+            address: 27,
+            kind: 'coil',
+          },
+          feedbackRegister: null,
+          statusRegister: null,
+        },
+        {
+          id: 'sel-latch',
+          row: 0,
+          col: 1,
+          label: 'OWFF close/open',
+          style: 'selector',
+          isMotion: false,
+          requiresSafeAction: false,
+          variableSpeed: false,
+          primaryRegister: {
+            id: 'pc',
+            name: 'coil.p03a21.di.owffClose',
+            address: 40,
+            kind: 'coil',
+          },
+          secondaryRegister: {
+            id: 'pd',
+            name: 'coil.p03a21.di.owffOpen',
+            address: 41,
+            kind: 'coil',
+          },
+          feedbackRegister: null,
+          statusRegister: null,
+        },
+      ],
+    };
+    mockGetWithControl(selectorLayout);
+    const posts: Array<{ path: string; body: unknown }> = [];
+    mockPostWithControl(async (path, body) => {
+      posts.push({ path, body });
+      return { ok: true };
+    });
+    renderOperator(<OperatorPage />);
+    const up = await screen.findByRole('button', { name: 'OWVA up/down up' });
+    const down = screen.getByRole('button', { name: 'OWVA up/down down' });
+    const close = screen.getByRole('button', {
+      name: 'OWFF close/open close',
+    });
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => true);
+
+    fireEvent.pointerDown(up);
+    await waitFor(() =>
+      expect(
+        posts.some(
+          (p) =>
+            p.path === '/hmi/cells/sel-motion/activate' &&
+            (p.body as { value?: boolean; direction?: string }).value ===
+              true &&
+            (p.body as { direction?: string }).direction === 'a',
+        ),
+      ).toBe(true),
+    );
+    const beforeRelease = posts.length;
+    // Opposite rocker leave must not clear the held side.
+    fireEvent.pointerLeave(down);
+    expect(posts.length).toBe(beforeRelease);
+    fireEvent.pointerUp(up);
+
+    fireEvent.pointerDown(close);
+    fireEvent.pointerMove(close, { clientX: -50, clientY: -50 });
+    fireEvent.pointerUp(close);
+    await waitFor(() =>
+      expect(
+        posts.some((p) => p.path === '/hmi/cells/sel-latch/activate'),
+      ).toBe(true),
+    );
+  });
+
+  it('prompts for control when selector motion is pressed without a lease', async () => {
+    const freeControl = {
+      ...heldControl,
+      held: false,
+      youHold: false,
+      holderUserId: null,
+      holderDisplayName: null,
+    };
+    const selectorLayout = {
+      ...layout,
+      matrix: { rows: 1, cols: 1 },
+      cells: [
+        {
+          id: 'sel-motion',
+          row: 0,
+          col: 0,
+          label: 'OWVA up/down',
+          style: 'selector',
+          isMotion: true,
+          requiresSafeAction: false,
+          variableSpeed: false,
+          primaryRegister: {
+            id: 'pa',
+            name: 'coil.p03a21.di.owvaUp',
+            address: 26,
+            kind: 'coil',
+          },
+          secondaryRegister: {
+            id: 'pb',
+            name: 'coil.p03a21.di.owvaDown',
+            address: 27,
+            kind: 'coil',
+          },
+          feedbackRegister: null,
+          statusRegister: null,
+        },
+      ],
+    };
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return freeControl as never;
+      if (path === '/realtime/tags') return defaultTags as never;
+      return selectorLayout as never;
+    });
+    vi.spyOn(api, 'apiPost').mockImplementation(async (path) => {
+      if (typeof path === 'string' && path.startsWith('/safety/control')) {
+        return freeControl as never;
+      }
+      return { ok: true } as never;
+    });
+    renderOperator(<OperatorPage />, { autoManage: false });
+    const up = await screen.findByRole('button', {
+      name: 'OWVA up/down up',
+    });
+    fireEvent.pointerDown(up);
+    expect(
+      await screen.findByText('Claim exclusive control before moving'),
+    ).toBeInTheDocument();
   });
 });

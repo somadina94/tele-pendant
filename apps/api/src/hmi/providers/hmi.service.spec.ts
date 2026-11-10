@@ -223,6 +223,200 @@ describe('HmiService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('selector rocker writes mutual-exclusive coils with direction', async () => {
+    const selectorCell = {
+      ...motionCell,
+      id: 'sel1',
+      label: 'OWVA up/down',
+      style: 'selector',
+      primaryRegister: {
+        kind: 'coil',
+        address: 26,
+        name: 'coil.p03a21.di.owvaUp',
+      },
+      secondaryRegister: {
+        kind: 'coil',
+        address: 27,
+        name: 'coil.p03a21.di.owvaDown',
+      },
+    };
+    cells.findOne.mockResolvedValue(selectorCell);
+    safetyState.canIssueMotion.mockReturnValue(true);
+    registers.findOneBy.mockImplementation(async (q: { name?: string }) => {
+      if (q.name === 'coil.p03a21.di.enable') {
+        return { name: q.name, kind: 'coil', address: 43 };
+      }
+      if (q.name === 'holding.speedPct') {
+        return { name: q.name, kind: 'holding', address: 2 };
+      }
+      return null;
+    });
+    plcService.getDriver.mockReturnValue({
+      readCoils: jest.fn().mockResolvedValue([true]),
+    });
+
+    await expect(
+      service.activateCell('sel1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await service.activateCell('sel1', true, {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+      direction: 'a',
+    });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(27, false);
+    expect(plcService.writeCoil).toHaveBeenCalledWith(26, true);
+
+    plcService.writeCoil.mockClear();
+    await service.activateCell('sel1', true, {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+      direction: 'b',
+    });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(26, false);
+    expect(plcService.writeCoil).toHaveBeenCalledWith(27, true);
+
+    plcService.writeCoil.mockClear();
+    await service.activateCell('sel1', false, {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+    });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(26, false);
+    expect(plcService.writeCoil).toHaveBeenCalledWith(27, false);
+  });
+
+  it('blocks jog selectors when Enable is not held', async () => {
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'selector',
+      secondaryRegister: {
+        kind: 'coil',
+        address: 27,
+        name: 'coil.p03a21.di.owvaDown',
+      },
+    });
+    safetyState.canIssueMotion.mockReturnValue(true);
+    registers.findOneBy.mockResolvedValue({
+      name: 'coil.p03a21.di.enable',
+      kind: 'coil',
+      address: 43,
+    });
+    plcService.getDriver.mockReturnValue({
+      readCoils: jest.fn().mockResolvedValue([false]),
+    });
+    await expect(
+      service.activateCell('c1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+        direction: 'a',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects selector direction b without a secondary register', async () => {
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'selector',
+      secondaryRegister: null,
+    });
+    safetyState.canIssueMotion.mockReturnValue(true);
+    await expect(
+      service.activateCell('c1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+        direction: 'b',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('asserts selector direction a without a secondary register', async () => {
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'selector',
+      secondaryRegister: null,
+      variableSpeed: false,
+    });
+    safetyState.canIssueMotion.mockReturnValue(true);
+    registers.findOneBy.mockResolvedValue(null);
+    plcService.getDriver.mockReturnValue({});
+    await service.activateCell('c1', true, {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+      direction: 'a',
+    });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(0, true);
+  });
+
+  it('releases one selector side when direction is provided', async () => {
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'selector',
+      primaryRegister: {
+        kind: 'coil',
+        address: 26,
+        name: 'coil.p03a21.di.owvaUp',
+      },
+      secondaryRegister: {
+        kind: 'coil',
+        address: 27,
+        name: 'coil.p03a21.di.owvaDown',
+      },
+    });
+    safetyState.canIssueMotion.mockReturnValue(true);
+    registers.findOneBy.mockImplementation(async (q: { name?: string }) => {
+      if (q.name === 'holding.speedPct') {
+        return { name: q.name, kind: 'holding', address: 2 };
+      }
+      return null;
+    });
+    plcService.getDriver.mockReturnValue({});
+    await service.activateCell('c1', false, {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+      direction: 'a',
+    });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(26, false);
+    expect(plcService.writeCoil).not.toHaveBeenCalledWith(27, false);
+  });
+
+  it('centers a selector that only has a primary register', async () => {
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'selector',
+      isMotion: false,
+      variableSpeed: false,
+      secondaryRegister: null,
+    });
+    plcService.getDriver.mockReturnValue({});
+    await service.activateCell('c1', false, { role: UserRole.OPERATOR });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(0, false);
+  });
+
+  it('skips Enable gate when the enable register is missing', async () => {
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'selector',
+      secondaryRegister: {
+        kind: 'coil',
+        address: 27,
+        name: 'coil.p03a21.di.owvaDown',
+      },
+      variableSpeed: false,
+    });
+    safetyState.canIssueMotion.mockReturnValue(true);
+    registers.findOneBy.mockResolvedValue(null);
+    plcService.getDriver.mockReturnValue({});
+    await service.activateCell('c1', true, {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+      direction: 'a',
+    });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(0, true);
+  });
+
   it('asserts STOP in one press without a PIN', async () => {
     cells.findOne.mockResolvedValue({
       ...motionCell,
@@ -569,6 +763,20 @@ describe('HmiService', () => {
         isMotion: true,
         slowSpeedPct: 80,
         fastSpeedPct: 40,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects selector cells without a secondary register', async () => {
+    registers.findOneBy.mockImplementation(async ({ id }: { id: string }) => ({
+      id,
+      name: id,
+    }));
+    await expect(
+      service.createCell({
+        ...cellInput,
+        style: 'selector',
+        secondaryRegisterId: null,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

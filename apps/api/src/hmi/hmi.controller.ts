@@ -30,13 +30,17 @@ import { SaveOverlayDto } from './dtos/save-overlay.dto';
 import { UpdateRegisterDto } from './dtos/update-register.dto';
 import { auditActorFromRequest } from '../common/audit-actor';
 import { HmiService } from './providers/hmi.service';
+import { HmiSeedService } from './providers/hmi-seed.service';
 
 @ApiTags('cells')
 @Controller('hmi')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiAuth()
 export class HmiController {
-  constructor(@Inject(HmiService) private readonly hmiService: HmiService) {}
+  constructor(
+    @Inject(HmiService) private readonly hmiService: HmiService,
+    @Inject(HmiSeedService) private readonly hmiSeed: HmiSeedService,
+  ) {}
 
   private actor(req: Request & { user: JwtPayload }) {
     return auditActorFromRequest(req.user, req.ip);
@@ -227,7 +231,18 @@ export class HmiController {
       safeActionPin: dto.safeActionPin,
       speed: dto.speed,
       refresh: dto.refresh,
+      direction: dto.direction,
       ip: req.ip,
     });
+  }
+
+  @Post('demo/p03a21/reset')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary:
+      'Replace Operator cells with the P03A21 welding pendant demo layout',
+  })
+  resetP03a21Demo() {
+    return this.hmiSeed.resetP03a21Demo();
   }
 }

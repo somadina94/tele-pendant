@@ -4,6 +4,7 @@ import {
   AppState,
   Image,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   useWindowDimensions,
@@ -11,12 +12,15 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import {
+  cellRequiresControlLease,
+  cellUsesHoldToRun,
   formatOverlay,
   isClusterMetricRegister,
   isOperatorScreenReady,
   MATRIX_CELL_STATE_CODE,
   MATRIX_CELL_STATE_I18N,
   operatorNeedsLiveTags,
+  parseSelectorSideLabels,
   resolveMatrixCellUiState,
   nextLiveTagsCursor,
   shouldApplyLiveTags,
@@ -74,6 +78,9 @@ export function OperatorScreen({ token }: { token: string }) {
   const controlRef = useRef(control);
   const [pin, setPin] = useState('');
   const [holdingId, setHoldingId] = useState<string | null>(null);
+  const [holdingDirection, setHoldingDirection] = useState<'a' | 'b' | null>(
+    null,
+  );
   const [jogSpeed, setJogSpeed] = useState<'slow' | 'fast'>('fast');
   const jogSpeedRef = useRef<'slow' | 'fast'>('fast');
   const [safety, setSafety] = useState<SafetySnap>({ mode: 'unknown' });
@@ -92,11 +99,13 @@ export function OperatorScreen({ token }: { token: string }) {
   const [liveFallback, setLiveFallback] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const heldId = useRef<string | null>(null);
+  const heldDirection = useRef<'a' | 'b' | null>(null);
   /** Bumps on release so in-flight activate(true) cannot leave a coil latched. */
   const holdGen = useRef(0);
   const activatingId = useRef<string | null>(null);
   /** Release arrived while activate(true) was still in flight — finish after pressCell. */
   const releaseAfterActivate = useRef<string | null>(null);
+  const releaseAfterDirection = useRef<'a' | 'b' | null>(null);
   const tagOrderRef = useRef<{ lastSeq: number; lastAt: string | null }>({
     lastSeq: 0,
     lastAt: null,
@@ -199,11 +208,15 @@ export function OperatorScreen({ token }: { token: string }) {
   }, []);
 
   const dropMotionCoil = useCallback(
-    async (cellId: string) => {
+    async (cellId: string, direction?: 'a' | 'b' | null) => {
       try {
         await apiPost(
           `/hmi/cells/${cellId}/activate`,
-          { value: false, speed: jogSpeedRef.current },
+          {
+            value: false,
+            speed: jogSpeedRef.current,
+            ...(direction ? { direction } : {}),
+          },
           token,
         );
       } catch {
@@ -214,12 +227,15 @@ export function OperatorScreen({ token }: { token: string }) {
   );
 
   const finishMotionRelease = useCallback(
-    (cellId: string) => {
+    (cellId: string, direction?: 'a' | 'b' | null) => {
       releaseAfterActivate.current = null;
+      releaseAfterDirection.current = null;
+      heldDirection.current = null;
       setHoldingId((current) => (current === cellId ? null : current));
+      setHoldingDirection(null);
       releaseDeadman();
       // Fire-and-forget — awaiting coil-off stacked Modbus behind the next press.
-      void dropMotionCoil(cellId);
+      void dropMotionCoil(cellId, direction);
     },
     [dropMotionCoil, releaseDeadman],
   );
@@ -227,17 +243,21 @@ export function OperatorScreen({ token }: { token: string }) {
   // Match the local working hold path: WS deadman pulse only (no HTTP flood).
   useEffect(() => {
     if (!holdingId) return;
+    const heldCell = layoutQuery.data?.cells.find((c) => c.id === holdingId);
+    if (!heldCell || !cellRequiresControlLease(heldCell)) return;
     const pulse = () => {
       socketRef.current?.emit('deadman.pulse');
     };
     pulse();
     const id = setInterval(pulse, 400);
     return () => clearInterval(id);
-  }, [holdingId]);
+  }, [holdingId, layoutQuery.data?.cells]);
 
-  const pressCell = async (cell: Cell) => {
+  const pressCell = async (cell: Cell, direction?: 'a' | 'b') => {
     const pressGen = holdGen.current;
-    if (cell.isMotion && !controlRef.current?.youHold) {
+    const needsLease = cellRequiresControlLease(cell);
+    const holdToRun = cellUsesHoldToRun(cell);
+    if (needsLease && !controlRef.current?.youHold) {
       showErrorAlert(
         controlRef.current?.held
           ? `${t('controlHeldBy')} ${controlRef.current.holderDisplayName || controlRef.current.holderUserId}`
@@ -246,10 +266,13 @@ export function OperatorScreen({ token }: { token: string }) {
       void hapticMotionBlocked();
       return;
     }
-    if (cell.isMotion) {
+    if (holdToRun) {
       heldId.current = cell.id;
+      heldDirection.current = direction ?? null;
       setHoldingId(cell.id);
+      setHoldingDirection(direction ?? null);
       releaseAfterActivate.current = null;
+      releaseAfterDirection.current = null;
       void hapticHoldStart();
     }
     activatingId.current = cell.id;
@@ -258,16 +281,20 @@ export function OperatorScreen({ token }: { token: string }) {
         ? jogSpeedRef.current
         : undefined;
     try {
-      if (cell.isMotion) {
+      if (needsLease) {
         await pulseDeadman();
       }
       await apiPost(
         `/hmi/cells/${cell.id}/activate`,
-        { value: true, ...(speed ? { speed } : {}) },
+        {
+          value: true,
+          ...(speed ? { speed } : {}),
+          ...(direction ? { direction } : {}),
+        },
         token,
       );
     } catch (err) {
-      if (cell.isMotion && isMotionBlockedError(err)) {
+      if (needsLease && isMotionBlockedError(err)) {
         void hapticMotionBlocked();
       }
       showErrorAlert(
@@ -279,54 +306,78 @@ export function OperatorScreen({ token }: { token: string }) {
       );
       if (heldId.current === cell.id) {
         heldId.current = null;
+        heldDirection.current = null;
         setHoldingId(null);
-        if (cell.isMotion) releaseDeadman();
+        setHoldingDirection(null);
+        if (needsLease) releaseDeadman();
       }
       releaseAfterActivate.current = null;
+      releaseAfterDirection.current = null;
       return;
     } finally {
       if (activatingId.current === cell.id) {
         activatingId.current = null;
       }
     }
-    if (cell.isMotion && releaseAfterActivate.current === cell.id) {
-      finishMotionRelease(cell.id);
+    if (holdToRun && releaseAfterActivate.current === cell.id) {
+      finishMotionRelease(cell.id, releaseAfterDirection.current);
       return;
     }
     if (
-      cell.isMotion &&
+      holdToRun &&
       (heldId.current !== cell.id || holdGen.current !== pressGen)
     ) {
-      void dropMotionCoil(cell.id);
+      void dropMotionCoil(cell.id, direction);
       if (heldId.current === null) releaseDeadman();
     }
   };
 
-  const releaseCell = (cell: Cell) => {
-    if (!cell.isMotion) return;
+  const releaseCell = (cell: Cell, direction?: 'a' | 'b') => {
+    if (!cellUsesHoldToRun(cell)) return;
     const mine = heldId.current === cell.id;
-    if (heldId.current === cell.id) heldId.current = null;
+    const heldDir = heldDirection.current;
+    if (direction && heldDir && direction !== heldDir) return;
+    if (heldId.current === cell.id) {
+      heldId.current = null;
+      heldDirection.current = null;
+    }
     if (!mine) return;
     holdGen.current += 1;
     if (activatingId.current === cell.id) {
       releaseAfterActivate.current = cell.id;
+      releaseAfterDirection.current = direction ?? heldDir;
       return;
     }
-    finishMotionRelease(cell.id);
+    finishMotionRelease(cell.id, direction ?? heldDir);
+  };
+
+  const clearSelector = async (cell: Cell) => {
+    try {
+      await apiPost(`/hmi/cells/${cell.id}/activate`, { value: false }, token);
+    } catch {
+      // Best-effort center clear.
+    }
   };
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       if (next !== 'active') {
         const id = heldId.current;
+        const dir = heldDirection.current;
         heldId.current = null;
+        heldDirection.current = null;
         holdGen.current += 1;
         setHoldingId(null);
+        setHoldingDirection(null);
         releaseDeadman();
         if (!id) return;
         const cell = layoutQuery.data?.cells.find((row) => row.id === id);
-        if (!cell?.isMotion) return;
-        void apiPost(`/hmi/cells/${id}/activate`, { value: false }, token);
+        if (!cell || !cellUsesHoldToRun(cell)) return;
+        void apiPost(
+          `/hmi/cells/${id}/activate`,
+          { value: false, ...(dir ? { direction: dir } : {}) },
+          token,
+        );
       }
     });
     return () => sub.remove();
@@ -390,9 +441,13 @@ export function OperatorScreen({ token }: { token: string }) {
     [layoutQuery.data?.cells],
   );
 
-  /** Phone: 1 col; tablet-wide: honor layout matrix cols. */
-  const matrixCols = windowWidth >= 768 ? Math.max(1, grid?.cols ?? 1) : 1;
-  const matrixGap = 8;
+  const isP03a21 =
+    (layoutQuery.data?.background?.name ?? '').includes('p03a21') ||
+    Boolean(layoutQuery.data?.cells.some((c) => c.style === 'selector'));
+  /** Pendant: keep 3-col layout on phones; otherwise 1 col until tablet. */
+  const matrixCols =
+    isP03a21 || windowWidth >= 768 ? Math.max(1, grid?.cols ?? 1) : 1;
+  const matrixGap = isP03a21 ? 6 : 8;
   const matrixPad = 24;
   const matrixCellWidth =
     (windowWidth - matrixPad - matrixGap * (matrixCols - 1)) / matrixCols;
@@ -450,6 +505,8 @@ export function OperatorScreen({ token }: { token: string }) {
 
   const renderMobileCell = (cell: Cell) => {
     const isEstop = cell.style === 'estop';
+    const needsLease = cellRequiresControlLease(cell);
+    const holdToRun = cellUsesHoldToRun(cell);
     const cellState = resolveMatrixCellUiState({
       style: cell.style,
       isMotion: cell.isMotion,
@@ -467,34 +524,165 @@ export function OperatorScreen({ token }: { token: string }) {
         }
       : statePalette[cellState];
     const stateLabel = t(MATRIX_CELL_STATE_I18N[cellState]);
-    const metaColor = isEstop ? 'rgba(255,255,255,0.85)' : palette.foreground;
-    const metaParts: string[] = [];
-    if (cell.feedbackRegister) {
-      metaParts.push(
-        `F ${String(tagValueForRegister(tags, cell.feedbackRegister.name))}`,
+    const stateCode = MATRIX_CELL_STATE_CODE[cellState];
+    const feedbackRaw = cell.feedbackRegister
+      ? tagValueForRegister(tags, cell.feedbackRegister.name)
+      : undefined;
+    const feedbackIsBool =
+      typeof feedbackRaw === 'boolean' ||
+      feedbackRaw === 0 ||
+      feedbackRaw === 1;
+    const lampOn = Boolean(feedbackRaw);
+    const statusTrailing = (
+      <View className="shrink-0 flex-row items-center gap-1">
+        {cell.feedbackRegister && feedbackIsBool ? (
+          <View
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 999,
+              backgroundColor: lampOn ? '#34d399' : 'rgba(148,163,184,0.45)',
+            }}
+            accessibilityElementsHidden
+          />
+        ) : null}
+        {cell.feedbackRegister && !feedbackIsBool ? (
+          <Text
+            numberOfLines={1}
+            className="text-[9px] opacity-80"
+            style={{ color: palette.foreground, maxWidth: 56 }}
+          >
+            F {String(feedbackRaw)}
+          </Text>
+        ) : null}
+        {cell.statusRegister ? (
+          <Text
+            numberOfLines={1}
+            className="text-[9px] opacity-80"
+            style={{ color: palette.foreground, maxWidth: 48 }}
+          >
+            S {String(tagValueForRegister(tags, cell.statusRegister.name))}
+          </Text>
+        ) : null}
+        <Text
+          numberOfLines={1}
+          className="rounded px-1 py-0.5 text-[9px] font-bold uppercase"
+          style={{
+            color: palette.foreground,
+            backgroundColor: palette.chip,
+          }}
+        >
+          {stateCode}
+        </Text>
+      </View>
+    );
+
+    if (cell.style === 'selector') {
+      const { sideA, sideB } = parseSelectorSideLabels(cell.label);
+      const latch = !holdToRun;
+      const aActive =
+        holdingId === cell.id && holdingDirection === 'a'
+          ? true
+          : Boolean(tagValueForRegister(tags, cell.primaryRegister?.name));
+      const bActive =
+        holdingId === cell.id && holdingDirection === 'b'
+          ? true
+          : Boolean(tagValueForRegister(tags, cell.secondaryRegister?.name));
+      return (
+        <View
+          key={cell.id}
+          className="w-full gap-0.5 rounded-md border px-1.5 py-1"
+          style={{
+            borderColor: palette.border,
+            backgroundColor: palette.background,
+            minHeight: 44,
+          }}
+        >
+          <View className="flex-row items-start gap-1">
+            <Text
+              numberOfLines={2}
+              className="shrink font-semibold"
+              style={{
+                color: palette.foreground,
+                fontSize: isP03a21 ? 11 : 13,
+                flexGrow: 1,
+                lineHeight: isP03a21 ? 14 : 16,
+              }}
+            >
+              {cell.label}
+            </Text>
+            {statusTrailing}
+          </View>
+          <View className="flex-row gap-0.5">
+            {(['a', 'b'] as const).map((dir) => {
+              const caption = dir === 'a' ? sideA : sideB;
+              const active = dir === 'a' ? aActive : bActive;
+              return (
+                <Pressable
+                  key={dir}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${cell.label} ${caption}`}
+                  accessibilityState={{ disabled: needsLease && !youHold }}
+                  className="flex-1 items-center justify-center rounded-md border px-1"
+                  style={{
+                    minHeight: 36,
+                    borderColor: palette.border,
+                    backgroundColor: active ? palette.chip : 'transparent',
+                    opacity: needsLease && !youHold ? 0.5 : 1,
+                  }}
+                  disabled={needsLease && !youHold}
+                  onPressIn={() => {
+                    if (needsLease && !youHold) return;
+                    void pressCell(cell, dir);
+                  }}
+                  onPressOut={() => {
+                    void releaseCell(cell, dir);
+                  }}
+                >
+                  <Text
+                    className="font-bold uppercase"
+                    style={{
+                      color: palette.foreground,
+                      fontSize: isP03a21 ? 10 : 12,
+                    }}
+                  >
+                    {caption}
+                  </Text>
+                </Pressable>
+              );
+            })}
+            {latch ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${cell.label} center`}
+                className="items-center justify-center rounded-md border px-1.5"
+                style={{ minHeight: 36, borderColor: palette.border }}
+                onPress={() => void clearSelector(cell)}
+              >
+                <Text style={{ color: palette.foreground }}>·</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
       );
     }
-    if (cell.statusRegister) {
-      metaParts.push(
-        `S ${String(tagValueForRegister(tags, cell.statusRegister.name))}`,
-      );
-    }
+
     return (
       <Pressable
         key={cell.id}
         accessibilityRole="button"
         accessibilityLabel={cell.label}
-        accessibilityHint={`${MATRIX_CELL_STATE_CODE[cellState]}: ${stateLabel}`}
-        className="min-h-[44px] w-full flex-row flex-nowrap items-center gap-1.5 rounded-md border px-2.5 py-2.5"
+        accessibilityHint={`${stateCode}: ${stateLabel}`}
+        className="w-full flex-row items-center gap-1 rounded-md border px-2 py-1.5"
         style={{
           minHeight: 44,
           backgroundColor: palette.background,
           borderColor: palette.border,
           borderWidth: cellState === 'running' && !isEstop ? 2 : 1,
         }}
-        disabled={cell.isMotion && !youHold}
+        disabled={needsLease && !youHold}
         onPressIn={() => {
-          if (cell.isMotion && !youHold) return;
+          if (needsLease && !youHold) return;
           void pressCell(cell);
         }}
         onPressOut={() => {
@@ -502,37 +690,33 @@ export function OperatorScreen({ token }: { token: string }) {
         }}
       >
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           className="shrink font-semibold"
-          style={{ color: palette.foreground, fontSize: 14, flexGrow: 1 }}
+          style={{
+            color: palette.foreground,
+            fontSize: isP03a21 ? 11 : 14,
+            flexGrow: 1,
+            lineHeight: isP03a21 ? 14 : 18,
+          }}
         >
           {cell.label}
         </Text>
-        <Text
-          numberOfLines={1}
-          className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
-          style={{
-            color: palette.foreground,
-            backgroundColor: palette.chip,
-          }}
-        >
-          {MATRIX_CELL_STATE_CODE[cellState]}
-        </Text>
-        {metaParts.length ? (
-          <Text
-            numberOfLines={1}
-            className="shrink text-[10px] opacity-80"
-            style={{ color: metaColor, maxWidth: 88 }}
-          >
-            {metaParts.join(' · ')}
-          </Text>
-        ) : null}
+        {statusTrailing}
       </Pressable>
     );
   };
 
-  /** Prefer showing all motion cells; plant fills leftover space. */
-  const plantMinHeight = windowWidth >= 768 ? 140 : 110;
+  const showCraneMetrics =
+    tags?.hoistHeightMm != null ||
+    tags?.values?.['holding.hoistHeightMm'] != null;
+  /** Pendant: shrink plant so the 3-col matrix stays visible. */
+  const plantMinHeight = isP03a21
+    ? windowWidth >= 768
+      ? 96
+      : 72
+    : windowWidth >= 768
+      ? 140
+      : 110;
 
   return (
     <View className="flex-1 bg-background" style={{ minHeight: 0 }}>
@@ -588,12 +772,18 @@ export function OperatorScreen({ token }: { token: string }) {
           </View>
         ) : null}
 
-        <HelpTip id="tour.operator.graphic" className="min-h-0 flex-1">
+        <HelpTip
+          id="tour.operator.graphic"
+          className={isP03a21 ? 'shrink-0' : 'min-h-0 flex-1'}
+        >
           <View
-            className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10"
+            className={`relative overflow-hidden rounded-xl border border-white/10 ${
+              isP03a21 ? 'shrink-0' : 'min-h-0 flex-1'
+            }`}
             style={{
-              flex: 1,
+              flex: isP03a21 ? undefined : 1,
               minHeight: plantMinHeight,
+              maxHeight: isP03a21 ? plantMinHeight + 36 : undefined,
               backgroundColor: solidBackground || '#07090c',
             }}
           >
@@ -639,12 +829,25 @@ export function OperatorScreen({ token }: { token: string }) {
               </View>
             </View>
             {!useCustomGraphic ? (
-              <View className="absolute inset-x-0 bottom-14 top-9 z-[8] px-1">
-                <CraneMimic tags={tags} safety={safety} />
+              <View
+                className={`absolute inset-x-0 top-9 z-[8] px-1 ${
+                  showCraneMetrics ? 'bottom-14' : 'bottom-2'
+                }`}
+              >
+                {showCraneMetrics ? (
+                  <CraneMimic tags={tags} safety={safety} />
+                ) : (
+                  <Text className="px-3 py-2 text-center text-xs text-white/55">
+                    {layoutQuery.data?.background?.name ?? 'P03A21'} pendant
+                    demo
+                  </Text>
+                )}
               </View>
             ) : null}
             <View
-              className="absolute inset-x-0 bottom-14 top-9 z-[10]"
+              className={`absolute inset-x-0 top-9 z-[10] ${
+                showCraneMetrics ? 'bottom-14' : 'bottom-2'
+              }`}
               pointerEvents="none"
             >
               {(layoutQuery.data?.overlays ?? [])
@@ -671,62 +874,64 @@ export function OperatorScreen({ token }: { token: string }) {
                   </View>
                 ))}
             </View>
-            <View className="absolute inset-x-0 bottom-0 z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1">
-              {(
-                [
-                  {
-                    label: 'Height',
-                    value: String(height ?? tags?.hoistHeightMm ?? '—'),
-                    unit: 'mm',
-                  },
-                  {
-                    label: 'Trolley',
-                    value: String(
-                      tags?.trolleyPositionMm ??
-                        tagValueForRegister(tags, 'holding.trolleyPosition'),
-                    ),
-                    unit: 'mm',
-                  },
-                  {
-                    label: 'Load',
-                    value: String(tags?.loadKg ?? '—'),
-                    unit: 'kg',
-                  },
-                  {
-                    label: 'Motor',
-                    value: tags?.motorRunning ? 'RUN' : 'IDLE',
-                    unit: 'status',
-                  },
-                ] as const
-              ).map((metric, index) => (
-                <View
-                  key={metric.label}
-                  className={`flex-1 items-center gap-0.5 px-1 py-1 ${
-                    index > 0 ? 'border-l border-white/10' : ''
-                  }`}
-                >
-                  <Text
-                    className="text-[9px] font-medium uppercase text-white/45"
-                    style={{ letterSpacing: 2 }}
+            {showCraneMetrics ? (
+              <View className="absolute inset-x-0 bottom-0 z-10 flex-row border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1">
+                {(
+                  [
+                    {
+                      label: 'Height',
+                      value: String(height ?? tags?.hoistHeightMm ?? '—'),
+                      unit: 'mm',
+                    },
+                    {
+                      label: 'Trolley',
+                      value: String(
+                        tags?.trolleyPositionMm ??
+                          tagValueForRegister(tags, 'holding.trolleyPosition'),
+                      ),
+                      unit: 'mm',
+                    },
+                    {
+                      label: 'Load',
+                      value: String(tags?.loadKg ?? '—'),
+                      unit: 'kg',
+                    },
+                    {
+                      label: 'Motor',
+                      value: tags?.motorRunning ? 'RUN' : 'IDLE',
+                      unit: 'status',
+                    },
+                  ] as const
+                ).map((metric, index) => (
+                  <View
+                    key={metric.label}
+                    className={`flex-1 items-center gap-0.5 px-1 py-1 ${
+                      index > 0 ? 'border-l border-white/10' : ''
+                    }`}
                   >
-                    {metric.label}
-                  </Text>
-                  <Text className="font-mono text-base font-semibold text-white">
-                    {metric.value}
-                  </Text>
-                  <Text
-                    className="text-[10px] uppercase text-white/40"
-                    style={{ letterSpacing: 1.2 }}
-                  >
-                    {metric.unit}
-                  </Text>
-                </View>
-              ))}
-            </View>
+                    <Text
+                      className="text-[9px] font-medium uppercase text-white/45"
+                      style={{ letterSpacing: 2 }}
+                    >
+                      {metric.label}
+                    </Text>
+                    <Text className="font-mono text-base font-semibold text-white">
+                      {metric.value}
+                    </Text>
+                    <Text
+                      className="text-[10px] uppercase text-white/40"
+                      style={{ letterSpacing: 1.2 }}
+                    >
+                      {metric.unit}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         </HelpTip>
 
-        <Card compact className="shrink-0">
+        <Card compact className="min-h-0 flex-1">
           <HelpTip id="tour.operator.safePin">
             <View className="gap-1">
               <View className="flex-row items-center gap-1.5">
@@ -799,11 +1004,19 @@ export function OperatorScreen({ token }: { token: string }) {
           </HelpTip>
           <HelpTip id="tour.operator.holdHint">
             <HelpTip id="tour.operator.matrix">
-              <View
-                className={
-                  matrixCols > 1 ? 'mt-1 flex-row flex-wrap' : 'mt-1 gap-1.5'
+              <ScrollView
+                className="mt-1 min-h-0 flex-1"
+                contentContainerStyle={
+                  matrixCols > 1
+                    ? {
+                        flexDirection: 'row',
+                        flexWrap: 'wrap',
+                        gap: matrixGap,
+                        paddingBottom: 8,
+                      }
+                    : { gap: 6, paddingBottom: 8 }
                 }
-                style={matrixCols > 1 ? { gap: matrixGap } : undefined}
+                showsVerticalScrollIndicator={false}
               >
                 {grid &&
                   grid.cells.map((cell, idx) => {
@@ -835,7 +1048,7 @@ export function OperatorScreen({ token }: { token: string }) {
                       </View>
                     );
                   })}
-              </View>
+              </ScrollView>
             </HelpTip>
           </HelpTip>
         </Card>

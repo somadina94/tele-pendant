@@ -70,6 +70,14 @@ export class SaveCellDto {
   @MinLength(1)
   primaryRegisterId!: string;
 
+  @ApiPropertyOptional({
+    description:
+      'P03A21 selector direction B coil (primary = direction A). Required when style is selector.',
+  })
+  @IsOptional()
+  @IsString()
+  secondaryRegisterId?: string | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
