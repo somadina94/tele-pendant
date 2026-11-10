@@ -140,14 +140,14 @@
   @apply flex min-h-0 w-full flex-1 flex-col gap-1.5 md:gap-2;
 }
 
-/* Grows so the matrix sits on STOP with no dead gap underneath. */
+/* Fixed strip. A flex-1 slot was crushed to 0 when the matrix was taller than the window. */
 .operator-plant-slot {
-  @apply flex min-h-0 w-full flex-1 flex-col;
+  @apply flex w-full shrink-0 flex-col;
 }
 
-/* HMI plant graphic — fills leftover height on phone through desktop (STOP stays docked). */
+/* HMI plant graphic — stable height so the dashboard stays above the buttons. */
 .plant-graphic {
-  @apply relative isolate h-full min-h-[10rem] w-full flex-1 overflow-hidden rounded-xl border border-white/10 md:min-h-[16rem] md:rounded-2xl;
+  @apply relative isolate h-[9rem] w-full shrink-0 overflow-hidden rounded-xl border border-white/10 md:h-[11rem] md:rounded-2xl;
   background:
     radial-gradient(120% 80% at 50% 110%, rgba(120, 160, 190, 0.18), transparent 55%),
     radial-gradient(90% 70% at 50% -10%, rgba(255, 255, 255, 0.08), transparent 50%),
@@ -320,14 +320,10 @@
 .matrix-grid > .matrix-grid-hole {
   @apply relative z-0 min-w-0;
 }
-@media (max-width: 767px) {
-  .matrix-grid {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-}
+/* Phones keep the authored column count. A forced 1-col stack hid the
+   rest of the pendant under STOP on short screens (iPhone SE). */
 .matrix-grid-hole {
-  /* FEAT-A3: keep ≥44px touch budget even for empty slots on md+. */
-  @apply max-md:hidden min-h-11 md:min-h-11;
+  @apply min-h-11;
 }
 .matrix-cell {
   /* FEAT-A3: ≥44px targets; compact label + state chip for dense pendants.
@@ -404,8 +400,7 @@
   @apply flex-none;
 }
 .operator-shell[data-pendant='p03a21'] .operator-plant-slot .plant-graphic {
-  @apply h-auto min-h-0 flex-none;
-  max-height: 2.75rem;
+  @apply h-[2.75rem] max-h-[2.75rem] min-h-[2.75rem];
 }
 .operator-shell[data-pendant='p03a21'] .plant-mimic-stage,
 .operator-shell[data-pendant='p03a21'] .plant-overlay-stage,
@@ -483,7 +478,7 @@
   @apply flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden md:gap-2;
 }
 .operator-matrix-card {
-  @apply relative z-0 mt-auto flex min-h-0 w-full shrink-0 flex-col overflow-visible;
+  @apply relative z-0 flex min-h-0 w-full flex-1 flex-col overflow-hidden;
 }
 .operator-matrix-toolbar-wrap {
   @apply flex flex-col gap-1 overflow-y-auto md:gap-1.5;
@@ -528,10 +523,34 @@
     min-height: 10rem;
   }
 }
-/* Tall phones (iPhone / Pixel / Z Fold cover): keep plant flex growth; only shrink mins on short height. */
+/* Phones: plant stays a strip; the matrix scrolls above the STOP dock. */
+@media (max-width: 767px) {
+  .operator-plant-slot {
+    @apply flex-none;
+  }
+  .plant-graphic {
+    @apply h-auto flex-none;
+    min-height: 6.5rem;
+    max-height: 7.5rem;
+  }
+  .operator-matrix-card {
+    @apply min-h-0 flex-1 overflow-hidden;
+  }
+  .operator-matrix-toolbar-wrap {
+    @apply min-h-0 flex-1;
+  }
+  .matrix-cell-label {
+    -webkit-line-clamp: 2;
+  }
+  .operator-shell[data-pendant='p03a21'] .operator-plant-slot .plant-graphic {
+    min-height: 0;
+    max-height: 2.75rem;
+  }
+}
 @media (max-width: 767px) and (max-height: 700px) {
   .plant-graphic {
-    min-height: 8rem;
+    min-height: 5.5rem;
+    max-height: 6.25rem;
   }
   .plant-cluster-chrome {
     padding-top: 0.35rem;

@@ -577,10 +577,7 @@ export function OperatorPage() {
 
   // Plant chrome follows the active background tab — not the shared cell set.
   const isPendantScreen = Boolean(layout.background?.name?.includes('p03a21'));
-  const showCraneMetrics =
-    !isPendantScreen &&
-    (tags?.hoistHeightMm != null ||
-      tags?.values?.['holding.hoistHeightMm'] != null);
+  const showCraneMetrics = !isPendantScreen;
 
   const stopCell =
     grid.cells.find(
