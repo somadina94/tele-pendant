@@ -344,6 +344,9 @@
    * Layout utilities also live on the Button className so twMerge beats
    * buttonVariants (inline-flex / whitespace-nowrap / gap-2 / h-9). */
   @apply min-h-11 w-full touch-pan-y select-none overflow-hidden px-2 py-1.5 text-xs md:min-h-11 md:px-2.5 md:py-2 md:text-[13px];
+}
+.matrix-cell,
+.pendant-cap {
   /* FEAT-A1 colour tokens — always paired with .matrix-cell-state text. */
   --matrix-state-idle-bg: hsl(210 40% 96%);
   --matrix-state-idle-fg: hsl(215 25% 27%);
@@ -358,7 +361,8 @@
   --matrix-state-fault-fg: hsl(271 60% 30%);
   --matrix-state-fault-bd: hsl(271 65% 48%);
 }
-.dark .matrix-cell {
+.dark .matrix-cell,
+.dark .pendant-cap {
   --matrix-state-idle-bg: hsl(217 33% 18%);
   --matrix-state-idle-fg: hsl(210 40% 92%);
   --matrix-state-idle-bd: hsl(215 25% 35%);
@@ -437,18 +441,101 @@
 .operator-shell[data-pendant='p03a21'] .operator-matrix-toolbar-wrap {
   @apply overflow-y-auto;
 }
-.matrix-cell.state-idle:not(.estop) {
+/* P03A21 face: round control, name on the plate under it.
+ * The drawing prints the name above the circle. The client asked for it below. */
+.operator-shell[data-pendant='p03a21'] .matrix-grid {
+  width: min(100%, 36rem);
+  margin-inline: auto;
+  background: #f4f1ea;
+  border: 1px solid #d5d0c6;
+  border-radius: 12px;
+  padding: 12px 8px 8px;
+  gap: 14px 8px;
+}
+.pendant-slot {
+  @apply flex min-w-0 flex-col items-center gap-1;
+}
+.pendant-legend {
+  @apply w-full text-center text-xs font-semibold leading-tight;
+  color: #1c1917;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  min-height: 2.8em;
+}
+.pendant-cap {
+  @apply h-[4.5rem] w-[4.5rem] min-h-[4.5rem] min-w-[4.5rem] shrink-0 rounded-full border-2 p-0;
+}
+.pendant-rocker {
+  @apply relative flex h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-full border-2;
+  background: #1c1c1c;
+  border-color: #3a3a3a;
+  color: #f4f4f5;
+}
+.pendant-rocker::after {
+  content: '';
+  position: absolute;
+  top: 12%;
+  bottom: 12%;
+  left: 50%;
+  z-index: 1;
+  width: 1px;
+  background: #6b6b6b;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.pendant-rocker .matrix-selector-side,
+.pendant-rocker .matrix-selector-center {
+  @apply h-full min-h-0 rounded-none border-0 px-0 text-[8px] leading-tight shadow-none;
+  background: transparent !important;
+  color: #f4f4f5 !important;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+}
+.pendant-rocker .matrix-selector-side.is-active {
+  background: #3d9cfd !important;
+  color: #fff !important;
+}
+.pendant-rocker .matrix-selector-center,
+.pendant-rocker .matrix-lamp {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 2;
+  width: 0.875rem;
+  transform: translateX(-50%);
+}
+.pendant-rocker .matrix-lamp {
+  top: 50%;
+  width: 0.5rem;
+  height: 0.5rem;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.matrix-cell.state-idle:not(.estop),
+.pendant-cap.state-idle {
   background-color: var(--matrix-state-idle-bg) !important;
   border-color: var(--matrix-state-idle-bd) !important;
   color: var(--matrix-state-idle-fg) !important;
 }
-.matrix-cell.state-running:not(.estop) {
+/* Drawing pushbuttons are white circles, including when the app chrome is dark. */
+.operator-shell[data-pendant='p03a21'] .pendant-cap.state-idle {
+  background-color: #fbfbf8 !important;
+  border-color: #8d8d8d !important;
+  color: #1c1917 !important;
+  box-shadow: inset 0 -3px 0 rgb(0 0 0 / 0.12);
+}
+.matrix-cell.state-running:not(.estop),
+.pendant-cap.state-running {
   background-color: var(--matrix-state-running-bg) !important;
   border-color: var(--matrix-state-running-bd) !important;
   color: var(--matrix-state-running-fg) !important;
   box-shadow: 0 0 0 2px var(--matrix-state-running-bd);
 }
-.matrix-cell.state-blocked:not(.estop) {
+.matrix-cell.state-blocked:not(.estop),
+.pendant-cap.state-blocked {
   background-color: var(--matrix-state-blocked-bg) !important;
   border-color: var(--matrix-state-blocked-bd) !important;
   color: var(--matrix-state-blocked-fg) !important;
@@ -460,7 +547,8 @@
     rgb(0 0 0 / 0.06) 8px
   );
 }
-.matrix-cell.state-fault:not(.estop) {
+.matrix-cell.state-fault:not(.estop),
+.pendant-cap.state-fault {
   background-color: var(--matrix-state-fault-bg) !important;
   border-color: var(--matrix-state-fault-bd) !important;
   color: var(--matrix-state-fault-fg) !important;

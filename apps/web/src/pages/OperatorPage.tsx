@@ -772,6 +772,87 @@ export function OperatorPage() {
         holdingCellId === cell.id && holdingDirection === 'b'
           ? true
           : Boolean(tagValueForRegister(tags, cell.secondaryRegister?.name));
+      const rocker = (
+        <div
+          className={
+            isPendantScreen
+              ? cn('pendant-rocker', `state-${cellState}`)
+              : 'matrix-selector-rocker'
+          }
+          data-cell-state={cellState}
+        >
+          {(['a', 'b'] as const).map((dir) => {
+            const caption = dir === 'a' ? sideA : sideB;
+            const active = dir === 'a' ? aActive : bActive;
+            const sideVariant = active ? 'default' : 'secondary';
+            return (
+              <Button
+                key={dir}
+                type="button"
+                variant={sideVariant}
+                size="sm"
+                className={cn(
+                  'matrix-selector-side flex-1',
+                  isPendantScreen
+                    ? 'h-full min-h-0 whitespace-normal rounded-none border-0 bg-transparent px-0 text-[8px] normal-case leading-tight tracking-normal shadow-none hover:bg-transparent'
+                    : 'h-9 min-h-9 px-1.5 text-[11px] max-md:px-[3px] max-md:text-[5.5px]',
+                  active && 'is-active',
+                )}
+                disabled={needsLease && !youHold}
+                aria-label={`${cell.label} ${caption}`}
+                aria-pressed={active}
+                {...pointerHandlers(dir)}
+                onLostPointerCapture={() => {
+                  if (heldRef.current === cell.id && holdToRun) {
+                    void releaseCell(cell, dir);
+                  }
+                }}
+              >
+                {caption}
+              </Button>
+            );
+          })}
+          {isPendantScreen && cell.feedbackRegister && feedbackIsBool ? (
+            <span
+              className={cn(
+                'matrix-lamp pointer-events-none self-center',
+                lampOn && 'is-on',
+              )}
+              title={lampOn ? 'Lamp on' : 'Lamp off'}
+              data-lamp={lampOn ? 'on' : 'off'}
+              aria-hidden
+            />
+          ) : null}
+          {latch ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={
+                isPendantScreen
+                  ? 'matrix-selector-center h-full min-h-0 w-3 flex-none rounded-none border-0 px-0 shadow-none'
+                  : 'matrix-selector-center h-9 min-h-9 px-1.5 max-md:px-[3px]'
+              }
+              aria-label={`${cell.label} center`}
+              onClick={() => void clearSelector(cell)}
+            >
+              ·
+            </Button>
+          ) : null}
+        </div>
+      );
+      if (isPendantScreen) {
+        return (
+          <div
+            key={cell.id}
+            className="pendant-slot"
+            title={`${cell.label} · ${stateCode}: ${stateLabel}`}
+          >
+            {rocker}
+            <p className="pendant-legend">{cell.label}</p>
+          </div>
+        );
+      }
       return (
         <div
           key={cell.id}
@@ -787,48 +868,48 @@ export function OperatorPage() {
             <span className="matrix-cell-label">{cell.label}</span>
             {statusChip}
           </div>
-          <div className="matrix-selector-rocker">
-            {(['a', 'b'] as const).map((dir) => {
-              const caption = dir === 'a' ? sideA : sideB;
-              const active = dir === 'a' ? aActive : bActive;
-              const sideVariant = active ? 'default' : 'secondary';
-              return (
-                <Button
-                  key={dir}
-                  type="button"
-                  variant={sideVariant}
-                  size="sm"
-                  className={cn(
-                    'matrix-selector-side h-9 min-h-9 flex-1 px-1.5 text-[11px] max-md:px-[3px] max-md:text-[5.5px]',
-                    active && 'is-active',
-                  )}
-                  disabled={needsLease && !youHold}
-                  aria-label={`${cell.label} ${caption}`}
-                  aria-pressed={active}
-                  {...pointerHandlers(dir)}
-                  onLostPointerCapture={() => {
-                    if (heldRef.current === cell.id && holdToRun) {
-                      void releaseCell(cell, dir);
-                    }
-                  }}
-                >
-                  {caption}
-                </Button>
-              );
-            })}
-            {latch ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="matrix-selector-center h-9 min-h-9 px-1.5 max-md:px-[3px]"
-                aria-label={`${cell.label} center`}
-                onClick={() => void clearSelector(cell)}
-              >
-                ·
-              </Button>
+          {rocker}
+        </div>
+      );
+    }
+
+    if (isPendantScreen && !isEstop) {
+      return (
+        <div
+          key={cell.id}
+          className="pendant-slot"
+          title={`${cell.label} · ${stateCode}: ${stateLabel}`}
+        >
+          <Button
+            type="button"
+            variant="secondary"
+            data-cell-state={cellState}
+            data-touch-min="44"
+            className={cn(
+              'pendant-cap h-[4.5rem] w-[4.5rem] min-h-[4.5rem] min-w-[4.5rem] rounded-full p-0',
+              `state-${cellState}`,
+              cell.style === 'enable' && 'matrix-enable',
+            )}
+            disabled={needsLease && !youHold}
+            {...pointerHandlers()}
+            onLostPointerCapture={() => {
+              if (heldRef.current === cell.id && holdToRun) {
+                void releaseCell(cell);
+              }
+            }}
+            aria-label={cell.label}
+            aria-description={`${stateCode}: ${stateLabel}`}
+          >
+            {cell.feedbackRegister && feedbackIsBool ? (
+              <span
+                className={cn('matrix-lamp size-3', lampOn && 'is-on')}
+                title={lampOn ? 'Lamp on' : 'Lamp off'}
+                data-lamp={lampOn ? 'on' : 'off'}
+                aria-hidden
+              />
             ) : null}
-          </div>
+          </Button>
+          <p className="pendant-legend">{cell.label}</p>
         </div>
       );
     }

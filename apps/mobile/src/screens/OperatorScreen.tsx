@@ -787,6 +787,215 @@ export function OperatorScreen({ token }: { token: string }) {
       </View>
     );
 
+    if (isP03a21 && !isEstop) {
+      const legend = (
+        <Text
+          numberOfLines={4}
+          style={{
+            width: '100%',
+            textAlign: 'center',
+            color: '#1c1917',
+            fontSize: 12,
+            lineHeight: 15,
+            fontWeight: '600',
+          }}
+        >
+          {cell.label}
+        </Text>
+      );
+      const lamp =
+        cell.feedbackRegister && feedbackIsBool ? (
+          <View
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: 999,
+              backgroundColor: lampOn ? '#34d399' : 'rgba(148,163,184,0.55)',
+            }}
+            accessibilityElementsHidden
+          />
+        ) : null;
+      if (cell.style === 'selector') {
+        const { sideA, sideB } = parseSelectorSideLabels(cell.label);
+        const aActive =
+          cellIsHeld(holdsRef.current, cell.id, 'a') ||
+          Boolean(tagValueForRegister(tags, cell.primaryRegister?.name));
+        const bActive =
+          cellIsHeld(holdsRef.current, cell.id, 'b') ||
+          Boolean(tagValueForRegister(tags, cell.secondaryRegister?.name));
+        const latch = !holdToRun;
+        return (
+          <View key={cell.id} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+            <View
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 36,
+                overflow: 'hidden',
+                flexDirection: 'row',
+                backgroundColor: '#1c1c1c',
+                borderWidth: 2,
+                borderColor: '#3a3a3a',
+              }}
+            >
+              {(['a', 'b'] as const).map((dir) => {
+                const caption = dir === 'a' ? sideA : sideB;
+                const active = dir === 'a' ? aActive : bActive;
+                const sideStyle = {
+                  flex: 1,
+                  height: 72,
+                  alignItems: 'center' as const,
+                  justifyContent: 'center' as const,
+                  backgroundColor: active ? '#3D9CFD' : 'transparent',
+                  paddingHorizontal: 1,
+                };
+                const sideLabel = (
+                  <Text
+                    numberOfLines={2}
+                    style={{
+                      color: '#f4f4f5',
+                      fontSize: 9,
+                      lineHeight: 11,
+                      fontWeight: '700',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {caption}
+                  </Text>
+                );
+                return multi ? (
+                  <TouchTarget
+                    key={dir}
+                    targetKey={holdKey(cell.id, dir)}
+                    cell={cell}
+                    direction={dir}
+                    boardRef={boardRef}
+                    targets={targets}
+                    accessibilityLabel={`${cell.label} ${caption}`}
+                    style={sideStyle}
+                  >
+                    {sideLabel}
+                  </TouchTarget>
+                ) : (
+                  <Pressable
+                    key={dir}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${cell.label} ${caption}`}
+                    accessibilityState={{ disabled: needsLease && !youHold }}
+                    disabled={needsLease && !youHold}
+                    style={sideStyle}
+                    onPressIn={() => {
+                      if (needsLease && !youHold) return;
+                      void pressCell(cell, dir);
+                    }}
+                    onPressOut={() => {
+                      void releaseCell(cell, dir);
+                    }}
+                  >
+                    {sideLabel}
+                  </Pressable>
+                );
+              })}
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: 8,
+                  bottom: 8,
+                  width: 1,
+                  marginLeft: -0.5,
+                  backgroundColor: '#6b6b6b',
+                }}
+              />
+              {lamp ? (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    width: 10,
+                    height: 10,
+                    marginLeft: -5,
+                    marginTop: -5,
+                    borderRadius: 999,
+                    backgroundColor: lampOn
+                      ? '#34d399'
+                      : 'rgba(244,244,245,0.45)',
+                  }}
+                />
+              ) : null}
+              {latch ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${cell.label} center`}
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: 0,
+                    width: 16,
+                    height: 72,
+                    marginLeft: -8,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => void clearSelector(cell)}
+                >
+                  <Text style={{ color: '#f4f4f5', fontSize: 12 }}>·</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {legend}
+          </View>
+        );
+      }
+      const capStyle = {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+        backgroundColor: '#fbfbf8',
+        borderWidth: 2,
+        borderColor: '#8d8d8d',
+      };
+      const cap = multi ? (
+        <TouchTarget
+          targetKey={holdKey(cell.id)}
+          cell={cell}
+          boardRef={boardRef}
+          targets={targets}
+          accessibilityLabel={cell.label}
+          style={capStyle}
+        >
+          {lamp}
+        </TouchTarget>
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={cell.label}
+          disabled={needsLease && !youHold}
+          style={capStyle}
+          onPressIn={() => {
+            if (needsLease && !youHold) return;
+            void pressCell(cell);
+          }}
+          onPressOut={() => {
+            void releaseCell(cell);
+          }}
+        >
+          {lamp}
+        </Pressable>
+      );
+      return (
+        <View key={cell.id} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+          {cap}
+          {legend}
+        </View>
+      );
+    }
+
     if (cell.style === 'selector') {
       const { sideA, sideB } = parseSelectorSideLabels(cell.label);
       const latch = !holdToRun;
@@ -1314,7 +1523,26 @@ export function OperatorScreen({ token }: { token: string }) {
                 showsVerticalScrollIndicator={false}
               >
                 <GestureDetector gesture={matrixGesture}>
-                  <View ref={boardRef as never} collapsable={false}>
+                  <View
+                    ref={boardRef as never}
+                    collapsable={false}
+                    style={
+                      isP03a21
+                        ? {
+                            alignSelf: 'center',
+                            width: '100%',
+                            maxWidth: 576,
+                            backgroundColor: '#f4f1ea',
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: '#d5d0c6',
+                            paddingTop: 12,
+                            paddingHorizontal: 8,
+                            paddingBottom: 4,
+                          }
+                        : undefined
+                    }
+                  >
                     {grid && matrixCols > 1
                       ? grid.rows.map((row, rowIdx) => (
                           <View

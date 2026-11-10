@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -2075,8 +2076,10 @@ describe('OperatorPage', () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
     const enable = screen.getByRole('button', { name: 'Enable' });
+    expect(enable).toHaveClass('matrix-enable');
     HTMLElement.prototype.setPointerCapture = vi.fn();
     fireEvent.pointerDown(enable);
+    fireEvent.lostPointerCapture(enable);
     fireEvent.pointerUp(enable);
     expect(screen.getByTitle('Lamp off')).toBeInTheDocument();
     expect(screen.getByTitle('Lamp on')).toBeInTheDocument();
@@ -2373,5 +2376,135 @@ describe('OperatorPage', () => {
 
     touch('pointerDown', 16, 4, 4);
     view.unmount();
+  });
+
+  it('covers a plain pendant button, a dark selector lamp, and crane enable', async () => {
+    const tags = {
+      ...defaultTags,
+      values: {
+        'coil.p03a21.do.buttonsActive': true,
+        'coil.p03a21.do.owvaSelector': false,
+      },
+    };
+    socket.on.mockImplementation(
+      (event: string, handler: (payload: unknown) => void) => {
+        if (event === 'tags.update') handler(tags);
+      },
+    );
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control')
+        return { ...heldControl, youHold: false } as never;
+      if (path === '/realtime/tags') return tags as never;
+      return {
+        ...layout,
+        matrix: { rows: 1, cols: 3 },
+        background: {
+          id: 'bg-p',
+          name: 'demo-p03a21',
+          cssBackground: '',
+          imageUrl: null,
+        },
+        cells: [
+          {
+            id: 'pb1',
+            row: 0,
+            col: 0,
+            label: 'Buttons active',
+            style: 'pushbutton',
+            isMotion: false,
+            requiresSafeAction: false,
+            primaryRegister: {
+              id: 'p1',
+              name: 'coil.p03a21.di.buttonsActive',
+              address: 42,
+              kind: 'coil',
+            },
+            feedbackRegister: {
+              id: 'f1',
+              name: 'coil.p03a21.do.buttonsActive',
+              address: 50,
+              kind: 'coil',
+            },
+            statusRegister: null,
+          },
+          {
+            id: 'plain',
+            row: 0,
+            col: 2,
+            label: 'Teach',
+            style: 'pushbutton',
+            isMotion: true,
+            requiresSafeAction: false,
+            primaryRegister: {
+              id: 'p2',
+              name: 'coil.p03a21.di.teachPipeMiddle',
+              address: 21,
+              kind: 'coil',
+            },
+            feedbackRegister: null,
+            statusRegister: null,
+          },
+          {
+            id: 'sel-off',
+            row: 0,
+            col: 1,
+            label: 'OWVA up/down',
+            style: 'selector',
+            isMotion: true,
+            requiresSafeAction: false,
+            variableSpeed: false,
+            primaryRegister: {
+              id: 'pa',
+              name: 'coil.p03a21.di.owvaUp',
+              address: 26,
+              kind: 'coil',
+            },
+            secondaryRegister: {
+              id: 'pb',
+              name: 'coil.p03a21.di.owvaDown',
+              address: 27,
+              kind: 'coil',
+            },
+            feedbackRegister: {
+              id: 'fl',
+              name: 'coil.p03a21.do.owvaSelector',
+              address: 56,
+              kind: 'coil',
+            },
+            statusRegister: null,
+          },
+        ],
+        overlays: [],
+        backgrounds: [],
+      } as never;
+    });
+    mockPostWithControl(async () => ({ ok: true }));
+    renderOperator(<OperatorPage />);
+    const plain = await screen.findByRole('button', { name: 'Buttons active' });
+    fireEvent.lostPointerCapture(plain);
+    expect(screen.getByTitle('Lamp on')).toBeInTheDocument();
+    expect(screen.getByTitle('Lamp off')).toBeInTheDocument();
+    cleanup();
+
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/safety/control') return heldControl as never;
+      if (path === '/realtime/tags') return defaultTags as never;
+      return {
+        ...layout,
+        cells: [
+          {
+            ...layout.cells[0],
+            id: 'en-crane',
+            label: 'Enable',
+            style: 'enable',
+            isMotion: false,
+          },
+        ],
+      } as never;
+    });
+    renderOperator(<OperatorPage />);
+    expect(await screen.findByRole('button', { name: 'Enable' })).toHaveClass(
+      'matrix-enable',
+    );
   });
 });
