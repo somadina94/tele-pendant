@@ -22,6 +22,7 @@ import { ResolveCodeDto } from './dtos/resolve-code.dto';
 import { SaveScanCodeDto } from './dtos/save-scan-code.dto';
 import { VoiceCommandDto } from './dtos/voice-command.dto';
 import { auditActorFromRequest } from '../common/audit-actor';
+import { readControlClientId } from '../safety/control-client-id';
 import { MediaService } from './providers/media.service';
 
 @ApiTags('media')
@@ -91,6 +92,7 @@ export class MediaController {
       safeActionPin: dto.safeActionPin,
       alternatives: dto.alternatives,
       ip: actor.ip,
+      clientId: readControlClientId(req),
     });
   }
 }

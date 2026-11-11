@@ -13,6 +13,8 @@ describe('getRealtimeSocket', () => {
     ioMock.mockClear();
     disconnect.mockClear();
     localStorage.clear();
+    sessionStorage.clear();
+    sessionStorage.setItem('controlClientId', 'test-client');
     vi.resetModules();
   });
 
@@ -28,7 +30,7 @@ describe('getRealtimeSocket', () => {
       expect.objectContaining({
         path: '/socket.io',
         withCredentials: true,
-        auth: { token: 'tok-1' },
+        auth: { token: 'tok-1', controlClientId: 'test-client' },
       }),
     );
   });
@@ -43,12 +45,15 @@ describe('getRealtimeSocket', () => {
     expect(ioMock).toHaveBeenCalledTimes(2);
     expect(ioMock).toHaveBeenLastCalledWith(
       '/realtime',
-      expect.objectContaining({ auth: { token: 'tok-2' } }),
+      expect.objectContaining({
+        auth: { token: 'tok-2', controlClientId: 'test-client' },
+      }),
     );
   });
 
-  it('connects without auth when localStorage is unavailable', async () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+  it('connects without token when localStorage is unavailable', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key) => {
+      if (key === 'controlClientId') return 'test-client';
       throw new Error('blocked');
     });
     const { getRealtimeSocket, resetRealtimeSocket } =
@@ -57,7 +62,9 @@ describe('getRealtimeSocket', () => {
     getRealtimeSocket();
     expect(ioMock).toHaveBeenCalledWith(
       '/realtime',
-      expect.objectContaining({ auth: {} }),
+      expect.objectContaining({
+        auth: { controlClientId: expect.any(String) },
+      }),
     );
   });
 });

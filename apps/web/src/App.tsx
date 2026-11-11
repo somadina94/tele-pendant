@@ -5,6 +5,7 @@ import {
   Outlet,
   Route,
   Routes,
+  useNavigate,
   useSearchParams,
 } from 'react-router-dom';
 import { AdminPage } from './pages/AdminPage';
@@ -18,12 +19,26 @@ import { OpsPage } from './pages/OpsPage';
 import { RequireRole } from '@/components/require-role';
 import { AppShell } from './layouts/AppShell';
 import { apiGet, type HmiLayout, type PublicUser } from './lib/api';
-import { clearSession } from './lib/session';
+import { clearSession, registerSoftLoginRedirect } from './lib/session';
 import { PageSpinner } from '@/components/page-spinner';
+
+/** Mid-session 401: soft-replace to login so STOP is not left under a paint. */
+function SoftLoginRedirectBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    registerSoftLoginRedirect(() => {
+      navigate('/', { replace: true });
+    });
+    return () => registerSoftLoginRedirect(null);
+  }, [navigate]);
+  return null;
+}
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const [state, setState] = useState<'loading' | 'ok' | 'out'>('loading');
+  const [state, setState] = useState<'loading' | 'ok' | 'out'>(() =>
+    localStorage.getItem('accessToken') ? 'loading' : 'out',
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -76,47 +91,50 @@ function ConfigAliasRedirect() {
 
 export function App() {
   return (
-    <Routes>
-      <Route path="/" element={<LoginPage />} />
-      <Route element={<FaceEntry />}>
-        <Route path="/face" element={<FacePage />} />
-      </Route>
-      <Route
-        element={
-          <RequireAuth>
-            <AppShell />
-          </RequireAuth>
-        }
-      >
-        <Route path="/operator" element={<OperatorPage />} />
+    <>
+      <SoftLoginRedirectBridge />
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+        <Route element={<FaceEntry />}>
+          <Route path="/face" element={<FacePage />} />
+        </Route>
         <Route
-          path="/admin"
           element={
-            <RequireRole
-              allow={['supervisor', 'admin']}
-              detail="Config is for supervisors and administrators. Operators use the Operator, Media, and Ops screens."
-            >
-              <AdminPage />
-            </RequireRole>
+            <RequireAuth>
+              <AppShell />
+            </RequireAuth>
           }
-        />
-        <Route path="/config" element={<ConfigAliasRedirect />} />
-        <Route path="/config/*" element={<ConfigAliasRedirect />} />
-        <Route path="/ops" element={<OpsPage />} />
-        <Route path="/media" element={<MediaPage />} />
-        <Route
-          path="/audit"
-          element={
-            <RequireRole
-              allow={['supervisor', 'admin']}
-              detail="The audit log is limited to supervisors and administrators."
-            >
-              <AuditPage />
-            </RequireRole>
-          }
-        />
-        <Route path="/assistant" element={<AssistantPage />} />
-      </Route>
-    </Routes>
+        >
+          <Route path="/operator" element={<OperatorPage />} />
+          <Route
+            path="/admin"
+            element={
+              <RequireRole
+                allow={['supervisor', 'admin']}
+                detail="Config is for supervisors and administrators. Operators use the Operator, Media, and Ops screens."
+              >
+                <AdminPage />
+              </RequireRole>
+            }
+          />
+          <Route path="/config" element={<ConfigAliasRedirect />} />
+          <Route path="/config/*" element={<ConfigAliasRedirect />} />
+          <Route path="/ops" element={<OpsPage />} />
+          <Route path="/media" element={<MediaPage />} />
+          <Route
+            path="/audit"
+            element={
+              <RequireRole
+                allow={['supervisor', 'admin']}
+                detail="The audit log is limited to supervisors and administrators."
+              >
+                <AuditPage />
+              </RequireRole>
+            }
+          />
+          <Route path="/assistant" element={<AssistantPage />} />
+        </Route>
+      </Routes>
+    </>
   );
 }

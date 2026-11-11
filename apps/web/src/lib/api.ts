@@ -1,3 +1,4 @@
+import { getControlClientId } from './control-client-id';
 import { clearSession, isPublicAuthPath, redirectToLogin } from './session';
 
 const API_BASE = '/api/v1';
@@ -6,7 +7,9 @@ export type ApiEnvelope<T> = { apiVersion: string; data: T };
 
 function authHeaders(json = true): HeadersInit {
   const token = localStorage.getItem('accessToken');
-  const headers: HeadersInit = {};
+  const headers: HeadersInit = {
+    'X-Control-Client-Id': getControlClientId(),
+  };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (json) headers['Content-Type'] = 'application/json';
   return headers;
@@ -202,6 +205,7 @@ export interface ControlLease {
   held: boolean;
   holderUserId: string | null;
   holderDisplayName: string | null;
+  holderClientId?: string | null;
   youHold: boolean;
   expiresAt: string | null;
 }

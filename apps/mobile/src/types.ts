@@ -52,6 +52,7 @@ export type ControlLease = {
   held: boolean;
   holderUserId: string | null;
   holderDisplayName: string | null;
+  holderClientId?: string | null;
   youHold: boolean;
   expiresAt: string | null;
 };

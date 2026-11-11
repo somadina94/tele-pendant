@@ -22,6 +22,7 @@ import { JwtPayload } from '../auth/providers/auth.service';
 import { JwtAuthGuard } from '../auth/providers/jwt-auth.guard';
 import { RolesGuard } from '../auth/providers/roles.guard';
 import { UserRole } from '../users/enums/user-role.enum';
+import { readControlClientId } from '../safety/control-client-id';
 import { ActivateCellDto } from './dtos/activate-cell.dto';
 import { CreateBackgroundDto } from './dtos/create-background.dto';
 import { SaveBackgroundDto } from './dtos/save-background.dto';
@@ -233,6 +234,7 @@ export class HmiController {
       refresh: dto.refresh,
       direction: dto.direction,
       ip: req.ip,
+      clientId: readControlClientId(req),
     });
   }
 

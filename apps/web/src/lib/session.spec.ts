@@ -4,6 +4,7 @@ import {
   isPublicAuthPath,
   logoutSession,
   redirectToLogin,
+  registerSoftLoginRedirect,
 } from './session';
 
 describe('session', () => {
@@ -59,25 +60,59 @@ describe('session', () => {
 
   it('redirects to login from protected routes', () => {
     localStorage.setItem('accessToken', 'tok');
-    const assign = vi.fn();
+    const replace = vi.fn();
     vi.stubGlobal('location', {
       pathname: '/operator',
-      assign,
+      replace,
+      assign: vi.fn(),
     });
     redirectToLogin();
     expect(localStorage.getItem('accessToken')).toBeNull();
-    expect(assign).toHaveBeenCalledWith('/');
+    expect(replace).toHaveBeenCalledWith('/');
+  });
+
+  it('uses a soft React Router redirect when registered', () => {
+    localStorage.setItem('accessToken', 'tok');
+    const soft = vi.fn();
+    registerSoftLoginRedirect(soft);
+    const replace = vi.fn();
+    vi.stubGlobal('location', {
+      pathname: '/operator',
+      replace,
+      assign: vi.fn(),
+    });
+    redirectToLogin();
+    expect(soft).toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    registerSoftLoginRedirect(null);
+  });
+
+  it('prefers soft redirect even on a public pathname', () => {
+    localStorage.setItem('accessToken', 'tok');
+    const soft = vi.fn();
+    registerSoftLoginRedirect(soft);
+    const replace = vi.fn();
+    vi.stubGlobal('location', {
+      pathname: '/',
+      replace,
+      assign: vi.fn(),
+    });
+    redirectToLogin();
+    expect(soft).toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    registerSoftLoginRedirect(null);
   });
 
   it('clears without redirect on public paths', () => {
     localStorage.setItem('accessToken', 'tok');
-    const assign = vi.fn();
+    const replace = vi.fn();
     vi.stubGlobal('location', {
       pathname: '/',
-      assign,
+      replace,
+      assign: vi.fn(),
     });
     redirectToLogin();
     expect(localStorage.getItem('accessToken')).toBeNull();
-    expect(assign).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 });

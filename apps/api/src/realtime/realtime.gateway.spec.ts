@@ -154,6 +154,7 @@ describe('RealtimeGateway', () => {
     expect(safetyState.pulseDeadman).toHaveBeenCalledWith({
       userId: 'u1',
       socketId: 'sock-2',
+      clientId: '',
     });
     await expect(gateway.handleDeadmanRelease(sock as never)).resolves.toEqual({
       mode: 'normal',

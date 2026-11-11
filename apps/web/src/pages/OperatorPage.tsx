@@ -611,9 +611,15 @@ export function OperatorPage() {
       statusRegisterName: cell.statusRegister?.name,
     });
     const StateIcon = CELL_STATE_ICON[cellState];
-    const stateLabel = t(MATRIX_CELL_STATE_I18N[cellState]);
-    const stateCode = MATRIX_CELL_STATE_CODE[cellState];
     const isEstop = cell.style === 'estop';
+    const estopLatched =
+      isEstop &&
+      (Boolean(safety?.eStopActive) ||
+        (safety?.mode ?? '').toLowerCase() === 'e_stop');
+    const stateLabel = estopLatched
+      ? t('estop')
+      : t(MATRIX_CELL_STATE_I18N[cellState]);
+    const stateCode = estopLatched ? 'STOP' : MATRIX_CELL_STATE_CODE[cellState];
     const needsLease = cellRequiresControlLease(cell);
     const holdToRun = cellUsesHoldToRun(cell);
     const feedbackRaw = cell.feedbackRegister
@@ -1086,7 +1092,11 @@ export function OperatorPage() {
                   <div className="plant-metric">
                     <span className="plant-metric-label">Motor</span>
                     <span className="plant-metric-value">
-                      {tags?.motorRunning ? 'RUN' : 'IDLE'}
+                      {safety?.eStopActive
+                        ? 'IDLE'
+                        : tags?.motorRunning
+                          ? 'RUN'
+                          : 'IDLE'}
                     </span>
                     <span className="plant-metric-unit">status</span>
                   </div>

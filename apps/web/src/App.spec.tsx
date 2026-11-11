@@ -111,6 +111,21 @@ describe('App', () => {
     expect(localStorage.getItem('accessToken')).toBeNull();
   });
 
+  it('soft-replaces to login on mid-session 401 without a hard assign', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    const view = renderWithProviders(<App />, { route: '/operator' });
+    expect(
+      await screen.findByRole('button', { name: 'Claim control' }),
+    ).toBeInTheDocument();
+    const { redirectToLogin } = await import('./lib/session');
+    redirectToLogin();
+    expect(
+      await screen.findByRole('button', { name: 'Sign in' }),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem('accessToken')).toBeNull();
+    view.unmount();
+  });
+
   it('ignores a late session check after unmount', async () => {
     localStorage.setItem('accessToken', 'tok');
     const apiMod = await import('./lib/api');

@@ -9,6 +9,8 @@ documentation
 !.env.test
 *.db
 *.db-journal
+apps/api/data/*.sqlite
+apps/api/data/*.sqlite-*
 .DS_Store
 apps/mobile/.expo
 apps/mobile/android

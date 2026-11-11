@@ -213,7 +213,10 @@ export class SafetyStateService {
     return this.plcService.addressFor(name, fallback);
   }
 
-  snapshot(forUserId?: string | null): SafetySnapshot {
+  snapshot(
+    forUserId?: string | null,
+    forClientId?: string | null,
+  ): SafetySnapshot {
     return {
       mode: this.mode,
       deadmanActive: this.deadmanActive,
@@ -222,20 +225,24 @@ export class SafetyStateService {
       allowTimedMediaMotion: this.allowTimedMedia,
       lastHeartbeatAt: this.lastHeartbeatAt?.toISOString() ?? null,
       lastClientPulseAt: this.lastClientPulseAt?.toISOString() ?? null,
-      control: this.controlLease.snapshot(forUserId),
+      control: this.controlLease.snapshot(forUserId, forClientId),
     };
   }
 
-  controlSnapshot(forUserId?: string | null): ControlLeaseView {
-    return this.controlLease.snapshot(forUserId);
+  controlSnapshot(
+    forUserId?: string | null,
+    forClientId?: string | null,
+  ): ControlLeaseView {
+    return this.controlLease.snapshot(forUserId, forClientId);
   }
 
   claimControl(
     userId: string,
     displayName?: string | null,
     actor?: AuditActor,
+    clientId?: string | null,
   ): ControlLeaseView {
-    const control = this.controlLease.claim(userId, displayName);
+    const control = this.controlLease.claim(userId, displayName, clientId);
     void this.auditService.write({
       ...auditWriteFields(actor),
       action: 'safety.control_claim',
@@ -245,12 +252,16 @@ export class SafetyStateService {
     return control;
   }
 
-  heartbeatControl(userId: string): ControlLeaseView {
-    return this.controlLease.heartbeat(userId);
+  heartbeatControl(userId: string, clientId?: string | null): ControlLeaseView {
+    return this.controlLease.heartbeat(userId, clientId);
   }
 
-  releaseControl(userId: string, actor?: AuditActor): ControlLeaseView {
-    const control = this.controlLease.release(userId);
+  releaseControl(
+    userId: string,
+    actor?: AuditActor,
+    clientId?: string | null,
+  ): ControlLeaseView {
+    const control = this.controlLease.release(userId, clientId);
     void this.auditService.write({
       ...auditWriteFields(actor),
       action: 'safety.control_release',
@@ -269,6 +280,7 @@ export class SafetyStateService {
     userId: string,
     displayName?: string | null,
     actor?: AuditActor,
+    clientId?: string | null,
   ): Promise<ControlLeaseView> {
     const ok = await this.safeActionPin.verify(userId, pin);
     if (!ok) {
@@ -283,6 +295,7 @@ export class SafetyStateService {
     const { control, previousUserId } = this.controlLease.steal(
       userId,
       displayName,
+      clientId,
     );
     if (previousUserId) {
       await this.releaseDeadman({ userId: previousUserId, force: true });
@@ -302,10 +315,14 @@ export class SafetyStateService {
    * (and optional socket) so another session cannot ride the pulse (TP-37).
    * FEAT-A5: pulses are ignored unless the user holds the control lease.
    */
-  pulseDeadman(holder: { userId: string; socketId?: string | null }): void {
+  pulseDeadman(holder: {
+    userId: string;
+    socketId?: string | null;
+    clientId?: string | null;
+  }): void {
     const userId = holder.userId?.trim();
     if (!userId) return;
-    if (!this.controlLease.holds(userId)) {
+    if (!this.controlLease.holds(userId, holder.clientId)) {
       motionDebug('deadman.pulse.rejected', {
         userId,
         reason: 'no-control-lease',
@@ -431,8 +448,8 @@ export class SafetyStateService {
    * Motion only for the exclusive control holder who also holds deadman
    * (TP-37 + FEAT-A5).
    */
-  canIssueMotion(userId?: string | null): boolean {
-    if (!userId || !this.controlLease.holds(userId)) return false;
+  canIssueMotion(userId?: string | null, clientId?: string | null): boolean {
+    if (!userId || !this.controlLease.holds(userId, clientId)) return false;
     if (userId !== this.deadmanHolderUserId) return false;
     return (
       this.mode === 'normal' &&
@@ -568,12 +585,13 @@ export class SafetyStateService {
     }
     const motion = await this.cells.find({
       where: { isMotion: true },
-      relations: { primaryRegister: true },
+      relations: { primaryRegister: true, secondaryRegister: true },
     });
     for (const cell of motion) {
-      const reg = cell.primaryRegister;
-      if (reg?.kind === 'coil') {
-        await driver.writeCoil(reg.address, false);
+      for (const reg of [cell.primaryRegister, cell.secondaryRegister]) {
+        if (reg?.kind === 'coil') {
+          await driver.writeCoil(reg.address, false);
+        }
       }
     }
   }

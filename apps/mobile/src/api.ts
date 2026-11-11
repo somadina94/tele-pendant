@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { getControlClientId } from './control-client-id';
 import { notifyUnauthorized } from './session';
 import { clearAccessToken } from './token-storage';
 
@@ -31,11 +32,13 @@ async function apiSend<T>(
   token?: string | null,
 ): Promise<T> {
   const base = getApiBase();
+  const controlClientId = await getControlClientId();
   const res = await fetch(`${base}${path}`, {
     method,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'X-Control-Client-Id': controlClientId,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
     // Live tags must not reuse a conditional/304 cache entry (prod jump).

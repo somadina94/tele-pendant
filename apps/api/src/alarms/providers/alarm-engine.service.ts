@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
@@ -294,6 +295,10 @@ export class AlarmEngineService implements OnModuleInit {
     if (!['eq', 'gt', 'lt', 'neq'].includes(compareOp)) {
       throw new BadRequestException('Operator must be eq, gt, lt, or neq');
     }
+    const duplicate = await this.definitions.findOne({ where: { name } });
+    if (duplicate) {
+      throw new ConflictException(`An alarm named "${name}" already exists`);
+    }
     const severity = await this.resolveWritableSeverity(
       input.severity,
       'alarm.create_denied',
@@ -344,6 +349,14 @@ export class AlarmEngineService implements OnModuleInit {
     if (input.name !== undefined) {
       const name = input.name.trim();
       if (!name) throw new BadRequestException('Name is required');
+      if (name !== row.name) {
+        const duplicate = await this.definitions.findOne({ where: { name } });
+        if (duplicate) {
+          throw new ConflictException(
+            `An alarm named "${name}" already exists`,
+          );
+        }
+      }
       row.name = name;
     }
     if (input.severity !== undefined) {

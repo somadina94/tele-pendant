@@ -54,30 +54,47 @@ describe('mergeControlLease', () => {
     expect(mergeControlLease(undefined, prev)).toBe(prev);
   });
 
-  it('derives youHold from the logged-in user id', () => {
+  it('derives youHold from user id and this tab client id', () => {
     localStorage.setItem('user', JSON.stringify({ id: 'u1' }));
+    sessionStorage.setItem('controlClientId', 'tab-a');
     expect(
       mergeControlLease(
         {
           held: true,
           holderUserId: 'u1',
           holderDisplayName: 'Op',
+          holderClientId: 'tab-a',
           youHold: false,
           expiresAt: held.expiresAt,
         },
         null,
       )?.youHold,
     ).toBe(true);
-  });
-
-  it('tolerates corrupt user JSON in storage', () => {
-    localStorage.setItem('user', '{');
     expect(
       mergeControlLease(
         {
           held: true,
           holderUserId: 'u1',
           holderDisplayName: 'Op',
+          holderClientId: 'tab-b',
+          youHold: false,
+          expiresAt: held.expiresAt,
+        },
+        null,
+      )?.youHold,
+    ).toBe(false);
+  });
+
+  it('tolerates corrupt user JSON in storage', () => {
+    localStorage.setItem('user', '{');
+    sessionStorage.setItem('controlClientId', 'tab-a');
+    expect(
+      mergeControlLease(
+        {
+          held: true,
+          holderUserId: 'u1',
+          holderDisplayName: 'Op',
+          holderClientId: 'tab-a',
           youHold: false,
           expiresAt: held.expiresAt,
         },

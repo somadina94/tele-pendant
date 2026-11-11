@@ -722,6 +722,33 @@ describe('MediaPage', () => {
   });
 
   it('reports missing video when the camera element is unavailable', async () => {
+    const videoRef = { current: null as HTMLVideoElement | null };
+    Object.defineProperty(videoRef, 'current', {
+      configurable: true,
+      get: () => null,
+      set: () => undefined,
+    });
+    cameraOverride.impl = () => ({
+      videoRef: videoRef as unknown as {
+        current: HTMLVideoElement | null;
+      },
+      camError: null,
+      camRepromptAllowed: false,
+      camShowSettingsHint: false,
+      camPermissionDenied: false,
+      retryCameraAccess: vi.fn(),
+    });
+    renderWithProviders(<MediaPage />);
+    await screen.findByText(/Device camera notes/);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText(/No camera video/i)).toHaveLength(1),
+    );
+  });
+
+  it('does not duplicate camera feedback when permission is already denied', async () => {
     cameraOverride.impl = () => ({
       videoRef: { current: null },
       camError: 'Camera permission denied',
@@ -735,9 +762,7 @@ describe('MediaPage', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'Scan QR / barcode in frame' }),
     );
-    await waitFor(() =>
-      expect(screen.getAllByText(/No camera video/i).length).toBeGreaterThan(0),
-    );
+    expect(screen.queryByText(/No camera video/i)).not.toBeInTheDocument();
   });
 
   it('decodes with zxing when BarcodeDetector is missing', async () => {

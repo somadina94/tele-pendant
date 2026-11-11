@@ -85,7 +85,7 @@ describe('resolveMatrixCellUiState (FEAT-A1)', () => {
     ).toBe('fault');
   });
 
-  it('marks STOP as running when latched, idle when clear', () => {
+  it('marks STOP as blocked when latched, idle when clear', () => {
     const stop = {
       style: 'estop',
       isMotion: false,
@@ -104,6 +104,6 @@ describe('resolveMatrixCellUiState (FEAT-A1)', () => {
         ...stop,
         safety: { mode: 'e_stop', eStopActive: true, watchdogOk: true },
       }),
-    ).toBe('running');
+    ).toBe('blocked');
   });
 });

@@ -173,6 +173,9 @@ export function MediaPage() {
   }
 
   async function scanFrameInner() {
+    if (deviceCamera.camError) {
+      return;
+    }
     const video = deviceCamera.videoRef.current;
     if (!video) {
       setScanFeedback({
@@ -472,7 +475,6 @@ export function MediaPage() {
                 >
                   Resolve
                 </Button>
-                {scanFeedbackAlert}
                 <ul className="space-y-1 text-sm">
                   {(codes.data ?? []).map((c) => (
                     <li key={c.code}>

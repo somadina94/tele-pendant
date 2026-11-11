@@ -37,6 +37,7 @@ import {
 import { io, Socket } from 'socket.io-client';
 import { operatorApiError } from '../api-errors';
 import { apiGet, apiPost, getApiBase } from '../api';
+import { getControlClientId } from '../control-client-id';
 import { useControlLease } from '../control-lease';
 import type { Cell, ControlLease, Layout } from '../types';
 import { useLocale } from '../locale';
@@ -255,23 +256,25 @@ export function OperatorScreen({ token }: { token: string }) {
     let socket: Socket | null = null;
     let closed = false;
     const base = getApiBase();
-    if (closed) return;
     const origin = base.replace(/\/api\/v1$/, '');
-    socket = io(`${origin}/realtime`, {
-      transports: ['websocket', 'polling'],
-      path: '/socket.io',
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      auth: token ? { token } : {},
-    });
-    socketRef.current = socket;
-    socket.on('safety.state', (s: SafetySnap) => {
-      setSafety(s);
-      if (s.control) applyControl(s.control);
-    });
-    socket.on('tags.update', (payload: TagSnapshot) => {
-      lastWsTagAt.current = Date.now();
-      applyLiveTags(payload);
+    void getControlClientId().then((controlClientId) => {
+      if (closed) return;
+      socket = io(`${origin}/realtime`, {
+        transports: ['websocket', 'polling'],
+        path: '/socket.io',
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        auth: token ? { token, controlClientId } : { controlClientId },
+      });
+      socketRef.current = socket;
+      socket.on('safety.state', (s: SafetySnap) => {
+        setSafety(s);
+        if (s.control) applyControl(s.control);
+      });
+      socket.on('tags.update', (payload: TagSnapshot) => {
+        lastWsTagAt.current = Date.now();
+        applyLiveTags(payload);
+      });
     });
     return () => {
       closed = true;
@@ -729,8 +732,14 @@ export function OperatorScreen({ token }: { token: string }) {
           chip: 'rgba(255,255,255,0.22)',
         }
       : statePalette[cellState];
-    const stateLabel = t(MATRIX_CELL_STATE_I18N[cellState]);
-    const stateCode = MATRIX_CELL_STATE_CODE[cellState];
+    const estopLatched =
+      isEstop &&
+      (Boolean(safety.eStopActive) ||
+        (safety.mode ?? '').toLowerCase() === 'e_stop');
+    const stateLabel = estopLatched
+      ? t('estop')
+      : t(MATRIX_CELL_STATE_I18N[cellState]);
+    const stateCode = estopLatched ? 'STOP' : MATRIX_CELL_STATE_CODE[cellState];
     const feedbackRaw = cell.feedbackRegister
       ? tagValueForRegister(tags, cell.feedbackRegister.name)
       : undefined;
@@ -1411,7 +1420,11 @@ export function OperatorScreen({ token }: { token: string }) {
                     },
                     {
                       label: 'Motor',
-                      value: tags?.motorRunning ? 'RUN' : 'IDLE',
+                      value: safety.eStopActive
+                        ? 'IDLE'
+                        : tags?.motorRunning
+                          ? 'RUN'
+                          : 'IDLE',
                       unit: 'status',
                     },
                   ] as const

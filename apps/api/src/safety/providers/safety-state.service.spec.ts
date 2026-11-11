@@ -68,13 +68,21 @@ describe('SafetyStateService', () => {
     );
   });
 
+  function clientFor(userId: string): string {
+    return `${userId}-client`;
+  }
+
   function claimAs(userId: string, name = userId): void {
-    service.claimControl(userId, name);
+    service.claimControl(userId, name, undefined, clientFor(userId));
   }
 
   function pulseHeld(userId = 'u1', socketId?: string): void {
-    if (!controlLease.holds(userId)) claimAs(userId);
-    service.pulseDeadman({ userId, socketId });
+    if (!controlLease.holds(userId, clientFor(userId))) claimAs(userId);
+    service.pulseDeadman({
+      userId,
+      socketId,
+      clientId: clientFor(userId),
+    });
   }
 
   it('stores the timed-motion flag and reads it back', async () => {
@@ -158,52 +166,70 @@ describe('SafetyStateService', () => {
 
   it('blocks motion until deadman pulse and releases', async () => {
     claimAs('u1', 'Alice');
-    expect(service.canIssueMotion('u1')).toBe(false);
-    service.pulseDeadman({ userId: 'u1' });
-    expect(service.canIssueMotion('u1')).toBe(true);
-    expect(service.canIssueMotion('u2')).toBe(false);
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(false);
+    service.pulseDeadman({ userId: 'u1', clientId: clientFor('u1') });
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(true);
+    expect(service.canIssueMotion('u2', clientFor('u2'))).toBe(false);
     await service.releaseDeadman({ userId: 'u1' });
-    expect(service.canIssueMotion('u1')).toBe(false);
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(false);
     expect(service.snapshot().lastClientPulseAt).toBeNull();
   });
 
   it('ignores deadman pulse without exclusive control (FEAT-A5)', () => {
-    service.pulseDeadman({ userId: 'u1' });
+    service.pulseDeadman({ userId: 'u1', clientId: clientFor('u1') });
     expect(service.snapshot().deadmanActive).toBe(false);
-    expect(service.canIssueMotion('u1')).toBe(false);
-    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(false);
+    service.pulseDeadman({
+      userId: 'u1',
+      socketId: 'sock-a',
+      clientId: clientFor('u1'),
+    });
     expect(service.snapshot().deadmanActive).toBe(false);
     claimAs('u1', 'Alice');
-    service.pulseDeadman({ userId: 'u1' });
-    expect(service.canIssueMotion('u1')).toBe(true);
-    expect(service.canIssueMotion('u2')).toBe(false);
+    service.pulseDeadman({ userId: 'u1', clientId: clientFor('u1') });
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(true);
+    expect(service.canIssueMotion('u2', clientFor('u2'))).toBe(false);
   });
 
   it('steals control with PIN and drops prior deadman (FEAT-A5)', async () => {
     process.env.SAFE_ACTION_PIN = '1234';
     claimAs('u1', 'Alice');
-    service.pulseDeadman({ userId: 'u1' });
-    expect(service.canIssueMotion('u1')).toBe(true);
+    service.pulseDeadman({ userId: 'u1', clientId: clientFor('u1') });
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(true);
     await expect(
-      service.stealControl('wrong', 'u2', 'Bob', { userEmail: 'bob@x' }),
+      service.stealControl(
+        'wrong',
+        'u2',
+        'Bob',
+        { userEmail: 'bob@x' },
+        clientFor('u2'),
+      ),
     ).rejects.toThrow('PIN does not match');
-    const control = await service.stealControl('1234', 'u2', 'Bob', {
-      userEmail: 'bob@x',
-    });
+    const control = await service.stealControl(
+      '1234',
+      'u2',
+      'Bob',
+      {
+        userEmail: 'bob@x',
+      },
+      clientFor('u2'),
+    );
     expect(control.youHold).toBe(true);
     expect(service.snapshot().deadmanActive).toBe(false);
-    expect(service.canIssueMotion('u1')).toBe(false);
-    service.pulseDeadman({ userId: 'u2' });
-    expect(service.canIssueMotion('u2')).toBe(true);
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(false);
+    service.pulseDeadman({ userId: 'u2', clientId: clientFor('u2') });
+    expect(service.canIssueMotion('u2', clientFor('u2'))).toBe(true);
     delete process.env.SAFE_ACTION_PIN;
   });
 
   it('heartbeats and releases exclusive control (FEAT-A5)', () => {
     claimAs('u1', 'Alice');
-    expect(service.controlSnapshot('u1').youHold).toBe(true);
-    expect(service.heartbeatControl('u1').youHold).toBe(true);
-    expect(service.releaseControl('u1', { userEmail: 'a@x' }).held).toBe(false);
-    expect(service.controlSnapshot('u1').held).toBe(false);
+    expect(service.controlSnapshot('u1', clientFor('u1')).youHold).toBe(true);
+    expect(service.heartbeatControl('u1', clientFor('u1')).youHold).toBe(true);
+    expect(
+      service.releaseControl('u1', { userEmail: 'a@x' }, clientFor('u1')).held,
+    ).toBe(false);
+    expect(service.controlSnapshot('u1', clientFor('u1')).held).toBe(false);
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'safety.control_release',
@@ -214,7 +240,13 @@ describe('SafetyStateService', () => {
 
   it('steals when control is free (no prior holder deadman drop)', async () => {
     process.env.SAFE_ACTION_PIN = '1234';
-    const control = await service.stealControl('1234', 'u1', 'Alice');
+    const control = await service.stealControl(
+      '1234',
+      'u1',
+      'Alice',
+      undefined,
+      clientFor('u1'),
+    );
     expect(control.youHold).toBe(true);
     expect(auditService.write).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -228,30 +260,42 @@ describe('SafetyStateService', () => {
 
   it('ignores empty pulse and non-holder release (TP-37)', async () => {
     claimAs('u1', 'Alice');
-    service.pulseDeadman({ userId: '  ' });
+    service.pulseDeadman({ userId: '  ', clientId: clientFor('  ') });
     expect(service.snapshot().deadmanActive).toBe(false);
-    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
-    expect(service.canIssueMotion('u1')).toBe(true);
+    service.pulseDeadman({
+      userId: 'u1',
+      socketId: 'sock-a',
+      clientId: clientFor('u1'),
+    });
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(true);
     await service.releaseDeadman({ userId: 'u2' });
     expect(service.snapshot().deadmanActive).toBe(true);
     await service.releaseDeadman({ socketId: 'sock-other' });
     expect(service.snapshot().deadmanActive).toBe(true);
     await service.releaseDeadman({ socketId: 'sock-a' });
     expect(service.snapshot().deadmanActive).toBe(false);
-    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    service.pulseDeadman({
+      userId: 'u1',
+      socketId: 'sock-a',
+      clientId: clientFor('u1'),
+    });
     await service.releaseDeadman({ force: true });
     expect(service.snapshot().deadmanActive).toBe(false);
   });
 
   it('keeps deadman across socket flap; HTTP pulse preserves socket binding', () => {
     claimAs('u1', 'Alice');
-    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
-    expect(service.canIssueMotion('u1')).toBe(true);
+    service.pulseDeadman({
+      userId: 'u1',
+      socketId: 'sock-a',
+      clientId: clientFor('u1'),
+    });
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(true);
     service.noteSocketDisconnect('sock-a');
-    expect(service.canIssueMotion('u1')).toBe(true);
-    service.pulseDeadman({ userId: 'u1' }); // HTTP — no socketId
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(true);
+    service.pulseDeadman({ userId: 'u1', clientId: clientFor('u1') }); // HTTP — no socketId
     service.noteSocketDisconnect('sock-other');
-    expect(service.canIssueMotion('u1')).toBe(true);
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(true);
   });
 
   it('aborts an in-flight coil drop when a newer pulse arrives', async () => {
@@ -259,7 +303,11 @@ describe('SafetyStateService', () => {
       { primaryRegister: { kind: 'coil', address: 7 } },
     ]);
     claimAs('u1', 'Alice');
-    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    service.pulseDeadman({
+      userId: 'u1',
+      socketId: 'sock-a',
+      clientId: clientFor('u1'),
+    });
     let resolveDeadmanWrite: (() => void) | undefined;
     const deadmanWriteGate = new Promise<void>((resolve) => {
       resolveDeadmanWrite = resolve;
@@ -274,7 +322,11 @@ describe('SafetyStateService', () => {
     const releasePromise = service.releaseDeadman({ userId: 'u1' });
     // Mid-drop: operator still holding — pulse cancels the clear.
     await Promise.resolve();
-    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    service.pulseDeadman({
+      userId: 'u1',
+      socketId: 'sock-a',
+      clientId: clientFor('u1'),
+    });
     resolveDeadmanWrite?.();
     await releasePromise;
     driver.writeCoil.mockClear();
@@ -290,7 +342,11 @@ describe('SafetyStateService', () => {
       { primaryRegister: { kind: 'coil', address: 7 } },
     ]);
     claimAs('u1', 'Alice');
-    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    service.pulseDeadman({
+      userId: 'u1',
+      socketId: 'sock-a',
+      clientId: clientFor('u1'),
+    });
     let resolveMotionWrite: (() => void) | undefined;
     const motionWriteGate = new Promise<void>((resolve) => {
       resolveMotionWrite = resolve;
@@ -310,7 +366,11 @@ describe('SafetyStateService', () => {
     }
     expect(motionWriteStarted).toBe(true);
     // Pulse after clearMotionCoils has begun so the post-clear abort path runs.
-    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    service.pulseDeadman({
+      userId: 'u1',
+      socketId: 'sock-a',
+      clientId: clientFor('u1'),
+    });
     resolveMotionWrite?.();
     await releasePromise;
     expect(service.snapshot().deadmanActive).toBe(true);
@@ -321,10 +381,14 @@ describe('SafetyStateService', () => {
 
   it('ignores unrelated socket disconnects and empty ids', () => {
     claimAs('u1', 'Alice');
-    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    service.pulseDeadman({
+      userId: 'u1',
+      socketId: 'sock-a',
+      clientId: clientFor('u1'),
+    });
     service.noteSocketDisconnect('');
     service.noteSocketDisconnect('sock-other');
-    expect(service.canIssueMotion('u1')).toBe(true);
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(true);
   });
 
   it('on release writes deadman coil off and clears motion coils (TP-35)', async () => {
@@ -338,7 +402,7 @@ describe('SafetyStateService', () => {
     await service.releaseDeadman({ userId: 'u1' });
     // Drop is fire-and-forget so the WS/HTTP response is not Modbus-bound.
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(service.canIssueMotion('u1')).toBe(false);
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(false);
     expect(service.snapshot().lastClientPulseAt).toBeNull();
     // DEMO_CRANE_MAP.coils.deadman is 10
     expect(driver.writeCoil).toHaveBeenCalledWith(10, false);
@@ -360,6 +424,21 @@ describe('SafetyStateService', () => {
     expect(cells.find).not.toHaveBeenCalled();
   });
 
+  it('clears selector secondary coils when the asserted set is empty', async () => {
+    cells.find.mockResolvedValue([
+      {
+        isMotion: true,
+        primaryRegister: { kind: 'coil', address: 26 },
+        secondaryRegister: { kind: 'coil', address: 27 },
+      },
+    ]);
+    driver.writeCoil.mockClear();
+    await service.latchOperatorEStop('Operator STOP');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(driver.writeCoil).toHaveBeenCalledWith(26, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(27, false);
+  });
+
   it('retries PLC drop on next tick if release write failed', async () => {
     cells.find.mockResolvedValue([
       { primaryRegister: { kind: 'coil', address: 7 } },
@@ -370,7 +449,7 @@ describe('SafetyStateService', () => {
       .mockResolvedValue(undefined);
     await service.releaseDeadman({ userId: 'u1' });
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(service.canIssueMotion('u1')).toBe(false);
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(false);
     driver.writeCoil.mockClear();
     await service.tick();
     expect(driver.writeCoil).toHaveBeenCalledWith(10, false);
@@ -382,7 +461,7 @@ describe('SafetyStateService', () => {
     pulseHeld();
     driver.writeCoil.mockClear();
     await service.releaseDeadman({ userId: 'u1' });
-    expect(service.canIssueMotion('u1')).toBe(false);
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(false);
     expect(driver.writeCoil).not.toHaveBeenCalled();
   });
 
@@ -394,7 +473,7 @@ describe('SafetyStateService', () => {
     driver.writeCoil.mockRejectedValueOnce('boom');
     await service.releaseDeadman({ userId: 'u1' });
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(service.canIssueMotion('u1')).toBe(false);
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(false);
     driver.writeCoil.mockReset();
     driver.writeCoil.mockResolvedValue(undefined);
     await service.tick();
@@ -463,7 +542,7 @@ describe('SafetyStateService', () => {
     const back = await service.tick();
     expect(back.mode).toBe('e_stop');
     expect(back.eStopActive).toBe(true);
-    expect(service.canIssueMotion('u1')).toBe(false);
+    expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(false);
 
     const reset = await service.resetEStop('1234');
     expect(reset.eStopActive).toBe(false);
@@ -508,7 +587,11 @@ describe('SafetyStateService', () => {
     const now = Date.now();
     jest.setSystemTime(now);
     claimAs('u1', 'Alice');
-    service.pulseDeadman({ userId: 'u1', socketId: 'sock-a' });
+    service.pulseDeadman({
+      userId: 'u1',
+      socketId: 'sock-a',
+      clientId: clientFor('u1'),
+    });
     service.noteSocketDisconnect('sock-a');
     jest.setSystemTime(now + 2000);
     await service.tick();

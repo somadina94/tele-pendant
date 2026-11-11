@@ -1248,7 +1248,8 @@ describe('OperatorPage', () => {
       expect(hoist).toHaveAttribute('data-cell-state', 'blocked'),
     );
     expect(hoist).toHaveTextContent(/BLOCK/);
-    expect(stop).toHaveAttribute('data-cell-state', 'running');
+    expect(stop).toHaveAttribute('data-cell-state', 'blocked');
+    expect(stop).toHaveTextContent(/STOP/);
 
     tagsHandler({
       ...defaultTags,

@@ -12,10 +12,12 @@ import {
 describe('api helpers', () => {
   afterEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     vi.unstubAllGlobals();
   });
 
   it('gets with and without bearer token', async () => {
+    sessionStorage.setItem('controlClientId', 'test-client');
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ apiVersion: 'v1', data: { ok: true } }),
@@ -28,7 +30,10 @@ describe('api helpers', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/health',
       expect.objectContaining({
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Control-Client-Id': 'test-client',
+        },
       }),
     );
 
@@ -40,6 +45,7 @@ describe('api helpers', () => {
         headers: {
           Authorization: 'Bearer tok',
           'Content-Type': 'application/json',
+          'X-Control-Client-Id': 'test-client',
         },
       }),
     );
@@ -79,8 +85,13 @@ describe('api helpers', () => {
   it('clears the session and redirects on 401 from protected calls', async () => {
     localStorage.setItem('accessToken', 'tok');
     localStorage.setItem('user', '{"id":"1"}');
-    const assign = vi.fn();
-    vi.stubGlobal('location', { pathname: '/operator', assign });
+    sessionStorage.setItem('controlClientId', 'test-client');
+    const replace = vi.fn();
+    vi.stubGlobal('location', {
+      pathname: '/operator',
+      replace,
+      assign: vi.fn(),
+    });
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -92,7 +103,7 @@ describe('api helpers', () => {
 
     await expect(apiGet('/hmi/layout')).rejects.toThrow('Unauthorized');
     expect(localStorage.getItem('accessToken')).toBeNull();
-    expect(assign).toHaveBeenCalledWith('/');
+    expect(replace).toHaveBeenCalledWith('/');
   });
 
   it('does not redirect on login 401', async () => {
@@ -246,6 +257,7 @@ describe('api helpers', () => {
   });
 
   it('downloads blobs and triggers a file save', async () => {
+    sessionStorage.setItem('controlClientId', 'test-client');
     const blob = new Blob(['a,b\n1,2'], { type: 'text/csv' });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -271,7 +283,9 @@ describe('api helpers', () => {
     await apiDownload('/audit/export', 'audit.csv');
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/audit/export',
-      expect.objectContaining({ headers: {} }),
+      expect.objectContaining({
+        headers: { 'X-Control-Client-Id': 'test-client' },
+      }),
     );
     expect(anchor.download).toBe('audit.csv');
     expect(click).toHaveBeenCalled();
@@ -313,6 +327,7 @@ describe('api helpers', () => {
 
   it('uploads multipart without forcing JSON content-type', async () => {
     localStorage.setItem('accessToken', 'tok');
+    sessionStorage.setItem('controlClientId', 'test-client');
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -336,7 +351,10 @@ describe('api helpers', () => {
       '/api/v1/hmi/background/asset',
       expect.objectContaining({
         method: 'POST',
-        headers: { Authorization: 'Bearer tok' },
+        headers: {
+          Authorization: 'Bearer tok',
+          'X-Control-Client-Id': 'test-client',
+        },
       }),
     );
     expect(fetchMock.mock.calls[0][1].body).toBeInstanceOf(FormData);

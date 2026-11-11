@@ -1,7 +1,9 @@
 import { io, Socket } from 'socket.io-client';
+import { getControlClientId } from './control-client-id';
 
 let socket: Socket | null = null;
 let socketToken: string | null = null;
+let socketClientId: string | null = null;
 
 function readAccessToken(): string | null {
   try {
@@ -18,20 +20,23 @@ export function resetRealtimeSocket(): void {
     socket = null;
   }
   socketToken = null;
+  socketClientId = null;
 }
 
 export function getRealtimeSocket(): Socket {
   const token = readAccessToken();
-  if (socket && socketToken !== token) {
+  const controlClientId = getControlClientId();
+  if (socket && (socketToken !== token || socketClientId !== controlClientId)) {
     resetRealtimeSocket();
   }
   if (!socket) {
     socketToken = token;
+    socketClientId = controlClientId;
     socket = io('/realtime', {
       path: '/socket.io',
       transports: ['websocket', 'polling'],
       withCredentials: true,
-      auth: token ? { token } : {},
+      auth: token ? { token, controlClientId } : { controlClientId },
     });
   }
   return socket;

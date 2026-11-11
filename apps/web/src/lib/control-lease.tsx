@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { apiGet, apiPost, type ControlLease } from './api';
+import { getControlClientId } from './control-client-id';
 import { useT } from './i18n';
 import { getRealtimeSocket } from './realtime';
 
@@ -43,12 +44,19 @@ export function mergeControlLease(
 ): ControlLease | null {
   if (!incoming) return prev;
   const me = readLocalUserId();
+  const clientId = getControlClientId();
+  // Trust server youHold when present; otherwise derive from holder + this tab.
+  const derived = Boolean(
+    me &&
+    clientId &&
+    incoming.holderUserId &&
+    incoming.holderClientId &&
+    me === incoming.holderUserId &&
+    clientId === incoming.holderClientId,
+  );
   return {
     ...incoming,
-    youHold: Boolean(
-      incoming.youHold ||
-      (me && incoming.holderUserId && me === incoming.holderUserId),
-    ),
+    youHold: Boolean(incoming.youHold || derived),
   };
 }
 

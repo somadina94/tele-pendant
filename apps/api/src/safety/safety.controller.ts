@@ -24,6 +24,7 @@ import {
   SaveSafetyRolesDto,
 } from './dtos/save-safety-roles.dto';
 import { StealControlDto } from './dtos/steal-control.dto';
+import { readControlClientId } from './control-client-id';
 
 @ApiTags('safety')
 @Controller('safety')
@@ -39,7 +40,7 @@ export class SafetyController {
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Current software safety snapshot' })
   get(@Req() req: Request & { user: JwtPayload }) {
-    return this.safetyState.snapshot(req.user.sub);
+    return this.safetyState.snapshot(req.user.sub, readControlClientId(req));
   }
 
   @Get('control')
@@ -48,7 +49,10 @@ export class SafetyController {
     summary: 'Exclusive Operator control lease status (FEAT-A5)',
   })
   control(@Req() req: Request & { user: JwtPayload }) {
-    return this.safetyState.controlSnapshot(req.user.sub);
+    return this.safetyState.controlSnapshot(
+      req.user.sub,
+      readControlClientId(req),
+    );
   }
 
   @Post('control/claim')
@@ -62,6 +66,7 @@ export class SafetyController {
       req.user.sub,
       req.user.displayName || req.user.email,
       actor,
+      readControlClientId(req),
     );
   }
 
@@ -71,7 +76,10 @@ export class SafetyController {
     summary: 'Keep exclusive control alive while Operator is open (FEAT-A5)',
   })
   heartbeatControl(@Req() req: Request & { user: JwtPayload }) {
-    return this.safetyState.heartbeatControl(req.user.sub);
+    return this.safetyState.heartbeatControl(
+      req.user.sub,
+      readControlClientId(req),
+    );
   }
 
   @Post('control/release')
@@ -79,7 +87,11 @@ export class SafetyController {
   @ApiOperation({ summary: 'Release exclusive control (FEAT-A5)' })
   releaseControl(@Req() req: Request & { user: JwtPayload }) {
     const actor = auditActorFromRequest(req.user, req.ip);
-    return this.safetyState.releaseControl(req.user.sub, actor);
+    return this.safetyState.releaseControl(
+      req.user.sub,
+      actor,
+      readControlClientId(req),
+    );
   }
 
   @Post('control/steal')
@@ -97,6 +109,7 @@ export class SafetyController {
       req.user.sub,
       req.user.displayName || req.user.email,
       actor,
+      readControlClientId(req),
     );
   }
 
@@ -128,8 +141,12 @@ export class SafetyController {
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Pulse deadman hold (also available over WS)' })
   pulse(@Req() req: Request & { user: JwtPayload }) {
-    this.safetyState.pulseDeadman({ userId: req.user.sub });
-    return this.safetyState.snapshot();
+    const clientId = readControlClientId(req);
+    this.safetyState.pulseDeadman({
+      userId: req.user.sub,
+      clientId,
+    });
+    return this.safetyState.snapshot(req.user.sub, clientId);
   }
 
   @Post('reset')

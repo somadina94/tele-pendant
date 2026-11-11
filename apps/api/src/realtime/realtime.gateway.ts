@@ -61,6 +61,7 @@ export class RealtimeGateway
       // TP-40: signature alone is not enough — reject suspended/deleted/revoked.
       const session = await this.authService.assertActiveSession(payload);
       this.setUser(client, session);
+      this.setControlClientId(client, this.extractControlClientId(client));
       motionDebug('ws.connect', {
         socketId: client.id,
         userId: session.sub,
@@ -102,11 +103,13 @@ export class RealtimeGateway
       });
       return this.safetyState.snapshot();
     }
+    const clientId = this.controlClientIdOf(client);
     this.safetyState.pulseDeadman({
       userId: user.sub,
       socketId: client.id,
+      clientId,
     });
-    const snap = this.safetyState.snapshot();
+    const snap = this.safetyState.snapshot(user.sub, clientId);
     motionDebug('ws.deadman.pulse', {
       socketId: client.id,
       userId: user.sub,
@@ -141,9 +144,31 @@ export class RealtimeGateway
     data.user = user;
   }
 
+  private setControlClientId(client: Socket, clientId: string): void {
+    const data = client.data as { controlClientId?: string };
+    data.controlClientId = clientId;
+  }
+
+  private controlClientIdOf(client: Socket): string {
+    const data = client.data as { controlClientId?: string };
+    return data.controlClientId?.trim() || '';
+  }
+
   private userOf(client: Socket): JwtPayload | undefined {
     const data = client.data as { user?: JwtPayload };
     return data.user;
+  }
+
+  private extractControlClientId(client: Socket): string {
+    const auth = client.handshake.auth as {
+      controlClientId?: unknown;
+    };
+    if (typeof auth?.controlClientId === 'string') {
+      return auth.controlClientId.trim();
+    }
+    const header = client.handshake.headers['x-control-client-id'];
+    const value = Array.isArray(header) ? header[0] : header;
+    return typeof value === 'string' ? value.trim() : '';
   }
 
   private extractToken(client: Socket): string | null {

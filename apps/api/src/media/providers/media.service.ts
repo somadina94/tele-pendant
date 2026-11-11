@@ -130,6 +130,7 @@ export class MediaService implements OnModuleInit {
       ip?: string;
       safeActionPin?: string;
       alternatives?: string[];
+      clientId?: string | null;
     },
   ) {
     const phrases = [transcript, ...(opts.alternatives ?? [])]
@@ -171,7 +172,7 @@ export class MediaService implements OnModuleInit {
       }
       // TP-29: never synthesize deadman here — require the session hold
       // (Listen deadman pulse or Operator hold) before timed voice motion.
-      if (!this.safetyState.canIssueMotion(opts.userId)) {
+      if (!this.safetyState.canIssueMotion(opts.userId, opts.clientId)) {
         return {
           ok: false,
           reason: 'deadman_required',

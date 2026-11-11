@@ -18,6 +18,7 @@ import {
   View,
 } from 'react-native';
 import { apiGet, apiPost } from './api';
+import { getControlClientId, peekControlClientId } from './control-client-id';
 import { useLocale } from './locale';
 import type { ControlLease } from './types';
 import { getStoredUser } from './user-session';
@@ -26,16 +27,20 @@ function mergeControl(
   incoming: ControlLease | null | undefined,
   prev: ControlLease | null,
   localUserId: string | null,
+  clientId: string | null,
 ): ControlLease | null {
   if (!incoming) return prev;
+  const derived = Boolean(
+    localUserId &&
+    clientId &&
+    incoming.holderUserId &&
+    incoming.holderClientId &&
+    localUserId === incoming.holderUserId &&
+    clientId === incoming.holderClientId,
+  );
   return {
     ...incoming,
-    youHold: Boolean(
-      incoming.youHold ||
-      (localUserId &&
-        incoming.holderUserId &&
-        localUserId === incoming.holderUserId),
-    ),
+    youHold: Boolean(incoming.youHold || derived),
   };
 }
 
@@ -67,9 +72,17 @@ export function ControlLeaseProvider({
   const [busy, setBusy] = useState(false);
   const controlRef = useRef<ControlLease | null>(null);
   const localUserIdRef = useRef<string | null>(null);
+  const clientIdRef = useRef<string | null>(null);
 
   const applyControl = useCallback((next: ControlLease | null | undefined) => {
-    setControl((prev) => mergeControl(next, prev, localUserIdRef.current));
+    setControl((prev) =>
+      mergeControl(
+        next,
+        prev,
+        localUserIdRef.current,
+        clientIdRef.current ?? peekControlClientId(),
+      ),
+    );
   }, []);
 
   useEffect(() => {
@@ -78,9 +91,13 @@ export function ControlLeaseProvider({
 
   useEffect(() => {
     let cancelled = false;
-    void getStoredUser().then((user) => {
-      if (!cancelled) localUserIdRef.current = user?.id?.trim() || null;
-    });
+    void Promise.all([getStoredUser(), getControlClientId()]).then(
+      ([user, clientId]) => {
+        if (cancelled) return;
+        localUserIdRef.current = user?.id?.trim() || null;
+        clientIdRef.current = clientId;
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -99,6 +116,7 @@ export function ControlLeaseProvider({
       }
     };
     void (async () => {
+      await getControlClientId();
       try {
         apply(
           await apiPost<ControlLease>(

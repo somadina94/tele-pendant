@@ -172,7 +172,7 @@ describe('MediaService', () => {
     });
     expect(exact.ok).toBe(true);
     expect(safetyState.pulseDeadman).not.toHaveBeenCalled();
-    expect(safetyState.canIssueMotion).toHaveBeenCalledWith('u1');
+    expect(safetyState.canIssueMotion).toHaveBeenCalledWith('u1', undefined);
 
     const fuzzy = await service.voiceCommand('please hoist up now', {
       role: UserRole.OPERATOR,

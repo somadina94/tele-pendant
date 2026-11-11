@@ -119,13 +119,12 @@ export function resolveMatrixCellUiState(
   }
 
   if (isEstop) {
+    // Latched STOP is blocked/STOP — never RUN (operators read the chip).
     if (
       safety?.eStopActive ||
-      (safety?.mode ?? '').toLowerCase() === 'e_stop'
+      (safety?.mode ?? '').toLowerCase() === 'e_stop' ||
+      isSafetyBlocking(safety)
     ) {
-      return 'running';
-    }
-    if (isSafetyBlocking(safety)) {
       return 'blocked';
     }
     return 'idle';

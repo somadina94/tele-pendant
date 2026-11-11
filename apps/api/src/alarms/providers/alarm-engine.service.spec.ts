@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { AlarmEngineService } from './alarm-engine.service';
 
 describe('AlarmEngineService', () => {
@@ -16,6 +20,7 @@ describe('AlarmEngineService', () => {
     ]),
     save: jest.fn().mockImplementation(async (x) => x),
     create: jest.fn((x) => x),
+    findOne: jest.fn().mockResolvedValue(null),
     findOneBy: jest.fn(),
     remove: jest.fn().mockImplementation(async (x) => x),
   };
@@ -64,6 +69,7 @@ describe('AlarmEngineService', () => {
         register: { kind: 'coil', address: 11 },
       },
     ]);
+    definitions.findOne.mockResolvedValue(null);
     driver.isConnected.mockReturnValue(true);
     driver.readCoils.mockResolvedValue([true]);
     driver.readDiscreteInputs.mockResolvedValue([false]);
@@ -334,6 +340,16 @@ describe('AlarmEngineService', () => {
     expect(driver.readDiscreteInputs).toHaveBeenCalled();
   });
 
+  it('refuses a duplicate alarm name with a clear message', async () => {
+    definitions.findOne.mockResolvedValue({ id: 'd1', name: 'E-Stop' });
+    await expect(
+      service.createDefinition({ name: 'E-Stop', registerId: 'r' }),
+    ).rejects.toThrow(ConflictException);
+    await expect(
+      service.createDefinition({ name: 'E-Stop', registerId: 'r' }),
+    ).rejects.toThrow(/An alarm named "E-Stop" already exists/);
+  });
+
   it('creates, updates, and deletes alarm definitions', async () => {
     await expect(
       service.createDefinition({ name: '  ', registerId: 'r' }),
@@ -417,6 +433,17 @@ describe('AlarmEngineService', () => {
     await expect(
       service.updateDefinition('d2', { name: '  ' }),
     ).rejects.toBeInstanceOf(BadRequestException);
+    definitions.findOne.mockResolvedValueOnce({
+      id: 'other',
+      name: 'E-Stop',
+    });
+    await expect(
+      service.updateDefinition('d2', { name: 'E-Stop' }),
+    ).rejects.toThrow(/An alarm named "E-Stop" already exists/);
+    definitions.findOne.mockResolvedValueOnce(null);
+    await service.updateDefinition('d2', { name: 'RenamedLoad' });
+    expect(row.name).toBe('RenamedLoad');
+    row.name = 'Load';
     await expect(
       service.updateDefinition('d2', { compareOp: 'bad' as 'eq' }),
     ).rejects.toBeInstanceOf(BadRequestException);

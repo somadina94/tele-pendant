@@ -161,7 +161,7 @@ describe('HmiService', () => {
       userId: 'u1',
       userEmail: 'op@example.com',
     });
-    expect(safetyState.canIssueMotion).toHaveBeenCalledWith('u1');
+    expect(safetyState.canIssueMotion).toHaveBeenCalledWith('u1', undefined);
     expect(plcService.writeCoil).toHaveBeenCalledWith(0, true);
     expect(result.ok).toBe(true);
   });

@@ -295,6 +295,8 @@ export class HmiService {
       refresh?: boolean;
       /** Selector rocker: a = primary, b = secondary. */
       direction?: 'a' | 'b';
+      /** Operator tab/device id for exclusive control (FEAT-A5). */
+      clientId?: string | null;
     },
   ) {
     const started = Date.now();
@@ -316,7 +318,7 @@ export class HmiService {
     if (
       cell.isMotion &&
       value &&
-      !this.safetyState.canIssueMotion(opts.userId)
+      !this.safetyState.canIssueMotion(opts.userId, opts.clientId)
     ) {
       motionDebug('activate.blocked', {
         cellId,
