@@ -66,6 +66,7 @@ export class HmiSeedService implements OnModuleInit {
       await this.ensureP03a21Layout();
     }
     await this.syncP03a21DrawingLabels();
+    await this.syncP03a21LakshmiFixes();
     await this.ensureRuntimeRegisters();
     await this.ensureSafetyRoles();
   }
@@ -98,6 +99,75 @@ export class HmiSeedService implements OnModuleInit {
       if (!next) continue;
       cell.label = next;
       await this.cells.save(cell);
+    }
+  }
+
+  /**
+   * Live-demo patches: Buttons active = lamp, Teach Pipe own DO,
+   * Move Home / Move Welding require Enable (isMotion).
+   */
+  private async syncP03a21LakshmiFixes(): Promise<void> {
+    const buttonsLamp = await this.upsertRegister(
+      pendantDoName('buttonsActive'),
+      DEMO_P03A21_MAP.do.buttonsActive,
+      'coil',
+      'bool',
+      'rw',
+    );
+    const teachPipeLamp = await this.upsertRegister(
+      pendantDoName('teachPipeMiddle'),
+      DEMO_P03A21_MAP.do.teachPipeMiddle,
+      'coil',
+      'bool',
+      'rw',
+    );
+
+    const rows = await this.cells.find({
+      relations: {
+        primaryRegister: true,
+        feedbackRegister: true,
+      },
+    });
+    for (const cell of rows) {
+      const label = cell.label.trim();
+      if (label === 'Buttons active') {
+        let dirty = false;
+        if (cell.style !== 'lamp') {
+          cell.style = 'lamp';
+          dirty = true;
+        }
+        if (cell.primaryRegister?.id !== buttonsLamp.id) {
+          cell.primaryRegister = buttonsLamp;
+          dirty = true;
+        }
+        if (cell.feedbackRegister) {
+          cell.feedbackRegister = null;
+          dirty = true;
+        }
+        if (cell.isMotion) {
+          cell.isMotion = false;
+          dirty = true;
+        }
+        if (dirty) await this.cells.save(cell);
+        continue;
+      }
+      if (label === 'Teach Pipe Middle Position') {
+        if (cell.feedbackRegister?.id !== teachPipeLamp.id) {
+          cell.feedbackRegister = teachPipeLamp;
+          await this.cells.save(cell);
+        }
+        continue;
+      }
+      if (
+        label === 'OWVA, OWCA, OWCVA Move Home Position' ||
+        label === 'OWVA, OWCA, OWCVA Move Welding Posit.'
+      ) {
+        if (!cell.isMotion) {
+          cell.isMotion = true;
+          cell.variableSpeed = false;
+          await this.cells.save(cell);
+        }
+      }
     }
   }
 
@@ -292,7 +362,7 @@ export class HmiSeedService implements OnModuleInit {
       owffClose,
       owffOpen,
     ] = await Promise.all([
-      di('buttonsActive'),
+      di('buttonsActive'), // kept for map parity; HMI cell uses DO lamp
       di('teachPipeMiddle'),
       di('teachWeldingPosition'),
       di('teachSeamTrackingLaser'),
@@ -317,6 +387,7 @@ export class HmiSeedService implements OnModuleInit {
       di('owffClose'),
       di('owffOpen'),
     ]);
+    void buttonsActiveDi;
 
     const [
       buttonsActiveLamp,
@@ -351,8 +422,7 @@ export class HmiSeedService implements OnModuleInit {
       lamp('owwdcSelector'),
       lamp('owffSelector'),
     ]);
-    // No dedicated teach-pipe lamp on the drawing; reuse seam-tracking lamp DO.
-    const teachPipeLamp = teachSeamLamp;
+    const teachPipeLamp = await lamp('teachPipeMiddle');
 
     const bg = await this.backgrounds.findOne({
       where: { name: 'demo-p03a21' },
@@ -393,9 +463,8 @@ export class HmiSeedService implements OnModuleInit {
         row: 0,
         col: 0,
         label: 'Buttons active',
-        style: 'pushbutton',
-        primary: buttonsActiveDi,
-        feedback: buttonsActiveLamp,
+        style: 'lamp',
+        primary: buttonsActiveLamp,
       },
       {
         row: 0,
@@ -449,6 +518,8 @@ export class HmiSeedService implements OnModuleInit {
         style: 'pushbutton',
         primary: moveHomeDi,
         feedback: moveHomeLamp,
+        isMotion: true,
+        variableSpeed: false,
       },
       {
         row: 2,
@@ -505,6 +576,8 @@ export class HmiSeedService implements OnModuleInit {
         style: 'pushbutton',
         primary: moveWeldDi,
         feedback: moveWeldLamp,
+        isMotion: true,
+        variableSpeed: false,
       },
       {
         row: 4,

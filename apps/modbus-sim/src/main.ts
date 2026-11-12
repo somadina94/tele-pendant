@@ -12,13 +12,18 @@ setBit(buffers.discrete, DEMO_CRANE_MAP.discretes.commsOk, true);
 
 /** Echo pendant DI → DO lamps (illuminated PB / selector feedback). */
 const LAMP_ECHO: Array<{ di: number[]; do: number }> = [
+  // P01: indicator only (Enable held => buttons active).
   {
-    di: [DEMO_P03A21_MAP.di.buttonsActive],
+    di: [DEMO_P03A21_MAP.di.enable],
     do: DEMO_P03A21_MAP.do.buttonsActive,
   },
   {
     di: [DEMO_P03A21_MAP.di.teachSeamTrackingLaser],
     do: DEMO_P03A21_MAP.do.teachSeamTrackingLaser,
+  },
+  {
+    di: [DEMO_P03A21_MAP.di.teachPipeMiddle],
+    do: DEMO_P03A21_MAP.do.teachPipeMiddle,
   },
   {
     di: [DEMO_P03A21_MAP.di.seamTrackingOnOff],
@@ -76,10 +81,6 @@ const LAMP_ECHO: Array<{ di: number[]; do: number }> = [
     di: [DEMO_P03A21_MAP.di.owffClose, DEMO_P03A21_MAP.di.owffOpen],
     do: DEMO_P03A21_MAP.do.owffSelector,
   },
-  {
-    di: [DEMO_P03A21_MAP.di.teachPipeMiddle],
-    do: DEMO_P03A21_MAP.do.teachSeamTrackingLaser,
-  },
 ];
 
 const netServer = new net.Server();
@@ -88,6 +89,38 @@ new Modbus.server.TCP(netServer, {
   discrete: buffers.discrete,
   holding: buffers.holding,
   input: buffers.input,
+});
+
+/** TP-46: keep the sim alive when a client socket errors or drops. */
+function attachClientGuards(socket: net.Socket): void {
+  socket.on('error', (err) => {
+    console.warn(
+      `[modbus-sim] client error ${socket.remoteAddress ?? '?'}: ${err.message}`,
+    );
+  });
+  socket.on('close', (hadError) => {
+    console.log(
+      `[modbus-sim] client closed ${socket.remoteAddress ?? '?'}${hadError ? ' (had error)' : ''}`,
+    );
+  });
+}
+
+netServer.on('connection', (socket) => {
+  attachClientGuards(socket);
+});
+
+netServer.on('error', (err) => {
+  console.error(`[modbus-sim] server error: ${err.message}`);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error(`[modbus-sim] uncaughtException (kept alive): ${err.message}`);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error(
+    `[modbus-sim] unhandledRejection (kept alive): ${String(reason)}`,
+  );
 });
 
 setInterval(() => {

@@ -622,8 +622,12 @@ export function OperatorPage() {
     const stateCode = estopLatched ? 'STOP' : MATRIX_CELL_STATE_CODE[cellState];
     const needsLease = cellRequiresControlLease(cell);
     const holdToRun = cellUsesHoldToRun(cell);
-    const feedbackRaw = cell.feedbackRegister
-      ? tagValueForRegister(tags, cell.feedbackRegister.name)
+    const isLamp = cell.style === 'lamp';
+    const lampRegisterName = isLamp
+      ? cell.primaryRegister?.name
+      : cell.feedbackRegister?.name;
+    const feedbackRaw = lampRegisterName
+      ? tagValueForRegister(tags, lampRegisterName)
       : undefined;
     const feedbackIsBool =
       typeof feedbackRaw === 'boolean' ||
@@ -636,6 +640,20 @@ export function OperatorPage() {
       feedbackRaw === 1 ||
       feedbackRaw === 'true' ||
       feedbackRaw === '1';
+    const releaseHeldPointer = (direction?: 'a' | 'b') => {
+      if (heldRef.current === cell.id && holdToRun) {
+        void releaseCell(cell, direction);
+      }
+    };
+    const feedbackLamp =
+      Boolean(cell.feedbackRegister) && feedbackIsBool ? (
+        <span
+          className={cn('matrix-lamp size-3', lampOn && 'is-on')}
+          title={lampOn ? 'Lamp on' : 'Lamp off'}
+          data-lamp={lampOn ? 'on' : 'off'}
+          aria-hidden
+        />
+      ) : null;
     const pointerHandlers = (
       direction?: 'a' | 'b',
     ): Pick<
@@ -808,11 +826,7 @@ export function OperatorPage() {
                 aria-label={`${cell.label} ${caption}`}
                 aria-pressed={active}
                 {...pointerHandlers(dir)}
-                onLostPointerCapture={() => {
-                  if (heldRef.current === cell.id && holdToRun) {
-                    void releaseCell(cell, dir);
-                  }
-                }}
+                onLostPointerCapture={() => releaseHeldPointer(dir)}
               >
                 {caption}
               </Button>
@@ -880,6 +894,33 @@ export function OperatorPage() {
     }
 
     if (isPendantScreen && !isEstop) {
+      if (isLamp) {
+        return (
+          <div
+            key={cell.id}
+            className="pendant-slot"
+            title={`${cell.label} · ${lampOn ? 'ON' : 'OFF'}`}
+          >
+            <div
+              role="status"
+              data-cell-state="idle"
+              data-lamp={lampOn ? 'on' : 'off'}
+              className={cn(
+                'pendant-cap flex h-[4.5rem] w-[4.5rem] min-h-[4.5rem] min-w-[4.5rem] items-center justify-center rounded-full border border-border bg-muted/40 p-0',
+                lampOn && 'ring-2 ring-emerald-500/70',
+              )}
+              aria-label={`${cell.label}: ${lampOn ? 'on' : 'off'}`}
+            >
+              <span
+                className={cn('matrix-lamp size-4', lampOn && 'is-on')}
+                title={lampOn ? 'Lamp on' : 'Lamp off'}
+                aria-hidden
+              />
+            </div>
+            <p className="pendant-legend">{cell.label}</p>
+          </div>
+        );
+      }
       return (
         <div
           key={cell.id}
@@ -898,24 +939,33 @@ export function OperatorPage() {
             )}
             disabled={needsLease && !youHold}
             {...pointerHandlers()}
-            onLostPointerCapture={() => {
-              if (heldRef.current === cell.id && holdToRun) {
-                void releaseCell(cell);
-              }
-            }}
+            onLostPointerCapture={() => releaseHeldPointer()}
             aria-label={cell.label}
             aria-description={`${stateCode}: ${stateLabel}`}
           >
-            {cell.feedbackRegister && feedbackIsBool ? (
-              <span
-                className={cn('matrix-lamp size-3', lampOn && 'is-on')}
-                title={lampOn ? 'Lamp on' : 'Lamp off'}
-                data-lamp={lampOn ? 'on' : 'off'}
-                aria-hidden
-              />
-            ) : null}
+            {feedbackLamp}
           </Button>
           <p className="pendant-legend">{cell.label}</p>
+        </div>
+      );
+    }
+
+    if (isLamp) {
+      return (
+        <div
+          key={cell.id}
+          role="status"
+          data-cell-state="idle"
+          data-lamp={lampOn ? 'on' : 'off'}
+          className="matrix-cell flex h-full min-h-11 flex-row items-center justify-between gap-1.5 whitespace-normal border border-border bg-muted/30 px-2 max-md:gap-[3px] max-md:px-1 max-md:py-[3px] max-md:text-[6px]"
+          aria-label={`${cell.label}: ${lampOn ? 'on' : 'off'}`}
+          title={`${cell.label} · ${lampOn ? 'ON' : 'OFF'}`}
+        >
+          <span className="matrix-cell-label">{cell.label}</span>
+          <span
+            className={cn('matrix-lamp size-3', lampOn && 'is-on')}
+            aria-hidden
+          />
         </div>
       );
     }
@@ -936,11 +986,7 @@ export function OperatorPage() {
         )}
         disabled={needsLease && !youHold}
         {...pointerHandlers()}
-        onLostPointerCapture={() => {
-          if (heldRef.current === cell.id && holdToRun) {
-            void releaseCell(cell);
-          }
-        }}
+        onLostPointerCapture={() => releaseHeldPointer()}
         aria-label={cell.label}
         aria-description={`${stateCode}: ${stateLabel}`}
         title={`${cell.label} · ${stateCode}: ${stateLabel}`}

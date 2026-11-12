@@ -740,8 +740,12 @@ export function OperatorScreen({ token }: { token: string }) {
       ? t('estop')
       : t(MATRIX_CELL_STATE_I18N[cellState]);
     const stateCode = estopLatched ? 'STOP' : MATRIX_CELL_STATE_CODE[cellState];
-    const feedbackRaw = cell.feedbackRegister
-      ? tagValueForRegister(tags, cell.feedbackRegister.name)
+    const isLamp = cell.style === 'lamp';
+    const lampRegisterName = isLamp
+      ? cell.primaryRegister?.name
+      : cell.feedbackRegister?.name;
+    const feedbackRaw = lampRegisterName
+      ? tagValueForRegister(tags, lampRegisterName)
       : undefined;
     const feedbackIsBool =
       typeof feedbackRaw === 'boolean' ||
@@ -750,7 +754,7 @@ export function OperatorScreen({ token }: { token: string }) {
     const lampOn = Boolean(feedbackRaw);
     const statusTrailing = (
       <View className="shrink-0 flex-row items-center gap-1">
-        {cell.feedbackRegister && feedbackIsBool ? (
+        {(isLamp || cell.feedbackRegister) && feedbackIsBool ? (
           <View
             style={{
               width: 8,
@@ -812,6 +816,38 @@ export function OperatorScreen({ token }: { token: string }) {
           {cell.label}
         </Text>
       );
+      if (isLamp) {
+        return (
+          <View key={cell.id} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+            <View
+              accessibilityRole="text"
+              accessibilityLabel={`${cell.label}: ${lampOn ? 'on' : 'off'}`}
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: '#a8a29e',
+                backgroundColor: lampOn ? '#d1fae5' : '#e7e5e4',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <View
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: 999,
+                  backgroundColor: lampOn
+                    ? '#10b981'
+                    : 'rgba(148,163,184,0.45)',
+                }}
+              />
+            </View>
+            {legend}
+          </View>
+        );
+      }
       const lamp =
         cell.feedbackRegister && feedbackIsBool ? (
           <View
@@ -1154,6 +1190,61 @@ export function OperatorScreen({ token }: { token: string }) {
               </Pressable>
             ) : null}
           </View>
+        </View>
+      );
+    }
+
+    if (isLamp) {
+      return (
+        <View
+          key={cell.id}
+          accessibilityRole="text"
+          accessibilityLabel={`${cell.label}: ${lampOn ? 'on' : 'off'}`}
+          className={`w-full flex-row items-center rounded-md border ${
+            compactButtons
+              ? 'gap-[1.25px] px-[3.75px] py-[2.5px]'
+              : 'gap-1 px-1.5 py-1'
+          }`}
+          style={{
+            minHeight: 44,
+            flex: 1,
+            borderColor: palette.border,
+            backgroundColor: lampOn ? '#d1fae5' : palette.background,
+          }}
+        >
+          <Text
+            numberOfLines={3}
+            className="shrink font-semibold"
+            style={{
+              color: palette.foreground,
+              fontSize: compactButtons
+                ? isP03a21
+                  ? 7.5
+                  : 8.8
+                : isP03a21
+                  ? 12
+                  : 14,
+              flexGrow: 1,
+              flexShrink: 1,
+              lineHeight: compactButtons
+                ? isP03a21
+                  ? 10
+                  : 11.3
+                : isP03a21
+                  ? 15
+                  : 18,
+            }}
+          >
+            {cell.label}
+          </Text>
+          <View
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: 999,
+              backgroundColor: lampOn ? '#10b981' : 'rgba(148,163,184,0.45)',
+            }}
+          />
         </View>
       );
     }

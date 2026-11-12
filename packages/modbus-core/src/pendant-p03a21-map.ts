@@ -49,6 +49,8 @@ export const DEMO_P03A21_MAP = {
     owwdcSelector: 63, // Q201.5 -P14
     teachWeldingPosition: 64, // Q201.6 -P15
     owffSelector: 65, // Q201.7 -P16
+    /** Demo lamp for Teach Pipe Middle (no dedicated Q on the sheet). */
+    teachPipeMiddle: 66,
   },
   /** Shared safety coils (aligned with crane map so safety roles stay valid). */
   safety: {

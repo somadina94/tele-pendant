@@ -305,6 +305,10 @@ export class HmiService {
       throw new NotFoundException('Cell or primary register not found');
     }
 
+    if (cell.style === 'lamp') {
+      throw new ForbiddenException('Indicator lamps are read-only');
+    }
+
     const isSelector = cell.style === 'selector';
     if (isSelector && value && !opts.direction) {
       throw new BadRequestException(
@@ -331,7 +335,8 @@ export class HmiService {
       );
     }
 
-    if (isSelector && cell.isMotion && value) {
+    // Jog selectors and axis move pushbuttons (Home / Welding) need Enable.
+    if (cell.isMotion && value) {
       await this.assertEnableHeldForJog();
     }
 
@@ -457,7 +462,7 @@ export class HmiService {
     };
   }
 
-  /** P03A21: jog selectors require the Enable switch coil held. */
+  /** P03A21: motion (jog selectors + axis move PBs) require Enable held. */
   private async assertEnableHeldForJog(): Promise<void> {
     const enable = await this.registers.findOneBy({
       name: pendantDiName('enable'),
@@ -466,7 +471,7 @@ export class HmiService {
     const driver = this.plcService.getDriver();
     const [on] = await driver.readCoils(enable.address, 1);
     if (!on) {
-      throw new ForbiddenException('Hold Enable before using jog selectors');
+      throw new ForbiddenException('Hold Enable before using motion controls');
     }
   }
 

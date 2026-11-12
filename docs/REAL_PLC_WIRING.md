@@ -26,7 +26,7 @@ The live demo numbers are **not** the Siemens wiring-sheet names. The sheet uses
 
 Do not type `I200.3` into **Address**. Ask the controls engineer for the Modbus coil (or OPC UA node id) that their program uses for that sheet name, then save that number on the matching register. The client can do this themselves in **Config** on web or on the phone. They do not have to send the list to the developer.
 
-Demo coils sit at **20–65** so they do not collide with crane safety coils `coil.deadman` (10) and `coil.eStop` (11). **Enable** is one demo coil (`43`). The sheet lists two Siemens inputs (`I384.2` and `I384.6`); the real program may still be two signals. **Buttons active** (`42`) is a local demo input, not a sheet address.
+Demo coils sit at **20–66** so they do not collide with crane safety coils `coil.deadman` (10) and `coil.eStop` (11). **Enable** is one demo coil (`43`). The sheet lists two Siemens inputs (`I384.2` and `I384.6`); the real program may still be two signals. **Buttons active** is indicator lamp P01 (`coil.p03a21.do.buttonsActive` / Q200.0); the local DI `42` is unused by the HMI cell.
 
 | Register name (do not rename) | Demo coil | Sheet note (comment only) |
 | ----------------------------- | --------- | ------------------------- |
@@ -70,10 +70,11 @@ Demo coils sit at **20–65** so they do not collide with crane safety coils `co
 | `coil.p03a21.do.owwdcSelector` | `63` | Q201.5 -P14 |
 | `coil.p03a21.do.teachWeldingPosition` | `64` | Q201.6 -P15 |
 | `coil.p03a21.do.owffSelector` | `65` | Q201.7 -P16 |
+| `coil.p03a21.do.teachPipeMiddle` | `66` | demo lamp for Teach Pipe Middle |
 
-Lamp coils (`coil.p03a21.do.*`) are indicator feedback. On the simulator they echo the related button. On a real machine, point them at the PLC bits that actually light those lamps.
+Lamp coils (`coil.p03a21.do.*`) are indicator feedback. On the simulator they echo the related button (P01 **Buttons active** follows Enable; Teach Pipe Middle has its own DO). On a real machine, point them at the PLC bits that actually light those lamps.
 
-On **Operator → demo-p03a21**: claim control, press **CLOSE** then **OPEN** on **OWFF** (one side stays on), then hold **Enable** and hold **UP** on **OWCVA**. Without **Enable**, jog rockers show **Hold Enable before using jog selectors**. A mouse has one pointer, so holding **Enable** and a rocker at the same time needs two fingers (phone or tablet) unless Enable is latched in the PLC.
+On **Operator → demo-p03a21**: claim control, press **CLOSE** then **OPEN** on **OWFF** (one side stays on), then hold **Enable** and hold **UP** on **OWCVA**. Without **Enable**, jog rockers and Move Home / Move Welding show **Hold Enable before using motion controls**. A mouse has one pointer, so holding **Enable** and a rocker at the same time needs two fingers (phone or tablet) unless Enable is latched in the PLC.
 
 ---
 

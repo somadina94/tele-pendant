@@ -2,7 +2,8 @@ import { DEMO_CRANE_MAP } from '@tele-pendant/modbus-core';
 
 /** Allocate Modbus memory buffers for the demo crane. */
 export function createDemoCraneBuffers() {
-  const coils = Buffer.alloc(64, 0);
+  // 128 bytes = 1024 coils; P03A21 DO lamps sit at 50–66+.
+  const coils = Buffer.alloc(128, 0);
   const discrete = Buffer.alloc(64, 0);
   const holding = Buffer.alloc(200);
   const input = Buffer.alloc(200);

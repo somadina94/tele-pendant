@@ -95,6 +95,9 @@ describe('HmiService', () => {
     cells.find.mockResolvedValue([motionCell]);
     cells.findOne.mockResolvedValue(motionCell);
     registers.findOneBy.mockResolvedValue(null);
+    plcService.getDriver.mockReturnValue({
+      readCoils: jest.fn().mockResolvedValue([true]),
+    });
     backgrounds.find.mockResolvedValue([
       { id: 'bg1', name: 'demo-crane', active: true },
     ]);
@@ -316,6 +319,51 @@ describe('HmiService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('blocks Move Home / Move Welding pushbuttons when Enable is not held', async () => {
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'pushbutton',
+      label: 'OWVA, OWCA, OWCVA Move Home Position',
+      isMotion: true,
+      variableSpeed: false,
+    });
+    safetyState.canIssueMotion.mockReturnValue(true);
+    registers.findOneBy.mockResolvedValue({
+      name: 'coil.p03a21.di.enable',
+      kind: 'coil',
+      address: 43,
+    });
+    plcService.getDriver.mockReturnValue({
+      readCoils: jest.fn().mockResolvedValue([false]),
+    });
+    await expect(
+      service.activateCell('c1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+      }),
+    ).rejects.toThrow(/Hold Enable before using motion controls/);
+  });
+
+  it('rejects writes to indicator lamp cells', async () => {
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'lamp',
+      isMotion: false,
+      label: 'Buttons active',
+      primaryRegister: {
+        kind: 'coil',
+        address: 50,
+        name: 'coil.p03a21.do.buttonsActive',
+      },
+    });
+    await expect(
+      service.activateCell('c1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+      }),
+    ).rejects.toThrow(/Indicator lamps are read-only/);
+  });
+
   it('rejects selector direction b without a secondary register', async () => {
     cells.findOne.mockResolvedValue({
       ...motionCell,
@@ -449,11 +497,15 @@ describe('HmiService', () => {
 
   it('writes holding.speedPct for slow vs fast motion jogs (FEAT-A2)', async () => {
     safetyState.canIssueMotion.mockReturnValue(true);
-    registers.findOneBy.mockResolvedValue({
-      name: 'holding.speedPct',
-      kind: 'holding',
-      address: 2,
-    });
+    const speedByName = (kind: 'holding' | 'coil' = 'holding') =>
+      registers.findOneBy.mockImplementation(async (q: { name?: string }) => {
+        if (q?.name === 'coil.p03a21.di.enable') return null;
+        if (q?.name === 'holding.speedPct') {
+          return { name: 'holding.speedPct', kind, address: 2 };
+        }
+        return null;
+      });
+    speedByName('holding');
     await service.activateCell('c1', true, {
       role: UserRole.OPERATOR,
       speed: 'slow',
@@ -509,11 +561,7 @@ describe('HmiService', () => {
 
     // Ignore non-holding speed register maps.
     cells.findOne.mockResolvedValue(motionCell);
-    registers.findOneBy.mockResolvedValue({
-      name: 'holding.speedPct',
-      kind: 'coil',
-      address: 2,
-    });
+    speedByName('coil');
     plcService.writeHolding.mockClear();
     await service.activateCell('c1', true, {
       role: UserRole.OPERATOR,
