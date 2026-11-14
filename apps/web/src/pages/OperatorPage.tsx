@@ -10,6 +10,7 @@ import {
   tagValueForRegister,
 } from '../lib/operator-helpers';
 import {
+  cellPulsesDeadman,
   cellRequiresControlLease,
   cellUsesHoldToRun,
   isOperatorScreenReady,
@@ -268,7 +269,7 @@ export function OperatorPage() {
     const heldCell = layoutQuery.data?.cells.find(
       (c) => c.id === holdingCellId,
     );
-    if (!heldCell || !cellRequiresControlLease(heldCell)) return;
+    if (!heldCell || !cellPulsesDeadman(heldCell)) return;
     holdPulseCount.current = 0;
     const pulse = () => {
       holdPulseCount.current += 1;
@@ -355,7 +356,7 @@ export function OperatorPage() {
       heldDirectionRef.current = direction ?? null;
       setHoldingCellId(cell.id);
       setHoldingDirection(direction ?? null);
-      if (needsLease) pulseDeadman();
+      if (cellPulsesDeadman(cell)) pulseDeadman();
     }
     const speed =
       cell.isMotion && (cell.variableSpeed ?? true)
@@ -400,7 +401,7 @@ export function OperatorPage() {
         heldDirectionRef.current = null;
         setHoldingCellId(null);
         setHoldingDirection(null);
-        if (needsLease) releaseDeadman();
+        if (cellPulsesDeadman(cell)) releaseDeadman();
       }
     }
   }
@@ -426,7 +427,7 @@ export function OperatorPage() {
       direction: direction ?? heldDir,
       pulses: holdPulseCount.current,
     });
-    if (cellRequiresControlLease(cell)) releaseDeadman();
+    if (cellPulsesDeadman(cell)) releaseDeadman();
     // Fire-and-forget: awaiting activate-false stacked Modbus work behind the
     // next press and caused live-tag jumps in prod (700–2500ms).
     const t0 = Date.now();

@@ -27,6 +27,7 @@ import {
   hmiAssetsDirectory,
 } from '../hmi-assets';
 import { pendantDiName } from '@tele-pendant/modbus-core';
+import { cellRequiresControlLease } from '@tele-pendant/shared';
 
 type Actor = AuditActor;
 
@@ -319,6 +320,28 @@ export class HmiService {
       throw new BadRequestException('Selector cell has no secondary register');
     }
 
+    const isEStopCell =
+      cell.requiresSafeAction ||
+      cell.style === 'estop' ||
+      cell.primaryRegister.name === 'coil.eStop';
+    const needsControl = cellRequiresControlLease({
+      isMotion: cell.isMotion,
+      style: cell.style,
+      label: cell.label,
+      requiresSafeAction: cell.requiresSafeAction,
+    });
+    // Asserts always need the lease. Non-motion clears (OWFF centre) do too.
+    // Motion release stays open so a dropped lease cannot leave a jog coil on.
+    if (
+      needsControl &&
+      (value || !cell.isMotion) &&
+      !this.safetyState.holdsControl(opts.userId, opts.clientId)
+    ) {
+      throw new ForbiddenException(
+        'Claim control before using operator buttons',
+      );
+    }
+
     if (
       cell.isMotion &&
       value &&
@@ -341,10 +364,6 @@ export class HmiService {
     }
 
     // STOP is one press. The PIN is only required to reset e-stop.
-    const isEStopCell =
-      cell.requiresSafeAction ||
-      cell.style === 'estop' ||
-      cell.primaryRegister.name === 'coil.eStop';
     if (isEStopCell && !value) {
       return { ok: true, cellId: cell.id, value: false, latched: true };
     }

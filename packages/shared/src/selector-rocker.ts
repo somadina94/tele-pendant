@@ -32,7 +32,35 @@ export function cellUsesHoldToRun(cell: {
   );
 }
 
-/** Motion cells still require control lease + deadman. */
-export function cellRequiresControlLease(cell: { isMotion: boolean }): boolean {
+/** STOP stays available without the control lease. */
+export function isOperatorStopCell(cell: {
+  style?: string;
+  label?: string;
+  requiresSafeAction?: boolean;
+}): boolean {
+  return (
+    cell.requiresSafeAction === true ||
+    cell.style === 'estop' ||
+    (cell.label ?? '').trim().toUpperCase() === 'STOP'
+  );
+}
+
+/**
+ * Every operator write requires exclusive control, except STOP and lamps.
+ * Motion still also needs deadman; that check stays on the server.
+ */
+export function cellRequiresControlLease(cell: {
+  isMotion: boolean;
+  style?: string;
+  label?: string;
+  requiresSafeAction?: boolean;
+}): boolean {
+  if (cell.style === 'lamp') return false;
+  if (isOperatorStopCell(cell)) return false;
+  return true;
+}
+
+/** Deadman pulses only while a motion cell is held. Enable must not pulse it. */
+export function cellPulsesDeadman(cell: { isMotion: boolean }): boolean {
   return cell.isMotion;
 }

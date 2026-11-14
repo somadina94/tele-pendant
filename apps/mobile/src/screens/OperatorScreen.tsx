@@ -19,6 +19,7 @@ import {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useQuery } from '@tanstack/react-query';
 import {
+  cellPulsesDeadman,
   cellRequiresControlLease,
   cellUsesHoldToRun,
   formatOverlay,
@@ -354,7 +355,7 @@ export function OperatorScreen({ token }: { token: string }) {
         const cell = layoutQuery.data?.cells.find(
           (row) => row.id === hold.cellId,
         );
-        if (cell && cellRequiresControlLease(cell)) return true;
+        if (cell && cellPulsesDeadman(cell)) return true;
       }
       return false;
     },
@@ -377,7 +378,7 @@ export function OperatorScreen({ token }: { token: string }) {
       const cell = layoutQuery.data?.cells.find(
         (row) => row.id === hold.cellId,
       );
-      return Boolean(cell && cellRequiresControlLease(cell));
+      return Boolean(cell && cellPulsesDeadman(cell));
     });
     if (!needsPulse) return;
     const pulse = () => {
@@ -418,7 +419,7 @@ export function OperatorScreen({ token }: { token: string }) {
         ? jogSpeedRef.current
         : undefined;
     try {
-      if (needsLease) {
+      if (cellPulsesDeadman(cell)) {
         await pulseDeadman();
       }
       await apiPost(
@@ -445,7 +446,7 @@ export function OperatorScreen({ token }: { token: string }) {
       if (held && held.gen === pressGen) {
         holdsRef.current.delete(key);
         bumpHolds();
-        if (needsLease && !leaseStillHeld()) releaseDeadman();
+        if (cellPulsesDeadman(cell) && !leaseStillHeld()) releaseDeadman();
       }
       releaseWaiting.current.delete(key);
       return;
@@ -476,7 +477,7 @@ export function OperatorScreen({ token }: { token: string }) {
         const other = layoutQuery.data?.cells.find(
           (row) => row.id === hold.cellId,
         );
-        if (!other || !cellRequiresControlLease(other)) continue;
+        if (!other || !cellPulsesDeadman(other)) continue;
         holdsRef.current.delete(otherKey);
         if (inflight.current.has(otherKey)) {
           releaseWaiting.current.set(otherKey, hold.direction);

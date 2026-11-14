@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cellPulsesDeadman,
   cellRequiresControlLease,
   cellUsesHoldToRun,
   parseSelectorSideLabels,
@@ -46,8 +47,34 @@ describe('cellUsesHoldToRun', () => {
 });
 
 describe('cellRequiresControlLease', () => {
-  it('only gates motion cells', () => {
+  it('gates every operator write except STOP and lamps', () => {
     expect(cellRequiresControlLease({ isMotion: true })).toBe(true);
-    expect(cellRequiresControlLease({ isMotion: false })).toBe(false);
+    expect(cellRequiresControlLease({ isMotion: false, style: 'enable' })).toBe(
+      true,
+    );
+    expect(
+      cellRequiresControlLease({ isMotion: false, style: 'pushbutton' }),
+    ).toBe(true);
+    expect(
+      cellRequiresControlLease({ isMotion: false, style: 'selector' }),
+    ).toBe(true);
+    expect(
+      cellRequiresControlLease({
+        isMotion: false,
+        style: 'estop',
+        label: 'STOP',
+        requiresSafeAction: true,
+      }),
+    ).toBe(false);
+    expect(cellRequiresControlLease({ isMotion: false, style: 'lamp' })).toBe(
+      false,
+    );
+  });
+});
+
+describe('cellPulsesDeadman', () => {
+  it('pulses only motion holds', () => {
+    expect(cellPulsesDeadman({ isMotion: true })).toBe(true);
+    expect(cellPulsesDeadman({ isMotion: false })).toBe(false);
   });
 });

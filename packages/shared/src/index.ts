@@ -49,8 +49,10 @@ export type {
   MatrixCellUiState,
 } from './matrix-cell-state';
 export {
+  cellPulsesDeadman,
   cellRequiresControlLease,
   cellUsesHoldToRun,
+  isOperatorStopCell,
   parseSelectorSideLabels,
 } from './selector-rocker';
 export { tourStepsFor } from './tour';

@@ -76,6 +76,7 @@ describe('HmiService', () => {
       heartbeatRegisterId: 'beat-id',
       safeStateRegisterId: 'safe-id',
     }),
+    holdsControl: jest.fn().mockReturnValue(true),
   };
   const safeActionPin = {
     verify: jest.fn(async (_userId: string | undefined, pin: string) => {
@@ -104,6 +105,7 @@ describe('HmiService', () => {
     backgrounds.findOne.mockResolvedValue({ id: 'bg1', active: true });
     backgrounds.findOneBy.mockResolvedValue(null);
     safetyState.canIssueMotion.mockReturnValue(false);
+    safetyState.holdsControl.mockReturnValue(true);
     safetyState.getRoles.mockResolvedValue({
       eStopRegisterId: 'estop-id',
       deadmanRegisterId: 'dead-id',
@@ -155,6 +157,56 @@ describe('HmiService', () => {
     await expect(
       service.activateCell('c1', true, { role: UserRole.OPERATOR }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('blocks non-motion operator buttons without exclusive control', async () => {
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'pushbutton',
+      label: 'Teach Pipe Middle Position',
+      isMotion: false,
+      variableSpeed: false,
+    });
+    safetyState.holdsControl.mockReturnValue(false);
+    await expect(
+      service.activateCell('c1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+      }),
+    ).rejects.toThrow(/Claim control before using operator buttons/);
+
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'selector',
+      label: 'OWFF Welding Flux Flap close/open',
+      isMotion: false,
+      variableSpeed: false,
+      secondaryRegister: {
+        kind: 'coil',
+        address: 41,
+        name: 'coil.p03a21.di.owffOpen',
+      },
+    });
+    await expect(
+      service.activateCell('c1', false, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+      }),
+    ).rejects.toThrow(/Claim control before using operator buttons/);
+  });
+
+  it('still allows STOP without exclusive control', async () => {
+    safetyState.holdsControl.mockReturnValue(false);
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'estop',
+      label: 'STOP',
+      isMotion: false,
+      requiresSafeAction: true,
+      primaryRegister: { kind: 'coil', address: 11, name: 'coil.eStop' },
+    });
+    await service.activateCell('stop', true, { role: UserRole.OPERATOR });
+    expect(plcService.writeCoil).toHaveBeenCalled();
   });
 
   it('writes coil when motion allowed', async () => {

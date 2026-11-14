@@ -448,6 +448,11 @@ export class SafetyStateService {
    * Motion only for the exclusive control holder who also holds deadman
    * (TP-37 + FEAT-A5).
    */
+  /** Exclusive control only. Non-motion buttons use this; motion also needs deadman. */
+  holdsControl(userId?: string | null, clientId?: string | null): boolean {
+    return this.controlLease.holds(userId, clientId);
+  }
+
   canIssueMotion(userId?: string | null, clientId?: string | null): boolean {
     if (!userId || !this.controlLease.holds(userId, clientId)) return false;
     if (userId !== this.deadmanHolderUserId) return false;

@@ -166,6 +166,8 @@ describe('SafetyStateService', () => {
 
   it('blocks motion until deadman pulse and releases', async () => {
     claimAs('u1', 'Alice');
+    expect(service.holdsControl('u1', clientFor('u1'))).toBe(true);
+    expect(service.holdsControl('u2', clientFor('u2'))).toBe(false);
     expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(false);
     service.pulseDeadman({ userId: 'u1', clientId: clientFor('u1') });
     expect(service.canIssueMotion('u1', clientFor('u1'))).toBe(true);
