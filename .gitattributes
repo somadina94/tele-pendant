@@ -1,0 +1,5 @@
+# Linux containers run these as scripts. A Windows checkout must not
+# rewrite them to CRLF, or docker-entrypoint.sh fails to start.
+*.sh text eol=lf
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf

@@ -30,6 +30,7 @@ COOKIE_SECURE=true
 - [FACE_LIMITATIONS.md](./FACE_LIMITATIONS.md)
 - [OTA.md](./OTA.md)
 - [MOBILE_RELEASE.md](./MOBILE_RELEASE.md); handover native Android/iOS builds (signing keys not in repo)
+- [LICENSES.md](./LICENSES.md); direct libraries and their licences
 
 Modbus TCP is the default driver. OPC UA is optional (`docker compose --profile opcua`). Languages are `packages/shared/i18n/en.json` and `es.json`. Add another language by dropping in a JSON file.
 

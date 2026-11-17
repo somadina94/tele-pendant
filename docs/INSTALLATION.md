@@ -58,6 +58,8 @@ cp .env.example .env
 
 `deploy.sh` logs in to GHCR, prunes stopped/idle containers and unused images before/after pull, then recreates the stack.
 
+`.gitattributes` keeps `*.sh` and the Dockerfiles as LF. On Windows, clone with that file in place so `docker-entrypoint.sh` is not saved as CRLF. CRLF stops the API container from starting.
+
 ## Database migrations (upgrades)
 
 TypeORM migrations live in `apps/api/src/database/migrations/`. `DATABASE_SYNC` stays off in production. After pulling a release that adds migrations (for example `1762380000000-AddUserSuspended` for account suspension), run:
