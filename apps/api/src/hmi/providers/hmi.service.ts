@@ -324,6 +324,12 @@ export class HmiService {
       cell.requiresSafeAction ||
       cell.style === 'estop' ||
       cell.primaryRegister.name === 'coil.eStop';
+    const safety = this.safetyState.snapshot();
+    if ((safety.eStopActive || safety.mode !== 'normal') && !isEStopCell) {
+      throw new ForbiddenException(
+        'Operator buttons are blocked until safety mode is normal',
+      );
+    }
     const needsControl = cellRequiresControlLease({
       isMotion: cell.isMotion,
       style: cell.style,
@@ -425,6 +431,11 @@ export class HmiService {
       }
     };
 
+    // Latch first so a failed STOP coil write still leaves software e-stop on.
+    if (isEStopCell && value) {
+      await this.safetyState.latchOperatorEStop(`STOP: ${cell.label}`);
+    }
+
     // Bundle jog+coil as one high-priority unit so a tag read cannot sneak in.
     const driver = this.plcService.getDriver();
     if (typeof driver.runExclusive === 'function') {
@@ -453,10 +464,6 @@ export class HmiService {
           result: 'success',
         })
         .catch(() => undefined);
-    }
-
-    if (isEStopCell && value) {
-      await this.safetyState.latchOperatorEStop(`STOP: ${cell.label}`);
     }
 
     if (cell.isMotion) {

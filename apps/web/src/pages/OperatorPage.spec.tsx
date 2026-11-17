@@ -2128,6 +2128,203 @@ describe('OperatorPage', () => {
     await screen.findByText('enable fail');
   });
 
+  it('turns Enable off when it is released after a jog', async () => {
+    const pendantLayout = {
+      ...layout,
+      matrix: { rows: 1, cols: 2 },
+      background: {
+        id: 'bg-p',
+        name: 'demo-p03a21',
+        cssBackground: 'gray',
+        imageUrl: null,
+      },
+      cells: [
+        {
+          id: 'en1',
+          row: 0,
+          col: 0,
+          label: 'Enable',
+          style: 'enable',
+          isMotion: false,
+          requiresSafeAction: false,
+          primaryRegister: {
+            id: 'pe',
+            name: 'coil.p03a21.di.enable',
+            address: 43,
+            kind: 'coil',
+          },
+          feedbackRegister: null,
+          statusRegister: null,
+        },
+        {
+          id: 'home1',
+          row: 0,
+          col: 1,
+          label: 'Move Home Position',
+          style: 'pushbutton',
+          isMotion: true,
+          requiresSafeAction: false,
+          variableSpeed: false,
+          primaryRegister: {
+            id: 'ph',
+            name: 'coil.p03a21.di.moveHome',
+            address: 30,
+            kind: 'coil',
+          },
+          feedbackRegister: null,
+          statusRegister: null,
+        },
+      ],
+    };
+    mockGetWithControl(pendantLayout);
+    const posts: Array<{ path: string; body: unknown }> = [];
+    mockPostWithControl(async (path, body) => {
+      posts.push({ path: String(path), body });
+      return { ok: true };
+    });
+    renderOperator(<OperatorPage />);
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    const enable = await screen.findByRole('button', { name: 'Enable' });
+    const home = screen.getByRole('button', { name: 'Move Home Position' });
+    fireEvent.pointerDown(enable);
+    fireEvent.pointerDown(home);
+    fireEvent.pointerUp(enable);
+    await waitFor(() =>
+      expect(
+        posts.some(
+          (p) =>
+            p.path === '/hmi/cells/en1/activate' &&
+            (p.body as { value?: boolean }).value === false,
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it('keeps deadman while another jog is still held', async () => {
+    const pendantLayout = {
+      ...layout,
+      matrix: { rows: 1, cols: 4 },
+      cells: [
+        {
+          id: 'en1',
+          row: 0,
+          col: 0,
+          label: 'Enable',
+          style: 'enable',
+          isMotion: false,
+          requiresSafeAction: false,
+          primaryRegister: {
+            id: 'pe',
+            name: 'coil.p03a21.di.enable',
+            address: 43,
+            kind: 'coil',
+          },
+          feedbackRegister: null,
+          statusRegister: null,
+        },
+        {
+          id: 'home1',
+          row: 0,
+          col: 1,
+          label: 'Move Home Position',
+          style: 'pushbutton',
+          isMotion: true,
+          requiresSafeAction: false,
+          variableSpeed: false,
+          primaryRegister: {
+            id: 'ph',
+            name: 'coil.p03a21.di.moveHome',
+            address: 30,
+            kind: 'coil',
+          },
+          feedbackRegister: null,
+          statusRegister: null,
+        },
+        {
+          id: 'weld1',
+          row: 0,
+          col: 2,
+          label: 'Move Welding Position',
+          style: 'pushbutton',
+          isMotion: true,
+          requiresSafeAction: false,
+          variableSpeed: false,
+          primaryRegister: {
+            id: 'pw',
+            name: 'coil.p03a21.di.moveWelding',
+            address: 31,
+            kind: 'coil',
+          },
+          feedbackRegister: null,
+          statusRegister: null,
+        },
+        {
+          id: 'teach1',
+          row: 0,
+          col: 3,
+          label: 'Teach Pipe Middle Position',
+          style: 'pushbutton',
+          isMotion: false,
+          requiresSafeAction: false,
+          primaryRegister: {
+            id: 'pt',
+            name: 'coil.p03a21.di.teachPipe',
+            address: 28,
+            kind: 'coil',
+          },
+          feedbackRegister: null,
+          statusRegister: null,
+        },
+      ],
+    };
+    mockGetWithControl(pendantLayout);
+    mockPostWithControl(async () => ({ ok: true }));
+    renderOperator(<OperatorPage />);
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    const enable = await screen.findByRole('button', { name: 'Enable' });
+    const home = screen.getByRole('button', { name: 'Move Home Position' });
+    const weld = screen.getByRole('button', { name: 'Move Welding Position' });
+    const teach = screen.getByRole('button', {
+      name: 'Teach Pipe Middle Position',
+    });
+    fireEvent.pointerDown(home);
+    fireEvent.pointerDown(weld);
+    socket.emit.mockClear();
+    fireEvent.pointerUp(home);
+    expect(socket.emit).not.toHaveBeenCalledWith('deadman.release');
+    fireEvent.pointerUp(weld);
+    expect(socket.emit).toHaveBeenCalledWith('deadman.release');
+
+    socket.emit.mockClear();
+    fireEvent.pointerDown(enable);
+    fireEvent.pointerDown(home);
+    fireEvent.pointerUp(home);
+    expect(socket.emit).toHaveBeenCalledWith('deadman.release');
+
+    const posts: string[] = [];
+    mockPostWithControl(async (path, body) => {
+      posts.push(`${String(path)}:${JSON.stringify(body)}`);
+      return { ok: true };
+    });
+    fireEvent.pointerDown(enable);
+    fireEvent.pointerDown(teach);
+    fireEvent.pointerDown(home);
+    posts.length = 0;
+    fireEvent.pointerUp(enable);
+    await waitFor(() =>
+      expect(
+        posts.some(
+          (p) => p.includes('/hmi/cells/home1/activate') && p.includes('false'),
+        ),
+      ).toBe(true),
+    );
+    expect(
+      posts.some(
+        (p) => p.includes('/hmi/cells/teach1/activate') && p.includes('false'),
+      ),
+    ).toBe(false);
+  });
+
   it('ignores opposite-side release and latch pointer moves on selectors', async () => {
     const selectorLayout = {
       ...layout,

@@ -441,6 +441,76 @@ describe('SafetyStateService', () => {
     expect(driver.writeCoil).toHaveBeenCalledWith(27, false);
   });
 
+  it('clears non-motion command coils on e-stop and leaves STOP and lamps', async () => {
+    cells.find.mockImplementation(
+      async (query?: { where?: { isMotion?: boolean } }) => {
+        if (query?.where?.isMotion) {
+          return [
+            {
+              isMotion: true,
+              primaryRegister: { kind: 'coil', address: 26 },
+              secondaryRegister: { kind: 'coil', address: 27 },
+            },
+          ];
+        }
+        return [
+          {
+            isMotion: false,
+            style: 'enable',
+            label: 'Enable',
+            primaryRegister: { kind: 'coil', address: 43 },
+          },
+          {
+            isMotion: false,
+            style: 'selector',
+            label: 'OWFF Welding Flux Flap close/open',
+            primaryRegister: { kind: 'coil', address: 40 },
+            secondaryRegister: { kind: 'coil', address: 41 },
+            feedbackRegister: { kind: 'coil', address: 65 },
+          },
+          {
+            isMotion: false,
+            style: 'pushbutton',
+            label: 'Teach Pipe Middle Position',
+            primaryRegister: { kind: 'coil', address: 28 },
+          },
+          {
+            isMotion: false,
+            style: 'pushbutton',
+            label: 'Seam Tracking on/off',
+            primaryRegister: { kind: 'coil', address: 21 },
+          },
+          {
+            isMotion: false,
+            style: 'estop',
+            label: 'STOP',
+            requiresSafeAction: true,
+            primaryRegister: { kind: 'coil', address: 11 },
+          },
+          {
+            isMotion: false,
+            style: 'lamp',
+            label: 'Buttons active',
+            primaryRegister: { kind: 'coil', address: 50 },
+          },
+        ];
+      },
+    );
+    driver.writeCoil.mockClear();
+    await service.latchOperatorEStop('Operator STOP');
+    expect(driver.writeCoil).toHaveBeenCalledWith(26, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(27, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(43, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(40, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(41, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(28, false);
+    expect(driver.writeCoil).toHaveBeenCalledWith(21, false);
+    expect(driver.writeCoil).not.toHaveBeenCalledWith(11, false);
+    expect(driver.writeCoil).not.toHaveBeenCalledWith(50, false);
+    expect(driver.writeCoil).not.toHaveBeenCalledWith(65, false);
+    expect(service.snapshot().eStopActive).toBe(true);
+  });
+
   it('retries PLC drop on next tick if release write failed', async () => {
     cells.find.mockResolvedValue([
       { primaryRegister: { kind: 'coil', address: 7 } },

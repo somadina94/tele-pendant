@@ -1,6 +1,7 @@
 import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DEMO_CRANE_MAP } from '@tele-pendant/modbus-core';
+import { cellRequiresControlLease } from '@tele-pendant/shared';
 import { Repository } from 'typeorm';
 import { AuditService } from '../../audit/providers/audit.service';
 import { Cell } from '../../cells/entities/cell.entity';
@@ -601,6 +602,36 @@ export class SafetyStateService {
     }
   }
 
+  /**
+   * E-stop, comms loss, and safe state also drop non-motion command coils
+   * (Enable, OWFF, Teach, Seam). STOP and lamps are left as they are.
+   */
+  private async clearCommandCoils(): Promise<void> {
+    const driver = this.plcService.getDriver();
+    if (!driver.isConnected()) return;
+    const rows = await this.cells.find({
+      relations: { primaryRegister: true, secondaryRegister: true },
+    });
+    for (const cell of rows) {
+      if (cell.isMotion) continue;
+      if (
+        !cellRequiresControlLease({
+          isMotion: cell.isMotion,
+          style: cell.style,
+          label: cell.label,
+          requiresSafeAction: cell.requiresSafeAction,
+        })
+      ) {
+        continue;
+      }
+      for (const reg of [cell.primaryRegister, cell.secondaryRegister]) {
+        if (reg?.kind === 'coil') {
+          await driver.writeCoil(reg.address, false);
+        }
+      }
+    }
+  }
+
   private async enterMode(mode: SafetyMode, reason: string): Promise<void> {
     if (this.mode === mode) return;
     this.mode = mode;
@@ -616,6 +647,7 @@ export class SafetyStateService {
         const driver = this.plcService.getDriver();
         if (driver.isConnected()) {
           await this.clearMotionCoils();
+          await this.clearCommandCoils();
           const safeState = await this.roleAddress(
             'safeStateRegisterId',
             'holding.safeState',

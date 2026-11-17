@@ -92,6 +92,30 @@ function releasePointerIfCaptured(
   }
 }
 
+type HeldButton = {
+  cellId: string;
+  cell: CellDto;
+  direction: 'a' | 'b' | null;
+  gen: number;
+  pulses: boolean;
+};
+
+function holdKey(cellId: string, direction?: 'a' | 'b' | null): string {
+  return direction ? `${cellId}:${direction}` : cellId;
+}
+
+function cellIsHeld(
+  holds: Map<string, HeldButton>,
+  cellId: string,
+  direction?: 'a' | 'b',
+): boolean {
+  if (direction) return holds.has(holdKey(cellId, direction));
+  for (const key of holds.keys()) {
+    if (key === cellId || key.startsWith(`${cellId}:`)) return true;
+  }
+  return false;
+}
+
 export function OperatorPage() {
   const queryClient = useQueryClient();
   const { t, terror } = useT();
@@ -99,12 +123,9 @@ export function OperatorPage() {
   const controlRef = useRef(control);
   const [tags, setTags] = useState<LiveTags | null>(null);
   const [safety, setSafety] = useState<HmiLayout['safety'] | null>(null);
-  const [holdingCellId, setHoldingCellId] = useState<string | null>(null);
-  const [holdingDirection, setHoldingDirection] = useState<'a' | 'b' | null>(
-    null,
-  );
-  const heldRef = useRef<string | null>(null);
-  const heldDirectionRef = useRef<'a' | 'b' | null>(null);
+  const holdsRef = useRef(new Map<string, HeldButton>());
+  const [heldVersion, setHeldVersion] = useState(0);
+  const bumpHolds = () => setHeldVersion((n) => n + 1);
   const [jogSpeed, setJogSpeed] = useState<'slow' | 'fast'>('fast');
   const jogSpeedRef = useRef<'slow' | 'fast'>('fast');
   const [safePin, setSafePin] = useState('');
@@ -119,8 +140,6 @@ export function OperatorPage() {
   const lastWsTagAt = useRef(0);
   const holdPulseCount = useRef(0);
   const lastTagLogAt = useRef(0);
-  /** Bumps on release so a late activate(true) cannot leave a coil latched. */
-  const holdGen = useRef(0);
   const touchArms = useRef(new Map<number, TouchArm>());
 
   const applyLiveTags = useCallback((payload: LiveTags) => {
@@ -141,14 +160,14 @@ export function OperatorPage() {
     }
     tagOrderRef.current = applyLiveTagsState(tagOrderRef.current, payload);
     const now = Date.now();
-    if (heldRef.current || now - lastTagLogAt.current > 1000) {
+    if (holdsRef.current.size > 0 || now - lastTagLogAt.current > 1000) {
       lastTagLogAt.current = now;
       motionDebug('tags.apply', {
         seq: payload.seq,
         at: payload.at,
         hoistHeightMm: payload.hoistHeightMm,
         trolleyPositionMm: payload.trolleyPositionMm,
-        holding: heldRef.current,
+        holding: holdsRef.current.size,
       });
     }
     setTags((prev) => ({
@@ -178,7 +197,7 @@ export function OperatorPage() {
       applyLiveTags(payload);
     };
     const onSafety = (payload: HmiLayout['safety']) => {
-      if (heldRef.current) {
+      if (holdsRef.current.size > 0) {
         const pulseAt = (payload as { lastClientPulseAt?: string | null })
           .lastClientPulseAt;
         motionDebug('safety.state', {
@@ -199,7 +218,7 @@ export function OperatorPage() {
     const onDisconnect = (reason: string) => {
       motionDebug('ws.disconnect', {
         reason,
-        holding: heldRef.current,
+        holding: holdsRef.current.size,
         msSinceLastTag: Date.now() - (lastWsTagAt.current || Date.now()),
       });
     };
@@ -265,18 +284,20 @@ export function OperatorPage() {
   // Only motion/jog holds refresh deadman — Enable/PB holds must not.
   useEffect(() => {
     const socket = getRealtimeSocket();
-    if (!holdingCellId) return;
-    const heldCell = layoutQuery.data?.cells.find(
-      (c) => c.id === holdingCellId,
-    );
-    if (!heldCell || !cellPulsesDeadman(heldCell)) return;
+    const motionHold = [...holdsRef.current.values()].find((hold) => {
+      const heldCell = layoutQuery.data?.cells.find(
+        (c) => c.id === hold.cellId,
+      );
+      return Boolean(heldCell && cellPulsesDeadman(heldCell));
+    });
+    if (!motionHold) return;
     holdPulseCount.current = 0;
     const pulse = () => {
       holdPulseCount.current += 1;
       const n = holdPulseCount.current;
       motionDebug('hold.pulse', {
         n,
-        cellId: holdingCellId,
+        cellId: motionHold.cellId,
         socketConnected: socket.connected,
         transport: socket.io?.engine?.transport?.name,
         msSinceLastTag: Date.now() - (lastWsTagAt.current || Date.now()),
@@ -286,7 +307,7 @@ export function OperatorPage() {
     pulse();
     const id = window.setInterval(pulse, 400);
     return () => window.clearInterval(id);
-  }, [holdingCellId, layoutQuery.data?.cells]);
+  }, [heldVersion, layoutQuery.data?.cells]);
 
   const activate = useMutation({
     mutationFn: (args: {
@@ -332,6 +353,40 @@ export function OperatorPage() {
     return { rows, cols, cells };
   }, [layoutQuery.data]);
 
+  function motionStillHeld() {
+    for (const hold of holdsRef.current.values()) {
+      if (hold.pulses) return true;
+    }
+    return false;
+  }
+
+  function dropCoil(cell: CellDto, direction?: 'a' | 'b' | null) {
+    const t0 = Date.now();
+    void activate
+      .mutateAsync({
+        id: cell.id,
+        value: false,
+        speed:
+          cell.isMotion && (cell.variableSpeed ?? true)
+            ? jogSpeedRef.current
+            : undefined,
+        ...(direction ? { direction } : {}),
+      })
+      .then(() => {
+        motionDebug('hold.activate-false', {
+          cellId: cell.id,
+          ms: Date.now() - t0,
+        });
+      })
+      .catch((err: unknown) => {
+        motionDebug('hold.activate-false.fail', {
+          cellId: cell.id,
+          ms: Date.now() - t0,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+  }
+
   async function pressCell(cell: CellDto, direction?: 'a' | 'b') {
     setMessage(null);
     const needsLease = cellRequiresControlLease(cell);
@@ -344,7 +399,8 @@ export function OperatorPage() {
       return;
     }
     const holdToRun = cellUsesHoldToRun(cell);
-    const pressGen = holdGen.current;
+    const key = holdKey(cell.id, direction);
+    const pressGen = holdsRef.current.get(key)?.gen ?? 0;
     if (holdToRun) {
       motionDebug('hold.press', {
         cellId: cell.id,
@@ -352,10 +408,14 @@ export function OperatorPage() {
         direction: direction ?? null,
         speed: jogSpeedRef.current,
       });
-      heldRef.current = cell.id;
-      heldDirectionRef.current = direction ?? null;
-      setHoldingCellId(cell.id);
-      setHoldingDirection(direction ?? null);
+      holdsRef.current.set(key, {
+        cellId: cell.id,
+        cell,
+        direction: direction ?? null,
+        gen: pressGen,
+        pulses: cellPulsesDeadman(cell),
+      });
+      bumpHolds();
       if (cellPulsesDeadman(cell)) pulseDeadman();
     }
     const speed =
@@ -370,16 +430,10 @@ export function OperatorPage() {
         speed,
         ...(direction ? { direction } : {}),
       });
-      if (holdToRun && holdGen.current !== pressGen) {
+      const held = holdsRef.current.get(key);
+      if (holdToRun && (!held || held.gen !== pressGen)) {
         // Released while activate(true) was in flight — drop the coil.
-        void activate
-          .mutateAsync({
-            id: cell.id,
-            value: false,
-            speed,
-            ...(direction ? { direction } : {}),
-          })
-          .catch(() => undefined);
+        dropCoil(cell, direction);
         return;
       }
       if (holdToRun) {
@@ -396,62 +450,41 @@ export function OperatorPage() {
           message: err instanceof Error ? err.message : String(err),
         });
       }
-      if (heldRef.current === cell.id && holdGen.current === pressGen) {
-        heldRef.current = null;
-        heldDirectionRef.current = null;
-        setHoldingCellId(null);
-        setHoldingDirection(null);
-        if (cellPulsesDeadman(cell)) releaseDeadman();
+      const held = holdsRef.current.get(key);
+      if (held && held.gen === pressGen) {
+        holdsRef.current.delete(key);
+        bumpHolds();
+        if (cellPulsesDeadman(cell) && !motionStillHeld()) releaseDeadman();
       }
     }
   }
 
   function releaseCell(cell: CellDto, direction?: 'a' | 'b') {
     if (!cellUsesHoldToRun(cell)) return;
-    const mine = heldRef.current === cell.id;
-    const heldDir = heldDirectionRef.current;
-    if (direction && heldDir && direction !== heldDir) return;
-    if (heldRef.current === cell.id) {
-      heldRef.current = null;
-      heldDirectionRef.current = null;
+    const key = holdKey(cell.id, direction);
+    const held = holdsRef.current.get(key);
+    if (!held) return;
+    holdsRef.current.delete(key);
+    const dropped: Array<{ cell: CellDto; direction: 'a' | 'b' | null }> = [];
+    if (cell.style === 'enable') {
+      for (const [otherKey, otherHold] of [...holdsRef.current.entries()]) {
+        if (!otherHold.pulses) continue;
+        holdsRef.current.delete(otherKey);
+        dropped.push({ cell: otherHold.cell, direction: otherHold.direction });
+      }
     }
-    setHoldingCellId((current) => (current === cell.id ? null : current));
-    setHoldingDirection((current) =>
-      current && (!direction || current === direction) ? null : current,
-    );
-    if (!mine) return;
-    holdGen.current += 1;
+    bumpHolds();
     motionDebug('hold.release', {
       cellId: cell.id,
       label: cell.label,
-      direction: direction ?? heldDir,
+      direction: held.direction,
       pulses: holdPulseCount.current,
     });
-    if (cellPulsesDeadman(cell)) releaseDeadman();
+    if (!motionStillHeld()) releaseDeadman();
     // Fire-and-forget: awaiting activate-false stacked Modbus work behind the
     // next press and caused live-tag jumps in prod (700–2500ms).
-    const t0 = Date.now();
-    const releaseDir = direction ?? heldDir ?? undefined;
-    void activate
-      .mutateAsync({
-        id: cell.id,
-        value: false,
-        speed: (cell.variableSpeed ?? true) ? jogSpeedRef.current : undefined,
-        ...(releaseDir ? { direction: releaseDir } : {}),
-      })
-      .then(() => {
-        motionDebug('hold.activate-false', {
-          cellId: cell.id,
-          ms: Date.now() - t0,
-        });
-      })
-      .catch((err: unknown) => {
-        motionDebug('hold.activate-false.fail', {
-          cellId: cell.id,
-          ms: Date.now() - t0,
-          message: err instanceof Error ? err.message : String(err),
-        });
-      });
+    dropCoil(cell, held.direction);
+    for (const item of dropped) dropCoil(item.cell, item.direction);
   }
 
   async function clearSelector(cell: CellDto) {
@@ -480,20 +513,21 @@ export function OperatorPage() {
 
   useEffect(() => {
     const dropHeld = () => {
-      const id = heldRef.current;
-      if (!id) return;
-      const cell = layoutQuery.data?.cells.find((row) => row.id === id);
-      const dir = heldDirectionRef.current;
-      heldRef.current = null;
-      heldDirectionRef.current = null;
-      setHoldingCellId(null);
-      setHoldingDirection(null);
+      const held = [...holdsRef.current.values()];
+      if (held.length === 0) return;
+      holdsRef.current.clear();
+      bumpHolds();
       releaseDeadman();
-      if (!cell || !cellUsesHoldToRun(cell)) return;
-      void apiPost(`/hmi/cells/${id}/activate`, {
-        value: false,
-        ...(dir ? { direction: dir } : {}),
-      }).catch(() => undefined);
+      for (const hold of held) {
+        const cell = layoutQuery.data?.cells.find(
+          (row) => row.id === hold.cellId,
+        );
+        if (!cell || !cellUsesHoldToRun(cell)) continue;
+        void apiPost(`/hmi/cells/${hold.cellId}/activate`, {
+          value: false,
+          ...(hold.direction ? { direction: hold.direction } : {}),
+        }).catch(() => undefined);
+      }
     };
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') dropHeld();
@@ -508,7 +542,7 @@ export function OperatorPage() {
 
   useEffect(() => {
     const modeNow = safety?.mode ?? layoutQuery.data?.safety.mode;
-    if (heldRef.current) return;
+    if (holdsRef.current.size > 0) return;
     if (modeNow === 'normal' && !safety?.eStopActive) {
       setMessage((current) =>
         current && /motion blocked/i.test(current) ? null : current,
@@ -606,7 +640,7 @@ export function OperatorPage() {
     const cellState = resolveMatrixCellUiState({
       style: cell.style,
       isMotion: cell.isMotion,
-      isHolding: holdingCellId === cell.id,
+      isHolding: cellIsHeld(holdsRef.current, cell.id),
       safety: safety ?? layout!.safety,
       tags,
       statusRegisterName: cell.statusRegister?.name,
@@ -642,7 +676,7 @@ export function OperatorPage() {
       feedbackRaw === 'true' ||
       feedbackRaw === '1';
     const releaseHeldPointer = (direction?: 'a' | 'b') => {
-      if (heldRef.current === cell.id && holdToRun) {
+      if (holdToRun && cellIsHeld(holdsRef.current, cell.id, direction)) {
         void releaseCell(cell, direction);
       }
     };
@@ -711,7 +745,9 @@ export function OperatorPage() {
             }
             return;
           }
-          if (heldRef.current !== cell.id || !holdToRun) return;
+          if (!holdToRun || !cellIsHeld(holdsRef.current, cell.id, direction)) {
+            return;
+          }
           if (
             pointerLeftElement(
               event.currentTarget,
@@ -789,14 +825,12 @@ export function OperatorPage() {
     if (cell.style === 'selector') {
       const { sideA, sideB } = parseSelectorSideLabels(cell.label);
       const latch = !holdToRun;
-      const aActive =
-        holdingCellId === cell.id && holdingDirection === 'a'
-          ? true
-          : Boolean(tagValueForRegister(tags, cell.primaryRegister?.name));
-      const bActive =
-        holdingCellId === cell.id && holdingDirection === 'b'
-          ? true
-          : Boolean(tagValueForRegister(tags, cell.secondaryRegister?.name));
+      const aActive = cellIsHeld(holdsRef.current, cell.id, 'a')
+        ? true
+        : Boolean(tagValueForRegister(tags, cell.primaryRegister?.name));
+      const bActive = cellIsHeld(holdsRef.current, cell.id, 'b')
+        ? true
+        : Boolean(tagValueForRegister(tags, cell.secondaryRegister?.name));
       const rocker = (
         <div
           className={
@@ -1011,7 +1045,8 @@ export function OperatorPage() {
             <span className="text-sm">
               {t('safety')}: <strong>{mode}</strong>
             </span>
-            {safety?.deadmanActive || holdingCellId ? (
+            {safety?.deadmanActive ||
+            (heldVersion >= 0 && holdsRef.current.size > 0) ? (
               <Badge variant="secondary">{t('deadmanHold')}</Badge>
             ) : null}
             {safety?.eStopActive ? (

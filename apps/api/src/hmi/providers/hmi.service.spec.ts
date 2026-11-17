@@ -66,7 +66,7 @@ describe('HmiService', () => {
   };
   const safetyState = {
     canIssueMotion: jest.fn().mockReturnValue(false),
-    snapshot: jest.fn().mockReturnValue({ mode: 'normal' }),
+    snapshot: jest.fn().mockReturnValue({ mode: 'normal', eStopActive: false }),
     latchOperatorEStop: jest.fn().mockResolvedValue({ mode: 'e_stop' }),
     noteMotionCoilAsserted: jest.fn(),
     noteMotionCoilCleared: jest.fn(),
@@ -106,6 +106,10 @@ describe('HmiService', () => {
     backgrounds.findOneBy.mockResolvedValue(null);
     safetyState.canIssueMotion.mockReturnValue(false);
     safetyState.holdsControl.mockReturnValue(true);
+    safetyState.snapshot.mockReturnValue({
+      mode: 'normal',
+      eStopActive: false,
+    });
     safetyState.getRoles.mockResolvedValue({
       eStopRegisterId: 'estop-id',
       deadmanRegisterId: 'dead-id',
@@ -193,6 +197,27 @@ describe('HmiService', () => {
         userId: 'u1',
       }),
     ).rejects.toThrow(/Claim control before using operator buttons/);
+  });
+
+  it('blocks non-motion buttons while e-stop is latched', async () => {
+    safetyState.snapshot.mockReturnValue({
+      mode: 'e_stop',
+      eStopActive: true,
+    });
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      style: 'pushbutton',
+      label: 'Teach Pipe Middle Position',
+      isMotion: false,
+      variableSpeed: false,
+    });
+    await expect(
+      service.activateCell('c1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+      }),
+    ).rejects.toThrow(/blocked until safety mode is normal/);
+    expect(plcService.writeCoil).not.toHaveBeenCalled();
   });
 
   it('still allows STOP without exclusive control', async () => {
@@ -545,6 +570,23 @@ describe('HmiService', () => {
       expect.objectContaining({ latched: true, value: false }),
     );
     expect(plcService.writeCoil).not.toHaveBeenCalled();
+  });
+
+  it('keeps software e-stop latched when the STOP coil write fails', async () => {
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      id: 'stop',
+      isMotion: false,
+      requiresSafeAction: true,
+      label: 'STOP',
+      style: 'estop',
+      variableSpeed: false,
+    });
+    plcService.writeCoil.mockRejectedValueOnce(new Error('write failed'));
+    await expect(
+      service.activateCell('stop', true, { role: UserRole.OPERATOR }),
+    ).rejects.toThrow('write failed');
+    expect(safetyState.latchOperatorEStop).toHaveBeenCalledWith('STOP: STOP');
   });
 
   it('writes holding.speedPct for slow vs fast motion jogs (FEAT-A2)', async () => {
