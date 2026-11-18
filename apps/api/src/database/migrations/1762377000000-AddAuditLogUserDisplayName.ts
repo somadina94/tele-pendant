@@ -1,11 +1,15 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { addColumnIfMissing } from '../column-exists';
 
 export class AddAuditLogUserDisplayName1762377000000 implements MigrationInterface {
   name = 'AddAuditLogUserDisplayName1762377000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `ALTER TABLE "audit_logs" ADD "user_display_name" varchar`,
+    await addColumnIfMissing(
+      queryRunner,
+      'audit_logs',
+      'user_display_name',
+      'varchar',
     );
     await queryRunner.query(`
       UPDATE "audit_logs"

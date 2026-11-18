@@ -20,6 +20,8 @@ New fieldbuses implement `PlcPort`. The API (`apps/api/src/plc/providers/plc.ser
 
 Admin **Config → PLC connections** toggles protocol. Register maps store Modbus address and optional OPC UA node id so the same HMI layout can switch backends.
 
+Modbus TCP connect and each later read or write use the connection timeout. A request that does not finish in that time closes the socket and the driver reports disconnected. OPC UA reads and writes throw when the status code is not Good. A lost session (`BadSession`, `BadConnection`, `BadSecureChannel`, `BadNotConnected`) clears the connection so the next poll sees it as disconnected.
+
 For connecting a **real** PLC (fields, example values, where to read them on the machine), see [REAL_PLC_WIRING.md](./REAL_PLC_WIRING.md).
 
 ## Adding a driver

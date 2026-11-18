@@ -56,6 +56,10 @@ export function matchVoiceCommand(transcript: string): string | null {
   const tokens = normalize(transcript);
   if (tokens.length === 0) return null;
 
+  if (tokens.some((token) => token === 'stop' || token === 'stopped')) {
+    return 'STOP';
+  }
+
   let direction: 'up' | 'down' | null = null;
   for (const token of tokens) {
     if (token === 'up') direction = 'up';
@@ -75,8 +79,5 @@ export function matchVoiceCommand(transcript: string): string | null {
 
   if (trolley && left && !right) return 'Trolley L';
   if (trolley && right && !left) return 'Trolley R';
-  if (tokens.some((token) => token === 'stop' || token === 'stopped')) {
-    return 'STOP';
-  }
   return null;
 }

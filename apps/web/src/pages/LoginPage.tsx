@@ -39,6 +39,7 @@ type LoginResult =
     };
 
 export function LoginPage() {
+  const faceLoginEnabled = import.meta.env.VITE_FACE_LOGIN === 'true';
   const navigate = useNavigate();
   const [locale, setLocale] = useState<Locale>(readLocale);
   const t = (key: string) => translate(locale, key);
@@ -276,14 +277,16 @@ export function LoginPage() {
                     {busy ? t('signingIn') : t('signIn')}
                   </Button>
                 </HelpTip>
-                <HelpTip id="tour.login.face">
-                  <Button variant="link" asChild className="px-0">
-                    <Link to="/face">
-                      <ScanFace />
-                      {t('faceLogin')}
-                    </Link>
-                  </Button>
-                </HelpTip>
+                {faceLoginEnabled ? (
+                  <HelpTip id="tour.login.face">
+                    <Button variant="link" asChild className="px-0">
+                      <Link to="/face">
+                        <ScanFace />
+                        {t('faceLogin')}
+                      </Link>
+                    </Button>
+                  </HelpTip>
+                ) : null}
               </>
             )}
           </form>

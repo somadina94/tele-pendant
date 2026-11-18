@@ -3,6 +3,7 @@ import {
   Injectable,
   OnModuleInit,
   BadRequestException,
+  ForbiddenException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -111,10 +112,13 @@ export class AuthService implements OnModuleInit {
 
   getCookieOptions(): CookieOptions {
     const ttl = this.configService.get<number>('appConfig.jwt.accessTokenTtl')!;
+    const appUrl = this.configService.get<string>('appConfig.appUrl') ?? '';
+    const servedOverHttps = appUrl.startsWith('https://');
     return {
       httpOnly: true,
       sameSite: 'lax',
       secure:
+        servedOverHttps ||
         this.configService.get<boolean>('appConfig.cookieSecure') === true,
       maxAge: ttl * 1000,
       path: '/',
@@ -511,6 +515,7 @@ export class AuthService implements OnModuleInit {
    * Never used for e-stop / safe-action authorization.
    */
   async enrollFace(userId: string, input: FaceCaptureInput, ip?: string) {
+    this.assertFaceLoginEnabled();
     const user = await this.usersRepository.findOneByOrFail({ id: userId });
     const desc = this.descriptorFromCapture(input);
     const key = this.faceKey();
@@ -542,6 +547,7 @@ export class AuthService implements OnModuleInit {
     emailHint?: string,
     ip?: string,
   ) {
+    this.assertFaceLoginEnabled();
     try {
       const probe = this.descriptorFromCapture(input);
       const key = this.faceKey();
@@ -632,6 +638,14 @@ export class AuthService implements OnModuleInit {
 
   private faceKey(): string {
     return this.configService.get<string>('appConfig.faceTemplateKey') ?? '';
+  }
+
+  private assertFaceLoginEnabled(): void {
+    if (
+      this.configService.get<boolean>('appConfig.faceLoginEnabled') !== true
+    ) {
+      throw new ForbiddenException('Face login is disabled');
+    }
   }
 
   /** TP-45: challenge frames only — single still imageDataUrl is rejected. */

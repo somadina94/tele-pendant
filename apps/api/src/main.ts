@@ -5,6 +5,7 @@ import { appCreate } from './app.create';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.set('trust proxy', 1);
   // Live Operator polls must never 304 an older tag snapshot.
   app.set('etag', false);
   // Face challenge sends 3 JPEG data-URLs; default Express limit is 100kb.

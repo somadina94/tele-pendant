@@ -312,4 +312,18 @@ describe('TcpModbusDriver (TP-41)', () => {
       'read-queued',
     ]);
   });
+
+  it('times out a request that never answers and drops the session', async () => {
+    const driver = new TcpModbusDriver();
+    await driver.connect({
+      host: '127.0.0.1',
+      port: 1502,
+      unitId: 1,
+      timeoutMs: 20,
+    });
+    const client = lastClient();
+    client.readCoils.mockImplementation(() => new Promise(() => undefined));
+    await expect(driver.readCoils(0, 1)).rejects.toThrow(/request timeout/);
+    expect(driver.isConnected()).toBe(false);
+  });
 });

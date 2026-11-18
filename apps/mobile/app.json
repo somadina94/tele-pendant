@@ -47,7 +47,6 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://api.tele-pendant.jahbyte.com/ota/manifest",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
@@ -61,7 +60,7 @@
       }
     },
     "extra": {
-      "otaNote": "Production updates.url: https://api.tele-pendant.jahbyte.com/ota/manifest. Local lab: http://<lan-host>:3010/ota/manifest. Manifests are code-signed (TP-43); native modules (camera, speech) still need a binary rebuild."
+      "otaNote": "updates.url comes from OTA_PUBLIC_URL at build time. Native modules (camera, speech) still need a binary rebuild."
     }
   }
 }

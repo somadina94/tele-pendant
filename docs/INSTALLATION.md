@@ -16,6 +16,8 @@ FRONTEND_URL=https://hmi.example.com
 COOKIE_SECURE=true
 ```
 
+A from-zero install, with your own keys and URLs, is in [FROM_ZERO.md](./FROM_ZERO.md).
+
 ## Requirements
 
 - Node 22+, pnpm 9.15
@@ -62,20 +64,13 @@ cp .env.example .env
 # fallback (build on server): DEPLOY_BUILD_LOCAL=1 ./deploy.sh
 ```
 
-`deploy.sh` logs in to GHCR, prunes stopped/idle containers and unused images before/after pull, then recreates the stack.
+`deploy.sh` copies the SQLite file and the current image ids into `./backups` before it replaces the stack. It does not delete images. If the API does not become healthy, it restores that backup. Run `./deploy.sh rollback` to restore the last backup yourself.
 
 `.gitattributes` keeps `*.sh` and the Dockerfiles as LF. On Windows, clone with that file in place so `docker-entrypoint.sh` is not saved as CRLF. CRLF stops the API container from starting.
 
 ## Database migrations (upgrades)
 
-TypeORM migrations live in `apps/api/src/database/migrations/`. `DATABASE_SYNC` stays off in production. After pulling a release that adds migrations (for example `1762385000000-AddOperatorEStopLatched` for the persisted STOP latch, or `1762380000000-AddUserSuspended` for account suspension), run:
-
-```bash
-pnpm --filter @tele-pendant/api build
-pnpm --filter @tele-pendant/api migration:run
-```
-
-Restart the API container or process. Fresh installs seed the admin user; existing SQLite files need `migration:run` when the repo adds columns.
+TypeORM migrations live in `apps/api/src/database/migrations/`. `DATABASE_SYNC` defaults to false. The API applies migrations when it starts, including `1762370000000-BaselineSchema` which creates the tables on a fresh database. Leave `DATABASE_SYNC` false so a restart does not rewrite the schema.
 
 ## GitHub secrets
 

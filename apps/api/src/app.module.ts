@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Module } from '@nestjs/common';
@@ -51,6 +52,8 @@ const ENV = process.env.NODE_ENV;
         autoLoadEntities: configService.get<boolean>(
           'database.autoLoadEntities',
         ),
+        migrationsRun: true,
+        migrations: [join(__dirname, 'database', 'migrations', '1*.{ts,js}')],
       }),
     }),
     AuditModule,

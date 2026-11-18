@@ -26,6 +26,8 @@ import {
   HMI_ASSET_MIME,
   hmiAssetPublicPath,
   hmiAssetsDirectory,
+  sanitizeSvg,
+  svgFailureMessage,
 } from '../hmi-assets';
 import { pendantDiName } from '@tele-pendant/modbus-core';
 import { cellRequiresControlLease } from '@tele-pendant/shared';
@@ -193,7 +195,18 @@ export class HmiService {
       );
     }
     const filename = `${randomUUID()}.${ext}`;
-    writeFileSync(join(hmiAssetsDirectory(), filename), file.buffer);
+    let payload = file.buffer;
+    if (ext === 'svg') {
+      try {
+        payload = Buffer.from(
+          sanitizeSvg(file.buffer.toString('utf8')),
+          'utf8',
+        );
+      } catch (err) {
+        throw new BadRequestException(svgFailureMessage(err));
+      }
+    }
+    writeFileSync(join(hmiAssetsDirectory(), filename), payload);
     const row = await this.activeBackground();
     row.imageUrl = hmiAssetPublicPath(filename);
     const saved = await this.backgrounds.save(row);

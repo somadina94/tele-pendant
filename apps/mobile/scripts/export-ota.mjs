@@ -41,8 +41,12 @@ const bundleName = basename(bundleRel);
 const bundleBytes = readFileSync(join(exportDir, bundleRel));
 cpSync(join(exportDir, bundleRel), join(assetDir, bundleName));
 const hash = createHash('sha256').update(bundleBytes).digest('hex');
-const configured =
-  process.env.OTA_PUBLIC_URL ?? 'https://api.tele-pendant.jahbyte.com';
+const configured = process.env.OTA_PUBLIC_URL?.trim();
+if (!configured) {
+  throw new Error(
+    'Set OTA_PUBLIC_URL before publishing an OTA update. Example: https://api.example.com',
+  );
+}
 const baseUrl = new URL(
   configured.includes('://') ? configured : `https://${configured}`,
 );

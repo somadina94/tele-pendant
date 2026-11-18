@@ -5,6 +5,44 @@ import type {
   PlcPort,
 } from './port';
 
+export interface OpcStatus {
+  name?: string;
+  isGood?: () => boolean;
+  toString?: () => string;
+}
+
+export function errorForOpcStatus(
+  status: OpcStatus | string | null | undefined,
+): Error | null {
+  if (!status) return null;
+  const name =
+    typeof status === 'string'
+      ? status
+      : (status.name ?? status.toString?.() ?? '');
+  if (!name || name === 'Good' || name.startsWith('Good')) return null;
+  const error = new Error(`OPC UA status ${name}`) as Error & {
+    lostSession?: boolean;
+  };
+  if (/BadSession|BadConnection|BadSecureChannel|BadNotConnected/i.test(name)) {
+    error.lostSession = true;
+  }
+  return error;
+}
+
+function lostSession(err: unknown): boolean {
+  if (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { lostSession?: boolean }).lostSession === true
+  ) {
+    return true;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return /BadSession|BadConnection|BadSecureChannel|BadNotConnected|ECONNRESET|socket hang up/i.test(
+    message,
+  );
+}
+
 export interface OpcSession {
   read(nodeId: string): Promise<unknown>;
   write(nodeId: string, value: boolean | number): Promise<void>;
@@ -47,11 +85,16 @@ export class OpcUaPort implements PlcPort {
   }
 
   async read(point: PlcPoint): Promise<number | boolean> {
-    const value = await this.sessionOrThrow().read(this.nodeId(point));
-    if (point.kind === 'coil' || point.kind === 'discrete')
-      return Boolean(value);
-    const numeric = Number(value);
-    return Number.isFinite(numeric) ? numeric : 0;
+    try {
+      const value = await this.sessionOrThrow().read(this.nodeId(point));
+      if (point.kind === 'coil' || point.kind === 'discrete')
+        return Boolean(value);
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : 0;
+    } catch (err) {
+      this.dropIfLost(err);
+      throw err;
+    }
   }
 
   async write(point: PlcPoint, value: number | boolean): Promise<void> {
@@ -59,7 +102,12 @@ export class OpcUaPort implements PlcPort {
       point.kind === 'coil' || point.kind === 'discrete'
         ? Boolean(value)
         : Number(value);
-    await this.sessionOrThrow().write(this.nodeId(point), payload);
+    try {
+      await this.sessionOrThrow().write(this.nodeId(point), payload);
+    } catch (err) {
+      this.dropIfLost(err);
+      throw err;
+    }
   }
 
   /** Same method names the poller already calls, backed by node ids. */
@@ -134,6 +182,10 @@ export class OpcUaPort implements PlcPort {
     if (!this.session) throw new Error('OPC UA is not connected');
     return this.session;
   }
+
+  private dropIfLost(err: unknown): void {
+    if (lostSession(err)) this.session = null;
+  }
 }
 
 async function openNodeOpcuaSession(endpoint: string): Promise<OpcSession> {
@@ -146,12 +198,13 @@ async function openNodeOpcuaSession(endpoint: string): Promise<OpcSession> {
         createSession: () => Promise<{
           read: (req: { nodeId: string; attributeId: number }) => Promise<{
             value?: { value?: unknown };
+            statusCode?: OpcStatus;
           }>;
           write: (req: {
             nodeId: string;
             attributeId: number;
             value: { value: { dataType: unknown; value: boolean | number } };
-          }) => Promise<void>;
+          }) => Promise<OpcStatus | undefined>;
           close: () => Promise<void>;
         }>;
       };
@@ -168,10 +221,12 @@ async function openNodeOpcuaSession(endpoint: string): Promise<OpcSession> {
         nodeId,
         attributeId: opc.AttributeIds.Value,
       });
+      const statusError = errorForOpcStatus(data.statusCode);
+      if (statusError) throw statusError;
       return data.value?.value;
     },
     write: async (nodeId, value) => {
-      await session.write({
+      const result = await session.write({
         nodeId,
         attributeId: opc.AttributeIds.Value,
         value: {
@@ -184,6 +239,8 @@ async function openNodeOpcuaSession(endpoint: string): Promise<OpcSession> {
           },
         },
       });
+      const statusError = errorForOpcStatus(result);
+      if (statusError) throw statusError;
     },
     close: async () => {
       await session.close();

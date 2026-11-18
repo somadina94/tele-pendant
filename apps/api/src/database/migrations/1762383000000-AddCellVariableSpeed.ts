@@ -1,17 +1,27 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { addColumnIfMissing } from '../column-exists';
 
 export class AddCellVariableSpeed1762383000000 implements MigrationInterface {
   name = 'AddCellVariableSpeed1762383000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `ALTER TABLE "cells" ADD "variable_speed" boolean NOT NULL DEFAULT true`,
+    await addColumnIfMissing(
+      queryRunner,
+      'cells',
+      'variable_speed',
+      'boolean NOT NULL DEFAULT true',
     );
-    await queryRunner.query(
-      `ALTER TABLE "cells" ADD "slow_speed_pct" integer NOT NULL DEFAULT 30`,
+    await addColumnIfMissing(
+      queryRunner,
+      'cells',
+      'slow_speed_pct',
+      'integer NOT NULL DEFAULT 30',
     );
-    await queryRunner.query(
-      `ALTER TABLE "cells" ADD "fast_speed_pct" integer NOT NULL DEFAULT 100`,
+    await addColumnIfMissing(
+      queryRunner,
+      'cells',
+      'fast_speed_pct',
+      'integer NOT NULL DEFAULT 100',
     );
   }
 

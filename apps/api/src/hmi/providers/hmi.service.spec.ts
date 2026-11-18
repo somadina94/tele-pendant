@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { HmiService } from './hmi.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 
@@ -1470,6 +1472,32 @@ describe('HmiService', () => {
       mimetype: 'image/svg+xml',
     });
     expect(saved.imageUrl).toMatch(/^\/hmi-assets\/.+\.svg$/);
+
+    const hostile = await service.uploadBackgroundAsset({
+      buffer: Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script><rect/></svg>',
+      ),
+      mimetype: 'image/svg+xml',
+    });
+    const written = readFileSync(
+      join(tmpdir(), 'hmi-assets', hostile.imageUrl!.split('/').pop()!),
+      'utf8',
+    );
+    expect(written).not.toMatch(/script|onload/i);
+    expect(written).toMatch(/<svg/i);
+
+    await expect(
+      service.uploadBackgroundAsset({
+        buffer: Buffer.from('<div>not a graphic</div>'),
+        mimetype: 'image/svg+xml',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const png = await service.uploadBackgroundAsset({
+      buffer: Buffer.from('png-bytes'),
+      mimetype: 'image/png',
+    });
+    expect(png.imageUrl).toMatch(/\.png$/);
 
     if (prevDir === undefined) delete process.env.SQLITE_DIR;
     else process.env.SQLITE_DIR = prevDir;

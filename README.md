@@ -50,25 +50,17 @@ pnpm docker:prod
 ./deploy.sh
 ```
 
-### GitHub secrets to set (CI deploy)
+### GitHub secrets to set (manual production deploy)
 
 Same as freelancer_bot: `SERVER_HOST`, `SERVER_USERNAME`, `SERVER_PORT`, and either `SERVER_PASSWORD` or `SERVER_SSH_KEY`. Optional: `SERVER_DEPLOY_PATH` (default `~/tele-pendant`).
 
-Images pushed on main: `tele-pendant-api`, `tele-pendant-sim`, `tele-pendant-web` under `ghcr.io/somadina94/`.
+A push to main verifies the repo and publishes images. Production deploy is a manual run of the CI workflow on main. It does not run on every push.
 
-Manual server deploy needs `GHCR_USERNAME` + `GHCR_PULL_TOKEN` (`read:packages`) in `.env`, then `./deploy.sh`.
+Images published on main: `tele-pendant-api`, `tele-pendant-sim`, `tele-pendant-web` under `ghcr.io/<owner>/`.
 
-### Live (production)
+Manual server deploy needs `GHCR_USERNAME` + `GHCR_PULL_TOKEN` (`read:packages`) in `.env`, then `./deploy.sh`. Roll back the previous database and images with `./deploy.sh rollback`.
 
-| Surface | URL |
-| ------- | --- |
-| Web HMI | https://tele-pendant.jahbyte.com |
-| API health | https://api.tele-pendant.jahbyte.com/api/v1/health |
-| Swagger UI | https://api.tele-pendant.jahbyte.com/api |
-| OTA manifest | https://api.tele-pendant.jahbyte.com/ota/manifest |
-| Phone API base | https://api.tele-pendant.jahbyte.com/api/v1 |
-
-`APP_URL=https://api.tele-pendant.jahbyte.com` · `FRONTEND_URL=https://tele-pendant.jahbyte.com`
+From-zero setup, using your keys and URLs: [`docs/FROM_ZERO.md`](./docs/FROM_ZERO.md).
 
 ### Local
 

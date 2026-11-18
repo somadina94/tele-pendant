@@ -7,7 +7,9 @@
 # FALLBACK: DEPLOY_BUILD_LOCAL=1 ./deploy.sh
 #
 # Prerequisites: .env on host, docker compose, GHCR access for pull mode.
-# CI path: push main → Actions builds images → SSH → git pull → this script.
+# CI path: push to main builds images. Production deploy is a manual Actions run.
+# This script backs up the SQLite file and the running image ids before replace.
+# Roll back the last backup with: ./deploy.sh rollback
 #
 # Required GitHub secrets (same pattern as freelancer_bot/server):
 #   SERVER_HOST, SERVER_USERNAME, SERVER_PORT
@@ -98,6 +100,77 @@ export TELE_PENDANT_API_IMAGE="${TELE_PENDANT_API_IMAGE:-$DEFAULT_API_IMAGE}"
 export TELE_PENDANT_SIM_IMAGE="${TELE_PENDANT_SIM_IMAGE:-$DEFAULT_SIM_IMAGE}"
 export TELE_PENDANT_WEB_IMAGE="${TELE_PENDANT_WEB_IMAGE:-$DEFAULT_WEB_IMAGE}"
 export COMPOSE_BAKE=false
+BACKUP_ROOT="./backups"
+
+image_id_of() {
+  $DOCKER inspect --format '{{.Image}}' "$1" 2>/dev/null || true
+}
+
+backup_before_deploy() {
+  local stamp dir
+  stamp="$(date +%Y%m%d%H%M%S)"
+  dir="${BACKUP_ROOT}/${stamp}"
+  mkdir -p "$dir" ./data
+  if [ -f ./data/tele-pendant.sqlite ]; then
+    cp -a ./data/tele-pendant.sqlite "${dir}/tele-pendant.sqlite"
+  fi
+  image_id_of tele-pendant-api > "${dir}/api.image"
+  image_id_of tele-pendant-modbus-sim > "${dir}/sim.image"
+  image_id_of tele-pendant-web > "${dir}/web.image"
+  printf '%s\n' "$TELE_PENDANT_API_IMAGE" > "${dir}/api.ref"
+  printf '%s\n' "$TELE_PENDANT_SIM_IMAGE" > "${dir}/sim.ref"
+  printf '%s\n' "$TELE_PENDANT_WEB_IMAGE" > "${dir}/web.ref"
+  printf '%s\n' "$dir" > "${BACKUP_ROOT}/latest"
+  echo "Backup saved to ${dir}"
+}
+
+retag_saved_image() {
+  local id_file="$1"
+  local ref="$2"
+  local id=""
+  if [ -f "$id_file" ]; then
+    id="$(tr -d '[:space:]' < "$id_file")"
+  fi
+  if [ -z "$id" ]; then
+    echo "No previous image id for ${ref}"
+    return 0
+  fi
+  echo "Restoring ${ref} from ${id}"
+  $DOCKER tag "$id" "$ref"
+}
+
+restore_previous() {
+  local dir=""
+  if [ -f "${BACKUP_ROOT}/latest" ]; then
+    dir="$(tr -d '[:space:]' < "${BACKUP_ROOT}/latest")"
+  fi
+  if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+    echo "No deploy backup to roll back to."
+    return 1
+  fi
+  echo "Rolling back from ${dir}"
+  $DOCKER_COMPOSE -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env stop 2>/dev/null || true
+  if [ -f "${dir}/tele-pendant.sqlite" ]; then
+    cp -a "${dir}/tele-pendant.sqlite" ./data/tele-pendant.sqlite
+  fi
+  retag_saved_image "${dir}/api.image" "$TELE_PENDANT_API_IMAGE"
+  retag_saved_image "${dir}/sim.image" "$TELE_PENDANT_SIM_IMAGE"
+  retag_saved_image "${dir}/web.image" "$TELE_PENDANT_WEB_IMAGE"
+  $DOCKER_COMPOSE -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env up -d --no-build --force-recreate --remove-orphans
+}
+
+fail_deploy() {
+  echo "Deploy failed. Restoring the previous database and images..."
+  $DOCKER_COMPOSE -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env logs --tail=100 || true
+  restore_previous || true
+  exit 1
+}
+
+if [ "${1:-}" = "rollback" ]; then
+  restore_previous
+  echo "Rollback complete."
+  exit 0
+fi
 
 validate_image_ref() {
   local name="$1"
@@ -123,10 +196,8 @@ fi
 echo "Disk before deploy:"
 df -h / /var/lib/docker 2>/dev/null || df -h /
 
-# Free space before pull: stopped/idle containers + unused images.
-echo "Removing stopped containers and unused Docker images..."
+echo "Removing stopped containers..."
 $DOCKER container prune -f >/dev/null || true
-$DOCKER image prune -af
 df -h / /var/lib/docker 2>/dev/null || df -h /
 
 stop_own_stack() {
@@ -182,6 +253,7 @@ build_images_local() {
 }
 
 mkdir -p ./data
+backup_before_deploy
 stop_own_stack
 
 if [ "$DEPLOY_BUILD_LOCAL" = "1" ]; then
@@ -208,8 +280,7 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
 
   if [ "$HEALTH_STATUS" = "unhealthy" ] || [ "$HEALTH_STATUS" = "missing" ]; then
     echo "API health status: ${HEALTH_STATUS}"
-    $DOCKER_COMPOSE -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env logs --tail=100
-    exit 1
+    fail_deploy
   fi
 
   echo "Health status: $HEALTH_STATUS (attempt $ATTEMPT/$MAX_ATTEMPTS)"
@@ -219,16 +290,11 @@ done
 
 if [ "$HEALTH_STATUS" != "healthy" ] && [ "$HEALTH_STATUS" != "none" ]; then
   echo "Healthcheck did not become healthy in time"
-  $DOCKER_COMPOSE -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env logs --tail=100
-  exit 1
+  fail_deploy
 fi
 
 echo "Recent logs:"
 $DOCKER_COMPOSE -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env logs --tail=20
-
-# Images replaced by this deploy are now unused.
-echo "Removing Docker images left unused by this deploy..."
-$DOCKER image prune -af
 
 echo "Deployment complete."
 $DOCKER_COMPOSE -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env ps

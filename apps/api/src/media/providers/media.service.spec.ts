@@ -157,9 +157,44 @@ describe('MediaService', () => {
     expect(await service.listCodes()).toHaveLength(1);
   });
 
+  it('rejects a voice command that has no device id', async () => {
+    const result = await service.voiceCommand('stop', {
+      role: UserRole.OPERATOR,
+    });
+    expect(result).toEqual(
+      expect.objectContaining({ ok: false, reason: 'device_required' }),
+    );
+    expect(hmiService.activateCell).not.toHaveBeenCalled();
+  });
+
+  it('runs STOP before another phrase in the same request', async () => {
+    const result = await service.voiceCommand('hoist up', {
+      role: UserRole.OPERATOR,
+      clientId: 'device-1',
+      userId: 'u1',
+      alternatives: ['stop'],
+    });
+    expect(result).toEqual(
+      expect.objectContaining({ ok: true, label: 'STOP', transcript: 'stop' }),
+    );
+  });
+
+  it('keeps the first motion phrase when a later phrase is also motion', async () => {
+    const result = await service.voiceCommand('hoist up', {
+      role: UserRole.OPERATOR,
+      clientId: 'device-1',
+      userId: 'u1',
+      alternatives: ['hoist down'],
+    });
+    expect(result).toEqual(
+      expect.objectContaining({ ok: true, label: 'Hoist Up' }),
+    );
+  });
+
   it('rejects unknown voice commands', async () => {
     const result = await service.voiceCommand('dance party', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
     });
     expect(result.ok).toBe(false);
   });
@@ -167,15 +202,17 @@ describe('MediaService', () => {
   it('maps exact and fuzzy voice aliases', async () => {
     const exact = await service.voiceCommand('hoist up', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
       userEmail: 'op@example.com',
     });
     expect(exact.ok).toBe(true);
     expect(safetyState.pulseDeadman).not.toHaveBeenCalled();
-    expect(safetyState.canIssueMotion).toHaveBeenCalledWith('u1', undefined);
+    expect(safetyState.canIssueMotion).toHaveBeenCalledWith('u1', 'device-1');
 
     const fuzzy = await service.voiceCommand('please hoist up now', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
     });
     expect(fuzzy.ok).toBe(true);
@@ -183,6 +220,7 @@ describe('MediaService', () => {
     safetyState.canIssueMotion.mockClear();
     const stop = await service.voiceCommand('emergency stop', {
       role: UserRole.SUPERVISOR,
+      clientId: 'device-1',
       safeActionPin: '1234',
     });
     expect(stop.ok).toBe(true);
@@ -193,6 +231,7 @@ describe('MediaService', () => {
   it('uses a later alternative when the top transcript misses', async () => {
     const result = await service.voiceCommand('banana', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
       alternatives: ['completely wrong', 'hoist up'],
     });
@@ -208,6 +247,7 @@ describe('MediaService', () => {
   it('rejects a blank transcript', async () => {
     const result = await service.voiceCommand('   ', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
     });
     expect(result).toEqual(
       expect.objectContaining({ ok: false, reason: 'command_not_allowlisted' }),
@@ -218,6 +258,7 @@ describe('MediaService', () => {
     jest.useFakeTimers();
     const result = await service.voiceCommand('hoist down', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
     });
     expect(result.ok).toBe(false);
@@ -234,6 +275,7 @@ describe('MediaService', () => {
     });
     const down = await service.voiceCommand('down', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
     });
     expect(down).toEqual(
@@ -255,10 +297,12 @@ describe('MediaService', () => {
     );
     await service.voiceCommand('hoist up', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
     });
     await service.voiceCommand('hoist up', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
     });
     await jest.advanceTimersByTimeAsync(2800);
@@ -269,6 +313,7 @@ describe('MediaService', () => {
     safetyState.canIssueMotion.mockReturnValue(false);
     const blocked = await service.voiceCommand('hoist up', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
     });
     expect(blocked).toEqual(
@@ -279,6 +324,7 @@ describe('MediaService', () => {
 
     const stop = await service.voiceCommand('stop', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
     });
     expect(stop.ok).toBe(true);
@@ -294,6 +340,7 @@ describe('MediaService', () => {
     });
     await service.voiceCommand('down', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
     });
     expect(hmiService.activateCell).toHaveBeenCalledWith(
@@ -315,10 +362,12 @@ describe('MediaService', () => {
     );
     await service.voiceCommand('up', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
     });
     await service.voiceCommand('trolley left', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
       userId: 'u1',
     });
     expect(hmiService.activateCell).toHaveBeenCalledWith(
@@ -332,6 +381,7 @@ describe('MediaService', () => {
     hmiService.getLayout.mockResolvedValueOnce({ cells: [] });
     const result = await service.voiceCommand('stop', {
       role: UserRole.SUPERVISOR,
+      clientId: 'device-1',
     });
     expect(result).toEqual(
       expect.objectContaining({ ok: false, reason: 'cell_not_found' }),
@@ -342,12 +392,14 @@ describe('MediaService', () => {
     safetyState.allowTimedMediaMotion.mockResolvedValueOnce(false);
     const blocked = await service.voiceCommand('hoist up', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
     });
     expect(blocked).toEqual(
       expect.objectContaining({ ok: false, reason: 'timed_motion_disabled' }),
     );
     const stop = await service.voiceCommand('stop', {
       role: UserRole.OPERATOR,
+      clientId: 'device-1',
     });
     expect(stop.ok).toBe(true);
     expect(String(stop.message)).toMatch(/commanded to stop/i);

@@ -46,7 +46,7 @@ export default Joi.object({
   API_VERSION: Joi.string().default('v1'),
 
   DATABASE_PATH: Joi.string().default('./data/tele-pendant.sqlite'),
-  DATABASE_SYNC: Joi.string().valid('true', 'false').default('true'),
+  DATABASE_SYNC: Joi.string().valid('true', 'false').default('false'),
   DATABASE_AUTOLOAD: Joi.string().valid('true', 'false').default('true'),
 
   JWT_SECRET: Joi.string().required(),
@@ -63,6 +63,8 @@ export default Joi.object({
   SAFE_ACTION_PIN: Joi.string().allow('').optional(),
 
   FACE_TEMPLATE_KEY: Joi.string().allow('').optional(),
+  /** Face enroll and face login stay off unless this is true. */
+  FACE_LOGIN_ENABLED: Joi.string().valid('true', 'false').default('false'),
 
   MODBUS_HOST: Joi.string().default('127.0.0.1'),
   MODBUS_PORT: Joi.number().port().default(1502),

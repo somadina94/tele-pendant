@@ -1,11 +1,15 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { addColumnIfMissing } from '../column-exists';
 
 export class AddUserSafeActionPin1762381000000 implements MigrationInterface {
   name = 'AddUserSafeActionPin1762381000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `ALTER TABLE "users" ADD "safe_action_pin_hash" varchar`,
+    await addColumnIfMissing(
+      queryRunner,
+      'users',
+      'safe_action_pin_hash',
+      'varchar',
     );
   }
 

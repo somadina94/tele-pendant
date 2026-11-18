@@ -28,6 +28,7 @@ export default registerAs('appConfig', () => ({
     model: process.env.CURSOR_MODEL?.trim() || 'composer-2.5',
   },
   faceTemplateKey: process.env.FACE_TEMPLATE_KEY?.trim() || '',
+  faceLoginEnabled: process.env.FACE_LOGIN_ENABLED === 'true',
   mail: {
     host: process.env.MAIL_HOST?.trim() || '',
     port: parseInt(process.env.MAIL_PORT ?? '587', 10),

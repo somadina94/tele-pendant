@@ -41,12 +41,15 @@ const appJsonPath = join(mobileRoot, 'app.json');
 const iosDir = join(mobileRoot, 'ios');
 const outDir = join(mobileRoot, 'dist');
 const buildDir = join(mobileRoot, 'build');
-const defaultOta = 'https://api.tele-pendant.jahbyte.com';
-const otaBase = (process.env.OTA_PUBLIC_URL ?? defaultOta).replace(/\/$/, '');
+const otaBase = process.env.OTA_PUBLIC_URL?.trim().replace(/\/$/, '');
+const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/$/, '');
+if (!otaBase || !apiUrl) {
+  console.error(
+    'Set OTA_PUBLIC_URL and EXPO_PUBLIC_API_URL before the iOS build. Example: https://api.example.com and https://api.example.com/api/v1',
+  );
+  process.exit(1);
+}
 const updatesUrl = `${otaBase}/ota/manifest`;
-const apiUrl =
-  process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '') ??
-  `${defaultOta}/api/v1`;
 process.env.EXPO_PUBLIC_API_URL = apiUrl;
 
 const scheme = process.env.IOS_SCHEME?.trim() || 'TelePendant';

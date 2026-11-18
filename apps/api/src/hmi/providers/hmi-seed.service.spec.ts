@@ -110,7 +110,7 @@ describe('HmiSeedService', () => {
     expect(cells.save).toHaveBeenCalledWith(shortened);
   });
 
-  it('migrates legacy crane layouts to P03A21 on boot', async () => {
+  it('does not wipe an existing layout on boot', async () => {
     const { service } = makeService({
       cellCount: 12,
       selectorCount: 0,
@@ -119,7 +119,14 @@ describe('HmiSeedService', () => {
     const reset = jest
       .spyOn(service, 'resetP03a21Demo')
       .mockResolvedValue({ ok: true, cells: 20 });
+    const lakshmi = jest
+      .spyOn(
+        service as unknown as { syncP03a21LakshmiFixes: () => Promise<void> },
+        'syncP03a21LakshmiFixes',
+      )
+      .mockResolvedValue(undefined);
     await service.onModuleInit();
-    expect(reset).toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+    expect(lakshmi).not.toHaveBeenCalled();
   });
 });

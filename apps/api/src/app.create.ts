@@ -120,12 +120,12 @@ export function appCreate(app: INestApplication): void {
     }),
   );
 
-  const liveSwaggerUrl =
-    process.env.SWAGGER_LIVE_URL ?? 'https://api.tele-pendant.jahbyte.com';
   const localSwaggerUrl =
     process.env.APP_URL && /localhost|127\.0\.0\.1/.test(process.env.APP_URL)
       ? process.env.APP_URL
       : `http://localhost:${process.env.SWAGGER_LOCAL_PORT ?? '4060'}`;
+  const liveSwaggerUrl =
+    process.env.SWAGGER_LIVE_URL ?? process.env.APP_URL ?? localSwaggerUrl;
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Tele-Pendant API')

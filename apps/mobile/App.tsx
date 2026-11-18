@@ -47,6 +47,7 @@ import {
 
 const queryClient = new QueryClient();
 const SPLASH_MIN_MS = 1600;
+const faceLoginEnabled = process.env.EXPO_PUBLIC_FACE_LOGIN === 'true';
 
 function LoginScreen({
   onLoggedIn,
@@ -249,12 +250,14 @@ function LoginScreen({
                 <BtnText>{t('signIn')}</BtnText>
               </Btn>
             </HelpTip>
-            <HelpTip id="tour.login.face">
-              <Btn onPress={() => setMode('face')}>
-                <ScanFace size={16} color="#041018" />
-                <BtnText>{t('faceLogin')}</BtnText>
-              </Btn>
-            </HelpTip>
+            {faceLoginEnabled ? (
+              <HelpTip id="tour.login.face">
+                <Btn onPress={() => setMode('face')}>
+                  <ScanFace size={16} color="#041018" />
+                  <BtnText>{t('faceLogin')}</BtnText>
+                </Btn>
+              </HelpTip>
+            ) : null}
           </>
         )}
       </ScrollView>

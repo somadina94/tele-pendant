@@ -133,6 +133,11 @@ export class MediaService implements OnModuleInit {
       clientId?: string | null;
     },
   ) {
+    const clientId = opts.clientId?.trim() || '';
+    if (!clientId) {
+      return { ok: false, reason: 'device_required', transcript };
+    }
+
     const phrases = [transcript, ...(opts.alternatives ?? [])]
       .map((phrase) => phrase.trim())
       .filter((phrase) => phrase.length > 0);
@@ -141,9 +146,15 @@ export class MediaService implements OnModuleInit {
     for (const phrase of phrases) {
       const hit = matchVoiceCommand(phrase);
       if (!hit) continue;
-      label = hit;
-      heard = phrase;
-      break;
+      if (hit === 'STOP') {
+        label = hit;
+        heard = phrase;
+        break;
+      }
+      if (!label) {
+        label = hit;
+        heard = phrase;
+      }
     }
 
     if (!label) {
@@ -172,7 +183,7 @@ export class MediaService implements OnModuleInit {
       }
       // TP-29: never synthesize deadman here — require the session hold
       // (Listen deadman pulse or Operator hold) before timed voice motion.
-      if (!this.safetyState.canIssueMotion(opts.userId, opts.clientId)) {
+      if (!this.safetyState.canIssueMotion(opts.userId, clientId)) {
         return {
           ok: false,
           reason: 'deadman_required',
@@ -201,6 +212,7 @@ export class MediaService implements OnModuleInit {
             role: opts.role,
             safeActionPin: opts.safeActionPin,
             ip: opts.ip,
+            clientId,
           });
         } catch {
           // The previous direction coil is cleared on a best-effort basis.
@@ -215,6 +227,7 @@ export class MediaService implements OnModuleInit {
       role: opts.role,
       safeActionPin: opts.safeActionPin,
       ip: opts.ip,
+      clientId,
     });
 
     await this.auditService.write({
@@ -225,6 +238,7 @@ export class MediaService implements OnModuleInit {
       resource: cell.label,
       details: heard,
       ip: opts.ip,
+      clientId,
       result: 'success',
     });
 

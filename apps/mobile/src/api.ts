@@ -4,9 +4,7 @@ import { notifyUnauthorized } from './session';
 import { ApiStatusError } from './session-failure';
 import { clearAccessToken } from './token-storage';
 
-const LIVE_API = 'https://api.tele-pendant.jahbyte.com/api/v1';
-
-/** API base from env (`EXPO_PUBLIC_API_URL` or `APP_URL` + `/api/v1`), else live. */
+/** API base from the build (`EXPO_PUBLIC_API_URL` or app config extra.apiUrl). */
 export function getApiBase(): string {
   const fromExtra = Constants.expoConfig?.extra?.apiUrl;
   if (typeof fromExtra === 'string' && fromExtra.trim()) {
@@ -14,7 +12,9 @@ export function getApiBase(): string {
   }
   const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, '');
-  return LIVE_API;
+  throw new Error(
+    'EXPO_PUBLIC_API_URL is not set. Set it to your API base, for example https://api.example.com/api/v1',
+  );
 }
 
 function isAuthBootstrapPath(path: string): boolean {

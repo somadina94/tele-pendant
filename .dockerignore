@@ -13,6 +13,7 @@ node_modules
 *.db-journal
 apps/mobile
 freelancer-bids-instruction.txt
+**/*.pem
 **/*.md
 !apps/api/docs/**
 !docs/

@@ -1,4 +1,8 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PNG } from 'pngjs';
 import { AuthService } from './auth.service';
@@ -113,6 +117,8 @@ describe('AuthService', () => {
     if (key === 'appConfig.admin.email') return 'admin@example.com';
     if (key === 'appConfig.admin.password') return 'change-me-admin-password';
     if (key === 'appConfig.faceTemplateKey') return '';
+    if (key === 'appConfig.faceLoginEnabled') return true;
+    if (key === 'appConfig.appUrl') return 'http://localhost:3010';
     return undefined;
   }
 
@@ -202,6 +208,31 @@ describe('AuthService', () => {
     });
     expect(service.getCookieOptions().secure).toBe(true);
     expect(service.getCookieOptions().maxAge).toBe(3600_000);
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'appConfig.appUrl') return 'https://api.example.com';
+      if (key === 'appConfig.cookieSecure') return false;
+      return defaultConfig(key);
+    });
+    expect(service.getCookieOptions().secure).toBe(true);
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'appConfig.appUrl') return undefined;
+      if (key === 'appConfig.cookieSecure') return false;
+      return defaultConfig(key);
+    });
+    expect(service.getCookieOptions().secure).toBe(false);
+  });
+
+  it('refuses face enroll and login when the flag is off', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'appConfig.faceLoginEnabled') return false;
+      return defaultConfig(key);
+    });
+    await expect(
+      service.enrollFace(user.id, { frames: [] }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.loginWithFace({ frames: [] })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it('logs in with valid credentials and null displayName', async () => {

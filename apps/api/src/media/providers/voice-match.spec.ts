@@ -27,6 +27,8 @@ describe('matchVoiceCommand', () => {
     expect(matchVoiceCommand('trolley write')).toBe('Trolley R');
     expect(matchVoiceCommand('trolley left right')).toBeNull();
     expect(matchVoiceCommand('please stop')).toBe('STOP');
+    expect(matchVoiceCommand('stop hoist up')).toBe('STOP');
+    expect(matchVoiceCommand('up stop')).toBe('STOP');
     expect(matchVoiceCommand('stop')).toBe('STOP');
     expect(matchVoiceCommand('emergency stop')).toBe('STOP');
     expect(matchVoiceCommand('stopped')).toBe('STOP');

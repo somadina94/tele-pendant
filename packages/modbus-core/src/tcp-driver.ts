@@ -23,6 +23,8 @@ export class TcpModbusDriver implements ModbusDriver {
   private pumping = false;
   /** >0 while inside runExclusive — nested writeCoil must not re-queue (deadlock). */
   private exclusiveDepth = 0;
+  /** Per-request timeout. Connect already times out; reads and writes use this too. */
+  private requestTimeoutMs = 3000;
 
   private enqueue<T>(
     op: () => Promise<T>,
@@ -84,6 +86,7 @@ export class TcpModbusDriver implements ModbusDriver {
     const socket = new net.Socket();
     const client = new Modbus.client.TCP(socket, options.unitId);
     const timeoutMs = options.timeoutMs ?? 3000;
+    this.requestTimeoutMs = timeoutMs;
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -171,9 +174,27 @@ export class TcpModbusDriver implements ModbusDriver {
     return this.client;
   }
 
+  private withTimeout<T>(op: Promise<T>): Promise<T> {
+    const ms = this.requestTimeoutMs;
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        this.connected = false;
+        this.socket?.destroy();
+        reject(new Error(`Modbus request timeout after ${ms}ms`));
+      }, ms);
+    });
+    void op.catch(() => undefined);
+    return Promise.race([op, timeout]).finally(() => {
+      if (timer) clearTimeout(timer);
+    });
+  }
+
   async readCoils(address: number, length: number): Promise<boolean[]> {
     return this.enqueue(async () => {
-      const resp = await this.assertClient().readCoils(address, length);
+      const resp = await this.withTimeout(
+        this.assertClient().readCoils(address, length),
+      );
       return resp.response.body.valuesAsArray.slice(0, length).map(Boolean);
     });
   }
@@ -183,9 +204,8 @@ export class TcpModbusDriver implements ModbusDriver {
     length: number,
   ): Promise<boolean[]> {
     return this.enqueue(async () => {
-      const resp = await this.assertClient().readDiscreteInputs(
-        address,
-        length,
+      const resp = await this.withTimeout(
+        this.assertClient().readDiscreteInputs(address, length),
       );
       return resp.response.body.valuesAsArray.slice(0, length).map(Boolean);
     });
@@ -196,9 +216,8 @@ export class TcpModbusDriver implements ModbusDriver {
     length: number,
   ): Promise<number[]> {
     return this.enqueue(async () => {
-      const resp = await this.assertClient().readHoldingRegisters(
-        address,
-        length,
+      const resp = await this.withTimeout(
+        this.assertClient().readHoldingRegisters(address, length),
       );
       return Array.from(resp.response.body.valuesAsArray.slice(0, length));
     });
@@ -206,9 +225,8 @@ export class TcpModbusDriver implements ModbusDriver {
 
   async readInputRegisters(address: number, length: number): Promise<number[]> {
     return this.enqueue(async () => {
-      const resp = await this.assertClient().readInputRegisters(
-        address,
-        length,
+      const resp = await this.withTimeout(
+        this.assertClient().readInputRegisters(address, length),
       );
       return Array.from(resp.response.body.valuesAsArray.slice(0, length));
     });
@@ -216,19 +234,25 @@ export class TcpModbusDriver implements ModbusDriver {
 
   async writeCoil(address: number, value: boolean): Promise<void> {
     await this.enqueue(async () => {
-      await this.assertClient().writeSingleCoil(address, value);
+      await this.withTimeout(
+        this.assertClient().writeSingleCoil(address, value),
+      );
     }, 'high');
   }
 
   async writeRegister(address: number, value: number): Promise<void> {
     await this.enqueue(async () => {
-      await this.assertClient().writeSingleRegister(address, value);
+      await this.withTimeout(
+        this.assertClient().writeSingleRegister(address, value),
+      );
     }, 'high');
   }
 
   async writeRegisters(address: number, values: number[]): Promise<void> {
     await this.enqueue(async () => {
-      await this.assertClient().writeMultipleRegisters(address, values);
+      await this.withTimeout(
+        this.assertClient().writeMultipleRegisters(address, values),
+      );
     }, 'high');
   }
 }

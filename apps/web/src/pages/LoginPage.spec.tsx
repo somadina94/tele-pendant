@@ -6,6 +6,15 @@ import * as api from '../lib/api';
 import { ApiError } from '../lib/api';
 
 describe('LoginPage', () => {
+  it('shows face login only when VITE_FACE_LOGIN is true', () => {
+    renderWithProviders(<LoginPage />);
+    expect(screen.queryByRole('link', { name: /face/i })).toBeNull();
+    vi.stubEnv('VITE_FACE_LOGIN', 'true');
+    renderWithProviders(<LoginPage />);
+    expect(screen.getByRole('link', { name: /face/i })).toBeTruthy();
+    vi.unstubAllEnvs();
+  });
+
   it('ignores password login responses with neither OTP nor token', async () => {
     vi.spyOn(api, 'apiPost').mockResolvedValueOnce({ limitation: 'noop' });
     renderWithProviders(<LoginPage />);

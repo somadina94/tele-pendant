@@ -1,4 +1,4 @@
-import { OpcUaPort } from './opcua-port';
+import { OpcUaPort, errorForOpcStatus } from './opcua-port';
 
 describe('OpcUaPort', () => {
   const session = {
@@ -59,5 +59,26 @@ describe('OpcUaPort', () => {
     await expect(port.read({ kind: 'holding', address: 9 })).resolves.toBe(0);
     await port.write({ kind: 'discrete', address: 9, nodeId: 'ns=1;s=X' }, 1);
     expect(quiet.write).toHaveBeenCalledWith('ns=1;s=X', true);
+  });
+
+  it('reports a bad status and treats a lost session as disconnected', async () => {
+    expect(errorForOpcStatus('Good')?.message).toBeUndefined();
+    expect(errorForOpcStatus('BadNodeIdUnknown')?.message).toMatch(
+      /BadNodeIdUnknown/,
+    );
+    const broken = {
+      read: jest.fn(async () => {
+        throw errorForOpcStatus('BadSessionIdInvalid');
+      }),
+      write: jest.fn(async () => undefined),
+      close: jest.fn(async () => undefined),
+    };
+    const port = new OpcUaPort(async () => broken);
+    await port.connect({ host: '127.0.0.1', port: 4840 });
+    port.setPoints([{ kind: 'coil', address: 0, nodeId: 'ns=1;s=X' }]);
+    await expect(port.read({ kind: 'coil', address: 0 })).rejects.toThrow(
+      /BadSessionIdInvalid/,
+    );
+    expect(port.isConnected()).toBe(false);
   });
 });

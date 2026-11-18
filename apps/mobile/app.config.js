@@ -45,11 +45,21 @@ function resolveApiUrl() {
   ) {
     return `${appUrl.replace(/\/api\/v1$/, '')}/api/v1`;
   }
-  if (appUrl && !appUrl.includes('tele-pendant.jahbyte.com')) {
-    return `${appUrl}/api/v1`;
-  }
+  if (appUrl) return `${appUrl.replace(/\/api\/v1$/, '')}/api/v1`;
 
-  return 'https://api.tele-pendant.jahbyte.com/api/v1';
+  throw new Error(
+    'Set EXPO_PUBLIC_API_URL or APP_URL before building the phone app. Example: https://api.example.com/api/v1',
+  );
+}
+
+function otaManifestUrl() {
+  const base = process.env.OTA_PUBLIC_URL?.trim().replace(/\/$/, '');
+  if (!base) {
+    throw new Error(
+      'Set OTA_PUBLIC_URL before building the phone app. Example: https://api.example.com',
+    );
+  }
+  return `${base}/ota/manifest`;
 }
 
 const apiUrl = resolveApiUrl();
@@ -61,11 +71,7 @@ module.exports = {
     ...appJson.expo,
     updates: {
       ...(appJson.expo.updates ?? {}),
-      url:
-        process.env.OTA_PUBLIC_URL?.replace(/\/$/, '')
-          ? `${process.env.OTA_PUBLIC_URL.replace(/\/$/, '')}/ota/manifest`
-          : (appJson.expo.updates?.url ??
-            'https://api.tele-pendant.jahbyte.com/ota/manifest'),
+      url: otaManifestUrl(),
       codeSigningCertificate:
         appJson.expo.updates?.codeSigningCertificate ??
         './certs/certificate.pem',

@@ -34,7 +34,7 @@ Private key (never commit):
 
 Generate keys once from `apps/mobile` (see `apps/mobile/signing/ota/README.md`). Fake or unsigned manifests are rejected by the client when code signing is enabled.
 
-1. Point `expo.updates.url` in `apps/mobile/app.json` at the live manifest for production builds: `https://api.example.com/ota/manifest` (local LAN for lab builds).
+1. Set `OTA_PUBLIC_URL` to your API origin. `apps/mobile/app.config.js` sets `expo.updates.url` to `${OTA_PUBLIC_URL}/ota/manifest`. The build fails when that variable is missing. Do not put a host in `app.json`.
 2. From `apps/mobile`, publish with the local command (no EAS account):
 
 ```bash

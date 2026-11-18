@@ -62,11 +62,8 @@ export class HmiSeedService implements OnModuleInit {
     if (count === 0) {
       this.logger.log('Seeding P03A21 welding pendant HMI layout');
       await this.seed();
-    } else {
-      await this.ensureP03a21Layout();
     }
     await this.syncP03a21DrawingLabels();
-    await this.syncP03a21LakshmiFixes();
     await this.ensureRuntimeRegisters();
     await this.ensureSafetyRoles();
   }

@@ -55,3 +55,22 @@ export const HMI_ASSET_MIME: Record<string, string> = {
   'image/webp': 'webp',
   'image/gif': 'gif',
 };
+
+export function svgFailureMessage(err: unknown): string {
+  return err instanceof Error ? err.message : 'Invalid SVG';
+}
+
+/** Drop scripts, embedded documents, and event handlers from an uploaded SVG. */
+export function sanitizeSvg(source: string): string {
+  let svg = source.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+  svg = svg.replace(/<foreignObject\b[^>]*>[\s\S]*?<\/foreignObject>/gi, '');
+  svg = svg.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '');
+  svg = svg.replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, '');
+  svg = svg.replace(/<embed\b[^>]*\/?>/gi, '');
+  svg = svg.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  svg = svg.replace(/javascript\s*:/gi, '');
+  if (!/<svg[\s>]/i.test(svg)) {
+    throw new Error('SVG must contain an svg root');
+  }
+  return svg;
+}
