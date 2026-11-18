@@ -20,6 +20,20 @@ describe('touch press vs scroll', () => {
     expect(isTouchPointer('')).toBe(false);
   });
 
+  it('commits STOP on contact before a slide or cancel', () => {
+    const arms = new Map<number, TouchArm>();
+    const commit = vi.fn();
+    const capture = vi.fn();
+    armTouchPress(arms, 1, 0, 0, commit, capture, true);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(noteTouchScroll(arms, 1, 40, 0)).toBe(true);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(settleTouchPress(arms, 1, 'cancel')).toBe('none');
+    armTouchPress(arms, 2, 0, 0, commit, capture, true);
+    expect(settleTouchPress(arms, 2, 'cancel')).toBe('release');
+  });
+
   it('commits a still finger and ignores a late timer', () => {
     vi.useFakeTimers();
     const arms = new Map<number, TouchArm>();

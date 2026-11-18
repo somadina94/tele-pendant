@@ -1,3 +1,4 @@
+import { auditRequestContext } from '../audit-request-context';
 import { AuditService } from './audit.service';
 import { AuditLog } from '../entities/audit-log.entity';
 
@@ -37,6 +38,7 @@ describe('AuditService', () => {
         resource: null,
         details: null,
         ip: null,
+        clientId: null,
         result: 'success',
       }),
     );
@@ -56,7 +58,59 @@ describe('AuditService', () => {
       expect.objectContaining({
         userId: 'u',
         result: 'failure',
+        clientId: null,
       }),
+    );
+  });
+
+  it('stores the device from the request, and an explicit id wins', async () => {
+    const repo = {
+      create: jest.fn((x) => x),
+      save: jest.fn(async (x) => x),
+    };
+    const service = new AuditService(
+      repo as never,
+      { find: jest.fn() } as never,
+    );
+
+    await auditRequestContext.run({ clientId: '  tab-a  ' }, () =>
+      service.write({ action: 'cell.activate' }),
+    );
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: 'tab-a' }),
+    );
+
+    await auditRequestContext.run({ clientId: 'tab-a' }, () =>
+      service.write({ action: 'cell.activate', clientId: ' tab-b ' }),
+    );
+    expect(repo.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ clientId: 'tab-b' }),
+    );
+
+    await auditRequestContext.run({ clientId: '   ' }, () =>
+      service.write({ action: 'cell.activate', clientId: ' ' }),
+    );
+    expect(repo.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ clientId: null }),
+    );
+
+    await service.write({ action: 'cell.activate', clientId: null });
+    expect(repo.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ clientId: null }),
+    );
+
+    await auditRequestContext.run({ clientId: '   ' }, () =>
+      service.write({ action: 'cell.activate' }),
+    );
+    expect(repo.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ clientId: null }),
+    );
+
+    await auditRequestContext.run({ clientId: null }, () =>
+      service.write({ action: 'cell.activate' }),
+    );
+    expect(repo.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({ clientId: null }),
     );
   });
 

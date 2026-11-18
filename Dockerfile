@@ -31,7 +31,8 @@ RUN pnpm --filter @tele-pendant/shared build \
   && pnpm --filter @tele-pendant/plc-driver build \
   && pnpm --filter @tele-pendant/api build \
   && pnpm --filter @tele-pendant/web build \
-  && pnpm --filter @tele-pendant/modbus-sim build
+  && pnpm --filter @tele-pendant/modbus-sim build \
+  && find apps/api/dist -name '*.map' -delete
 
 # ---- API runtime ----
 FROM node:26-bookworm-slim AS api

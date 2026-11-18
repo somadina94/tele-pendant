@@ -43,6 +43,8 @@ services:
       MODBUS_HOST: modbus-sim
       MODBUS_PORT: 1502
       APP_URL: ${APP_URL:-http://localhost:3010}
+      # Browser-facing Swagger server. PORT inside this container stays 3010.
+      SWAGGER_LOCAL_PORT: ${WEB_PORT:-4060}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
     volumes:
       # Named volume avoids Docker Desktop bind-mount mkdir failures under ~/Desktop
@@ -52,6 +54,12 @@ services:
         - action: sync
           path: ./apps/api/src
           target: /app/apps/api/src
+        - action: sync
+          path: ./apps/api/nest-cli.json
+          target: /app/apps/api/nest-cli.json
+        - action: sync
+          path: ./apps/api/tsconfig.json
+          target: /app/apps/api/tsconfig.json
         - action: sync
           path: ./docs
           target: /app/docs

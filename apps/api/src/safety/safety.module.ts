@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
 import { UsersModule } from '../users/users.module';
@@ -12,7 +12,7 @@ import { SafetyStateService } from './providers/safety-state.service';
 
 @Module({
   imports: [
-    PlcModule,
+    forwardRef(() => PlcModule),
     AuditModule,
     UsersModule,
     TypeOrmModule.forFeature([Cell, RegisterMap, SafetyRoles]),

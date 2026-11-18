@@ -7,6 +7,7 @@ import {
   apiPost,
   apiPut,
   apiUpload,
+  rejectIfSlow,
 } from './api';
 
 describe('api helpers', () => {
@@ -361,5 +362,18 @@ describe('api helpers', () => {
     await expect(apiUpload('/hmi/background/asset', file)).rejects.toThrow(
       'too large',
     );
+  });
+
+  it('rejects a session check that does not answer', async () => {
+    vi.useFakeTimers();
+    const pending = rejectIfSlow(new Promise(() => undefined), 3000);
+    const assertion = expect(pending).rejects.toThrow('Failed to fetch');
+    await vi.advanceTimersByTimeAsync(3000);
+    await assertion;
+    await expect(rejectIfSlow(Promise.resolve('ok'), 3000)).resolves.toBe('ok');
+    await expect(
+      rejectIfSlow(Promise.reject(new Error('down')), 3000),
+    ).rejects.toThrow('down');
+    vi.useRealTimers();
   });
 });

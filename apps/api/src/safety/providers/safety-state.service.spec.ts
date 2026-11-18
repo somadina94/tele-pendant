@@ -240,6 +240,58 @@ describe('SafetyStateService', () => {
     );
   });
 
+  it('clears Enable when control is stolen, released, or expires', async () => {
+    cells.find.mockImplementation(
+      async (query?: { where?: { isMotion?: boolean } }) => {
+        if (query?.where?.isMotion) {
+          return [
+            {
+              isMotion: true,
+              primaryRegister: { kind: 'coil', address: 26 },
+            },
+          ];
+        }
+        return [
+          {
+            isMotion: false,
+            style: 'enable',
+            label: 'Enable',
+            primaryRegister: { kind: 'coil', address: 43 },
+          },
+          {
+            isMotion: false,
+            style: 'estop',
+            label: 'STOP',
+            requiresSafeAction: true,
+            primaryRegister: { kind: 'coil', address: 11 },
+          },
+        ];
+      },
+    );
+    process.env.SAFE_ACTION_PIN = '1234';
+    claimAs('u1', 'Alice');
+    driver.writeCoil.mockClear();
+    await service.stealControl('1234', 'u2', 'Bob', undefined, clientFor('u2'));
+    expect(driver.writeCoil).toHaveBeenCalledWith(43, false);
+    expect(driver.writeCoil).not.toHaveBeenCalledWith(11, false);
+
+    driver.writeCoil.mockClear();
+    service.releaseControl('u2', undefined, clientFor('u2'));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(driver.writeCoil).toHaveBeenCalledWith(43, false);
+
+    jest.useFakeTimers();
+    const now = Date.now();
+    jest.setSystemTime(now);
+    claimAs('u1', 'Alice');
+    jest.setSystemTime(now + 13_000);
+    driver.writeCoil.mockClear();
+    await service.tick();
+    expect(driver.writeCoil).toHaveBeenCalledWith(43, false);
+    expect(driver.writeCoil).not.toHaveBeenCalledWith(11, false);
+    delete process.env.SAFE_ACTION_PIN;
+  });
+
   it('steals when control is free (no prior holder deadman drop)', async () => {
     process.env.SAFE_ACTION_PIN = '1234';
     const control = await service.stealControl(
@@ -589,12 +641,61 @@ describe('SafetyStateService', () => {
     expect(snap.eStopActive).toBe(true);
   });
 
-  it('enters comms_lost when disconnected after consecutive fails', async () => {
+  it('enters comms_lost on the first failed tick', async () => {
     driver.isConnected.mockReturnValue(false);
-    await service.tick();
-    await service.tick();
     const snap = await service.tick();
     expect(snap.mode).toBe('comms_lost');
+    expect(snap.watchdogOk).toBe(false);
+  });
+
+  it('restores a latched STOP after restart while the PLC coil is low', async () => {
+    roles.find.mockResolvedValue([
+      { id: 'role-1', operatorEStopLatched: true },
+    ]);
+    driver.readCoils.mockResolvedValue([false]);
+    await service.onModuleInit();
+    expect(service.snapshot().eStopActive).toBe(true);
+    expect(service.snapshot().mode).toBe('e_stop');
+  });
+
+  it('stores the STOP latch and clears it on PIN reset', async () => {
+    process.env.SAFE_ACTION_PIN = '1234';
+    await service.latchOperatorEStop('Operator STOP');
+    expect(roles.save).toHaveBeenCalledWith(
+      expect.objectContaining({ operatorEStopLatched: true }),
+    );
+    roles.find.mockResolvedValue([
+      { id: 'role-1', operatorEStopLatched: true },
+    ]);
+    roles.save.mockClear();
+    await service.resetEStop('1234');
+    expect(roles.save).toHaveBeenCalledWith(
+      expect.objectContaining({ operatorEStopLatched: false }),
+    );
+    expect(service.snapshot().mode).toBe('normal');
+    delete process.env.SAFE_ACTION_PIN;
+  });
+
+  it('leaves STOP clear on boot when the latch row is empty', async () => {
+    await service.onModuleInit();
+    expect(service.snapshot().eStopActive).toBe(false);
+  });
+
+  it('skips a latch write when the row is already latched', async () => {
+    roles.find.mockResolvedValue([
+      { id: 'role-1', operatorEStopLatched: true },
+    ]);
+    await service.latchOperatorEStop();
+    expect(roles.save).not.toHaveBeenCalled();
+  });
+
+  it('keeps the in-memory STOP latch when the store write fails', async () => {
+    roles.save.mockRejectedValueOnce(new Error('disk'));
+    await service.latchOperatorEStop();
+    expect(service.snapshot().eStopActive).toBe(true);
+    roles.save.mockRejectedValueOnce('disk');
+    await service.latchOperatorEStop();
+    expect(service.snapshot().eStopActive).toBe(true);
   });
 
   it('keeps software e-stop across PLC disconnect and reconnect until PIN (TP-39)', async () => {
@@ -603,8 +704,6 @@ describe('SafetyStateService', () => {
     expect(service.snapshot().eStopActive).toBe(true);
 
     driver.isConnected.mockReturnValue(false);
-    await service.tick();
-    await service.tick();
     const lost = await service.tick();
     expect(lost.mode).toBe('comms_lost');
     expect(lost.eStopActive).toBe(true);
@@ -622,16 +721,18 @@ describe('SafetyStateService', () => {
     delete process.env.SAFE_ACTION_PIN;
   });
 
-  it('restores normal after non-normal mode when healthy', async () => {
+  it('keeps comms_lost until the reset PIN', async () => {
+    process.env.SAFE_ACTION_PIN = '1234';
     driver.isConnected.mockReturnValue(false);
-    await service.tick();
-    await service.tick();
     await service.tick();
     expect(service.snapshot().mode).toBe('comms_lost');
     driver.isConnected.mockReturnValue(true);
     driver.readCoils.mockResolvedValue([false]);
     const snap = await service.tick();
-    expect(snap.mode).toBe('normal');
+    expect(snap.mode).toBe('comms_lost');
+    const reset = await service.resetEStop('1234');
+    expect(reset.mode).toBe('normal');
+    delete process.env.SAFE_ACTION_PIN;
   });
 
   it('writes heartbeat and deadman coil while active', async () => {
@@ -673,12 +774,8 @@ describe('SafetyStateService', () => {
     expect(service.snapshot().deadmanActive).toBe(false);
   });
 
-  it('enters comms_lost only after consecutive tick read failures', async () => {
+  it('enters comms_lost on the first tick read failure', async () => {
     driver.readCoils.mockRejectedValue(new Error('timeout'));
-    const first = await service.tick();
-    expect(first.mode).toBe('normal');
-    expect(first.watchdogOk).toBe(false);
-    await service.tick();
     const snap = await service.tick();
     expect(snap.mode).toBe('comms_lost');
     expect(snap.watchdogOk).toBe(false);
@@ -691,10 +788,8 @@ describe('SafetyStateService', () => {
     expect(snap.mode).toBe('e_stop');
   });
 
-  it('handles non-Error throw in tick catch after consecutive fails', async () => {
+  it('handles non-Error throw in tick catch', async () => {
     driver.readCoils.mockRejectedValue('boom');
-    await service.tick();
-    await service.tick();
     const snap = await service.tick();
     expect(snap.mode).toBe('comms_lost');
   });
@@ -706,7 +801,10 @@ describe('SafetyStateService', () => {
     const enter = (m: string, r: string) => priv.enterMode(m, r);
     await enter('safe_state', 'test');
     expect(service.snapshot().mode).toBe('safe_state');
+    driver.readCoils.mockResolvedValue([false]);
+    expect((await service.tick()).mode).toBe('normal');
 
+    await enter('safe_state', 'again');
     await enter('normal', 'recovered');
     expect(service.snapshot().mode).toBe('normal');
     expect(auditService.write).toHaveBeenCalledWith(

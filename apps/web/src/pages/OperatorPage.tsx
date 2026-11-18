@@ -13,6 +13,7 @@ import {
   cellPulsesDeadman,
   cellRequiresControlLease,
   cellUsesHoldToRun,
+  isOperatorStopCell,
   isOperatorScreenReady,
   MATRIX_CELL_STATE_CODE,
   MATRIX_CELL_STATE_I18N,
@@ -720,6 +721,7 @@ export function OperatorPage() {
               event.clientY,
               commit,
               () => trySetPointerCapture(event.currentTarget, event.pointerId),
+              isOperatorStopCell(cell),
             );
             return;
           }

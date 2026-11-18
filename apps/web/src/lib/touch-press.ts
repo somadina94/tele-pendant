@@ -26,7 +26,20 @@ export function armTouchPress(
   y: number,
   commit: () => void,
   capture: () => void,
+  immediate = false,
 ): void {
+  if (immediate) {
+    arms.set(pointerId, {
+      x,
+      y,
+      scrolling: false,
+      pressed: true,
+      timer: 0,
+    });
+    capture();
+    commit();
+    return;
+  }
   const arm: TouchArm = {
     x,
     y,

@@ -87,4 +87,13 @@ export class SaveCellDto {
   @IsOptional()
   @IsString()
   statusRegisterId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Reset PIN. Required when turning a motion cell into a non-motion cell.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  pin?: string;
 }

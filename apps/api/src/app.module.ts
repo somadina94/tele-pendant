@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuditModule } from './audit/audit.module';
+import { AuditRequestInterceptor } from './audit/providers/audit-request.interceptor';
 import { AuthModule } from './auth/auth.module';
 import { DataResponseInterceptor } from './common/interceptors/data-response/data-response.interceptor';
 import { AlarmsModule } from './alarms/alarms.module';
@@ -68,6 +69,10 @@ const ENV = process.env.NODE_ENV;
   controllers: [AppController],
   providers: [
     AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditRequestInterceptor,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: DataResponseInterceptor,

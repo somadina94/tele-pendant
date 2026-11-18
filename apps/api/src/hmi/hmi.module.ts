@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditModule } from '../audit/audit.module';
 import { BackgroundDisplay } from '../backgrounds/entities/background-display.entity';
@@ -22,7 +22,7 @@ import { HmiService } from './providers/hmi.service';
       OverlayLabel,
       SafetyRoles,
     ]),
-    PlcModule,
+    forwardRef(() => PlcModule),
     SafetyModule,
     UsersModule,
     AuditModule,

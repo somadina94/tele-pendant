@@ -14,7 +14,8 @@ import { AuditService } from '../../audit/providers/audit.service';
 import { BackgroundDisplay } from '../../backgrounds/entities/background-display.entity';
 import { Cell } from '../../cells/entities/cell.entity';
 import { OverlayLabel } from '../../overlays/entities/overlay-label.entity';
-import { PlcService } from '../../plc/providers/plc.service';
+import { plcServiceRef } from '../../plc/plc-service.ref';
+import type { PlcService } from '../../plc/providers/plc.service';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { SafetyStateService } from '../../safety/providers/safety-state.service';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
@@ -61,7 +62,7 @@ export class HmiService {
     backgrounds: Repository<BackgroundDisplay>,
     @InjectRepository(OverlayLabel)
     overlays: Repository<OverlayLabel>,
-    @Inject(PlcService) plcService: PlcService,
+    @Inject(plcServiceRef) plcService: PlcService,
     @Inject(SafetyStateService) safetyState: SafetyStateService,
     @Inject(AuditService) auditService: AuditService,
     @Inject(SafeActionPinService) safeActionPin: SafeActionPinService,
@@ -225,7 +226,10 @@ export class HmiService {
     if (!row) throw new NotFoundException('Register not found');
 
     const addressChanging = row.address !== address;
-    if (addressChanging && (await this.isSafetyRegister(row.id, row.name))) {
+    if (
+      addressChanging &&
+      (await this.addressChangeNeedsPin(row.id, row.name))
+    ) {
       const ok = await this.safeActionPin.verify(
         actor?.userId,
         extra?.pin ?? '',
@@ -261,6 +265,23 @@ export class HmiService {
       result: 'success',
     });
     return saved;
+  }
+
+  /**
+   * Safety maps, plus the Enable coil. Moving Enable makes jogs skip the hold check.
+   */
+  private async addressChangeNeedsPin(
+    id: string,
+    name: string,
+  ): Promise<boolean> {
+    if (await this.isSafetyRegister(id, name)) return true;
+    if (name === pendantDiName('enable')) return true;
+    const enableCell = await this.cells.findOne({
+      where: { style: 'enable' },
+    });
+    return (
+      enableCell?.style === 'enable' && enableCell.primaryRegister?.id === id
+    );
   }
 
   /**
@@ -307,7 +328,7 @@ export class HmiService {
     }
 
     if (cell.style === 'lamp') {
-      throw new ForbiddenException('Indicator lamps are read-only');
+      this.refuseActivation(opts, cell.label, 'Indicator lamps are read-only');
     }
 
     const isSelector = cell.style === 'selector';
@@ -326,7 +347,9 @@ export class HmiService {
       cell.primaryRegister.name === 'coil.eStop';
     const safety = this.safetyState.snapshot();
     if ((safety.eStopActive || safety.mode !== 'normal') && !isEStopCell) {
-      throw new ForbiddenException(
+      this.refuseActivation(
+        opts,
+        cell.label,
         'Operator buttons are blocked until safety mode is normal',
       );
     }
@@ -343,7 +366,9 @@ export class HmiService {
       (value || !cell.isMotion) &&
       !this.safetyState.holdsControl(opts.userId, opts.clientId)
     ) {
-      throw new ForbiddenException(
+      this.refuseActivation(
+        opts,
+        cell.label,
         'Claim control before using operator buttons',
       );
     }
@@ -359,14 +384,16 @@ export class HmiService {
         userId: opts.userId ?? null,
         refresh: Boolean(opts.refresh),
       });
-      throw new ForbiddenException(
+      this.refuseActivation(
+        opts,
+        cell.label,
         'Motion blocked: claim control, hold deadman, and ensure normal safety mode',
       );
     }
 
     // Jog selectors and axis move pushbuttons (Home / Welding) need Enable.
     if (cell.isMotion && value) {
-      await this.assertEnableHeldForJog();
+      await this.assertEnableHeldForJog(opts, cell.label);
     }
 
     // STOP is one press. The PIN is only required to reset e-stop.
@@ -400,7 +427,7 @@ export class HmiService {
       } else if (reg.kind === 'holding') {
         await this.plcService.writeHolding(reg.address, on ? 1 : 0);
       } else {
-        throw new ForbiddenException('Register is read-only');
+        this.refuseActivation(opts, cell.label, 'Register is read-only');
       }
     };
 
@@ -429,19 +456,27 @@ export class HmiService {
       if (usesVariableSpeed && !value) {
         await this.writeJogSpeedPct(cell, null);
       }
+      if (cell.style === 'enable' && !value) {
+        await this.clearJogCoils();
+      }
     };
-
-    // Latch first so a failed STOP coil write still leaves software e-stop on.
-    if (isEStopCell && value) {
-      await this.safetyState.latchOperatorEStop(`STOP: ${cell.label}`);
-    }
 
     // Bundle jog+coil as one high-priority unit so a tag read cannot sneak in.
     const driver = this.plcService.getDriver();
-    if (typeof driver.runExclusive === 'function') {
-      await driver.runExclusive(writeMotion);
+    const performWrite = async () => {
+      if (typeof driver.runExclusive === 'function') {
+        await driver.runExclusive(writeMotion);
+      } else {
+        await writeMotion();
+      }
+    };
+
+    // Latch first. A frozen PLC must not hold the STOP response for the write timeout.
+    if (isEStopCell && value) {
+      await this.safetyState.latchOperatorEStop(`STOP: ${cell.label}`);
+      void performWrite().catch(() => undefined);
     } else {
-      await writeMotion();
+      await performWrite();
     }
 
     if (!opts.refresh) {
@@ -455,6 +490,7 @@ export class HmiService {
           resource: cell.label,
           details: [
             `${cell.label}=${value}`,
+            `client=${opts.clientId ?? ''}`,
             usesVariableSpeed ? `speed=${value ? speedMode : 'off'}` : null,
             opts.direction ? `dir=${opts.direction}` : null,
           ]
@@ -488,8 +524,34 @@ export class HmiService {
     };
   }
 
+  /** Enable release drops jog coils even if the client never sent jog false. */
+  private async clearJogCoils(): Promise<void> {
+    const motion = await this.cells.find({
+      where: { isMotion: true },
+      relations: { primaryRegister: true, secondaryRegister: true },
+    });
+    for (const jog of motion) {
+      for (const reg of [jog.primaryRegister, jog.secondaryRegister]) {
+        if (reg?.kind === 'coil') {
+          await this.plcService.writeCoil(reg.address, false);
+          this.safetyState.noteMotionCoilCleared(reg.address);
+        }
+      }
+    }
+  }
+
   /** P03A21: motion (jog selectors + axis move PBs) require Enable held. */
-  private async assertEnableHeldForJog(): Promise<void> {
+  private async assertEnableHeldForJog(
+    opts: {
+      userId?: string;
+      userEmail?: string;
+      userDisplayName?: string | null;
+      ip?: string;
+      refresh?: boolean;
+      clientId?: string | null;
+    },
+    label: string,
+  ): Promise<void> {
     const enable = await this.registers.findOneBy({
       name: pendantDiName('enable'),
     });
@@ -497,8 +559,116 @@ export class HmiService {
     const driver = this.plcService.getDriver();
     const [on] = await driver.readCoils(enable.address, 1);
     if (!on) {
-      throw new ForbiddenException('Hold Enable before using motion controls');
+      this.refuseActivation(
+        opts,
+        label,
+        'Hold Enable before using motion controls',
+      );
     }
+  }
+
+  private refuseActivation(
+    opts: {
+      userId?: string;
+      userEmail?: string;
+      userDisplayName?: string | null;
+      ip?: string;
+      refresh?: boolean;
+      clientId?: string | null;
+    },
+    resource: string,
+    message: string,
+  ): never {
+    if (!opts.refresh) {
+      void this.auditService
+        .write({
+          userId: opts.userId,
+          userEmail: opts.userEmail,
+          userDisplayName: opts.userDisplayName ?? null,
+          action: 'cell.activate',
+          resource,
+          details: `client=${opts.clientId ?? ''}; ${message}`,
+          ip: opts.ip,
+          result: 'failure',
+        })
+        .catch(() => undefined);
+    }
+    throw new ForbiddenException(message);
+  }
+
+  /**
+   * Raw coil writes use the same rules as a pendant press.
+   * Motion needs control, Enable, and deadman. Clearing e-stop needs the reset PIN.
+   */
+  async writeGuardedCoil(
+    address: number,
+    value: boolean,
+    opts: {
+      userId?: string;
+      userEmail?: string;
+      userDisplayName?: string | null;
+      role?: UserRole;
+      pin?: string;
+      ip?: string;
+      clientId?: string | null;
+    },
+  ): Promise<{ ok: true }> {
+    const rows = await this.cells.find({
+      relations: { primaryRegister: true, secondaryRegister: true },
+    });
+    const cell = rows.find((row) =>
+      [row.primaryRegister, row.secondaryRegister].some(
+        (reg) => reg?.kind === 'coil' && reg.address === address,
+      ),
+    );
+    const estop = cell
+      ? Boolean(cell.requiresSafeAction) ||
+        cell.style === 'estop' ||
+        cell.primaryRegister?.name === 'coil.eStop' ||
+        cell.secondaryRegister?.name === 'coil.eStop'
+      : await this.isEStopCoilAddress(address);
+    if (estop && !value) {
+      await this.safetyState.resetEStop(opts.pin ?? '', {
+        userId: opts.userId,
+        userEmail: opts.userEmail,
+        userDisplayName: opts.userDisplayName ?? null,
+        ip: opts.ip,
+      });
+      return { ok: true };
+    }
+    if (cell) {
+      const direction =
+        cell.style === 'selector'
+          ? cell.secondaryRegister?.address === address
+            ? 'b'
+            : 'a'
+          : undefined;
+      await this.activateCell(cell.id, value, {
+        userId: opts.userId,
+        userEmail: opts.userEmail,
+        userDisplayName: opts.userDisplayName,
+        role: opts.role,
+        safeActionPin: opts.pin,
+        ip: opts.ip,
+        clientId: opts.clientId,
+        direction,
+      });
+      return { ok: true };
+    }
+    if (estop && value) {
+      await this.safetyState.latchOperatorEStop('STOP: raw coil');
+    }
+    await this.plcService.writeCoil(address, value);
+    return { ok: true };
+  }
+
+  private async isEStopCoilAddress(address: number): Promise<boolean> {
+    const named = await this.registers.findOneBy({ name: 'coil.eStop' });
+    if (named?.kind === 'coil' && named.address === address) return true;
+    const roles = await this.safetyState.getRoles();
+    if (!roles.eStopRegisterId) return false;
+    const bound = await this.registers.findOneBy({ id: roles.eStopRegisterId });
+    return bound?.kind === 'coil' && bound.address === address;
   }
 
   /** FEAT-A2: write holding.speedPct for slow/fast jog (0 clears). */
@@ -540,6 +710,7 @@ export class HmiService {
     });
     if (!row) throw new NotFoundException('Cell not found');
     await this.assertStopCellNotDemoted(row, input);
+    await this.assertMotionNotDemoted(row, input, actor);
     const fields = await this.cellFields(input);
     Object.assign(row, fields);
     const saved = await this.cells.save(row);
@@ -602,6 +773,27 @@ export class HmiService {
         'The STOP cell cannot be changed away from e-stop',
       );
     }
+  }
+
+  /** Turning Motion off removes the Enable and deadman gates for that button. */
+  private async assertMotionNotDemoted(
+    row: Cell,
+    input: CellInput,
+    actor?: Actor,
+  ): Promise<void> {
+    if (!row.isMotion || input.isMotion !== false) return;
+    const ok = await this.safeActionPin.verify(actor?.userId, input.pin ?? '');
+    if (ok) return;
+    await this.auditService.write({
+      ...this.actorFields(actor),
+      action: 'cell.update_denied',
+      resource: row.label,
+      details: `${row.label} motion flag left unchanged`,
+      result: 'failure',
+    });
+    throw new ForbiddenException(
+      'PIN does not match — required to turn motion off',
+    );
   }
 
   async createOverlay(
@@ -782,6 +974,7 @@ interface CellInput {
   style: string;
   isMotion: boolean;
   requiresSafeAction: boolean;
+  pin?: string;
   variableSpeed?: boolean;
   slowSpeedPct?: number;
   fastSpeedPct?: number;

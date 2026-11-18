@@ -1,11 +1,18 @@
-import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DEMO_CRANE_MAP } from '@tele-pendant/modbus-core';
 import { cellRequiresControlLease } from '@tele-pendant/shared';
 import { Repository } from 'typeorm';
 import { AuditService } from '../../audit/providers/audit.service';
 import { Cell } from '../../cells/entities/cell.entity';
-import { PlcService } from '../../plc/providers/plc.service';
+import { plcServiceRef } from '../../plc/plc-service.ref';
+import type { PlcService } from '../../plc/providers/plc.service';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { AuditActor, auditWriteFields } from '../../common/audit-actor';
 import { motionDebug } from '../../common/motion-debug';
@@ -34,11 +41,13 @@ export interface SafetySnapshot {
  * Software safety supervision over Modbus (not a certified safety PLC).
  */
 @Injectable()
-export class SafetyStateService {
+export class SafetyStateService implements OnModuleInit {
   private readonly logger = new Logger(SafetyStateService.name);
   private mode: SafetyMode = 'normal';
   private deadmanActive = false;
   private eStopActive = false;
+  /** Mirrors the SQLite latch so a restart can restore STOP. */
+  private latchPersisted = false;
   private watchdogOk = true;
   private lastHeartbeatAt: Date | null = null;
   private lastClientPulseAt: Date | null = null;
@@ -56,12 +65,6 @@ export class SafetyStateService {
   private readonly watchdogTimeoutMs = 2000;
   /** Missed client pulses before motion drop (tight; WS pulse every 400ms). */
   private readonly deadmanTimeoutMs = 2500;
-  /**
-   * Transient Modbus timeouts must not clear motion coils (that freezes live
-   * height/trolley until the next press). Require consecutive tick failures.
-   */
-  private readonly commsFailThreshold = 3;
-  private consecutiveCommsFails = 0;
   private allowTimedMedia = false;
 
   private readonly plcService: PlcService;
@@ -73,7 +76,7 @@ export class SafetyStateService {
   private readonly controlLease: ControlLeaseService;
 
   constructor(
-    @Inject(PlcService) plcService: PlcService,
+    @Inject(plcServiceRef) plcService: PlcService,
     @Inject(AuditService) auditService: AuditService,
     @InjectRepository(Cell) cells: Repository<Cell>,
     @InjectRepository(RegisterMap) registers: Repository<RegisterMap>,
@@ -88,6 +91,14 @@ export class SafetyStateService {
     this.roles = roles;
     this.safeActionPin = safeActionPin;
     this.controlLease = controlLease;
+  }
+
+  async onModuleInit(): Promise<void> {
+    const existing = await this.roles.find({ take: 1 });
+    if (!existing[0]?.operatorEStopLatched) return;
+    this.latchPersisted = true;
+    this.eStopActive = true;
+    await this.enterMode('e_stop', 'Software e-stop still latched');
   }
 
   async getRoles(): Promise<SafetyRoles> {
@@ -186,7 +197,10 @@ export class SafetyStateService {
       await driver.writeCoil(address, false);
     }
     this.eStopActive = false;
-    if (this.mode === 'e_stop') this.mode = 'normal';
+    await this.persistEStopLatch(false);
+    if (this.mode === 'e_stop' || this.mode === 'comms_lost') {
+      this.mode = 'normal';
+    }
     await this.auditService.write({
       ...auditWriteFields(actor),
       action: 'safety.reset',
@@ -263,6 +277,7 @@ export class SafetyStateService {
     clientId?: string | null,
   ): ControlLeaseView {
     const control = this.controlLease.release(userId, clientId);
+    void this.settleControlLoss();
     void this.auditService.write({
       ...auditWriteFields(actor),
       action: 'safety.control_release',
@@ -301,6 +316,7 @@ export class SafetyStateService {
     if (previousUserId) {
       await this.releaseDeadman({ userId: previousUserId, force: true });
     }
+    await this.settleControlLoss();
     await this.auditService.write({
       ...auditWriteFields(actor),
       action: 'safety.control_steal',
@@ -468,23 +484,33 @@ export class SafetyStateService {
   /** Latch software e-stop after operator STOP until resetEStop(). */
   async latchOperatorEStop(reason = 'Operator STOP'): Promise<SafetySnapshot> {
     this.eStopActive = true;
+    await this.persistEStopLatch(true);
     await this.enterMode('e_stop', reason);
     return this.snapshot();
   }
 
+  private async persistEStopLatch(on: boolean): Promise<void> {
+    if (this.latchPersisted === on) return;
+    this.latchPersisted = on;
+    try {
+      const row = await this.getRoles();
+      if (Boolean(row.operatorEStopLatched) === on) return;
+      row.operatorEStopLatched = on;
+      await this.roles.save(row);
+    } catch (err) {
+      this.latchPersisted = !on;
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Could not store e-stop latch: ${message}`);
+    }
+  }
+
   async tick(): Promise<SafetySnapshot> {
+    await this.settleControlLoss();
     const driver = this.plcService.getDriver();
     if (!driver.isConnected()) {
-      this.consecutiveCommsFails += 1;
+      this.watchdogOk = false;
       // TP-39: never clear the software e-stop latch on comms loss.
-      if (this.consecutiveCommsFails >= this.commsFailThreshold) {
-        await this.enterMode('comms_lost', 'PLC disconnected');
-      } else {
-        this.watchdogOk = false;
-        this.logger.debug(
-          `PLC disconnected (fail ${this.consecutiveCommsFails}/${this.commsFailThreshold})`,
-        );
-      }
+      await this.enterMode('comms_lost', 'PLC disconnected');
       return this.snapshot();
     }
 
@@ -499,15 +525,17 @@ export class SafetyStateService {
       const coils = await driver.readCoils(eStopAddress, 1);
       const coilHigh = Boolean(coils[0]);
       // Latch sticks until resetEStop (PIN); coil high also asserts it.
-      this.eStopActive = this.eStopActive || coilHigh;
+      const wasLatched = this.eStopActive;
+      this.eStopActive = wasLatched || coilHigh;
+      if (this.eStopActive && !wasLatched) {
+        await this.persistEStopLatch(true);
+      }
       if (coilHigh) {
-        this.consecutiveCommsFails = 0;
         await this.enterMode('e_stop', 'E-stop coil asserted');
         return this.snapshot();
       }
       if (this.eStopActive) {
         // Re-assert e_stop after reconnect / coil drop until PIN reset (TP-39).
-        this.consecutiveCommsFails = 0;
         if (this.mode !== 'e_stop') {
           await this.enterMode('e_stop', 'Software e-stop still latched');
         }
@@ -524,7 +552,6 @@ export class SafetyStateService {
       await driver.writeRegister(heartbeat, beat);
       this.lastHeartbeatAt = new Date();
       this.watchdogOk = true;
-      this.consecutiveCommsFails = 0;
 
       // Deadman expiry (lost pulses) or pending drop after explicit release.
       if (
@@ -558,23 +585,24 @@ export class SafetyStateService {
         this.deadmanCoilHigh = true;
       }
 
-      if (this.mode !== 'normal' && !this.eStopActive) {
+      if (this.mode === 'safe_state' && !this.eStopActive) {
         this.mode = 'normal';
       }
     } catch (err) {
-      this.consecutiveCommsFails += 1;
       this.watchdogOk = false;
       const message = err instanceof Error ? err.message : 'watchdog failure';
-      if (this.consecutiveCommsFails >= this.commsFailThreshold) {
-        await this.enterMode('comms_lost', message);
-      } else {
-        this.logger.debug(
-          `PLC tick fail ${this.consecutiveCommsFails}/${this.commsFailThreshold}: ${message}`,
-        );
-      }
+      await this.enterMode('comms_lost', message);
     }
 
     return this.snapshot();
+  }
+
+  /** Drop motion and latched command coils after the control lease ends. */
+  private async settleControlLoss(): Promise<void> {
+    this.controlLease.expireIfStale();
+    if (!this.controlLease.consumeControlLost()) return;
+    await this.releaseDeadman({ force: true });
+    await this.clearCommandCoils();
   }
 
   private async clearMotionCoils(): Promise<void> {

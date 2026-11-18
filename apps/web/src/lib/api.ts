@@ -3,6 +3,40 @@ import { clearSession, isPublicAuthPath, redirectToLogin } from './session';
 
 const API_BASE = '/api/v1';
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+export function isUnauthorized(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401;
+}
+
+/** Bootstrap must not wait out a dead API. */
+export function rejectIfSlow<T>(work: Promise<T>, ms = 3000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new TypeError('Failed to fetch')),
+      ms,
+    );
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 export type ApiEnvelope<T> = { apiVersion: string; data: T };
 
 function authHeaders(json = true): HeadersInit {
@@ -45,7 +79,7 @@ async function handleFailedResponse(
     if (isPublicAuthPath()) clearSession();
     else redirectToLogin();
   }
-  throw new Error(await readErrorMessage(res));
+  throw new ApiError(await readErrorMessage(res), res.status);
 }
 
 export async function apiGet<T>(path: string): Promise<T> {

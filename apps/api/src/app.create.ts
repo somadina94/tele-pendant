@@ -125,7 +125,7 @@ export function appCreate(app: INestApplication): void {
   const localSwaggerUrl =
     process.env.APP_URL && /localhost|127\.0\.0\.1/.test(process.env.APP_URL)
       ? process.env.APP_URL
-      : `http://localhost:${process.env.PORT ?? 3010}`;
+      : `http://localhost:${process.env.SWAGGER_LOCAL_PORT ?? '4060'}`;
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Tele-Pendant API')
@@ -134,13 +134,16 @@ export function appCreate(app: INestApplication): void {
     )
     .setVersion('1.0')
     .addCookieAuth('access_token')
-    .addBearerAuth({
-      type: 'http',
-      scheme: 'bearer',
-      bearerFormat: 'JWT',
-      description:
-        'Paste `accessToken` from POST /api/v1/auth/login (or use oauth2 below for email + password).',
-    })
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description:
+          'Paste `accessToken` from POST /api/v1/auth/login. Swagger sends it as Authorization: Bearer.',
+      },
+      'bearer',
+    )
     .addOAuth2(
       {
         type: 'oauth2',
@@ -171,7 +174,11 @@ export function appCreate(app: INestApplication): void {
 
   if (process.env.NODE_ENV !== 'production') {
     const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('api', app, document);
+    SwaggerModule.setup('api', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
+    });
   }
 
   // TP-44: do not reflect arbitrary Origin with credentials.

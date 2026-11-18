@@ -13,6 +13,7 @@ type AuditRow = {
   action: string;
   resource?: string | null;
   result: string;
+  clientId?: string | null;
   createdAt: string;
 };
 
@@ -55,6 +56,7 @@ function AuditListItem({ row }: { row: AuditRow }) {
       <AuditFieldRow label="Action" value={row.action} />
       <AuditFieldRow label="Resource" value={row.resource?.trim() || '—'} />
       <AuditFieldRow label="Result" value={row.result} />
+      <AuditFieldRow label="Device" value={row.clientId?.trim() || '—'} />
       <Text className="pt-0.5 text-xs text-muted-foreground">
         {new Date(row.createdAt).toLocaleString()}
       </Text>

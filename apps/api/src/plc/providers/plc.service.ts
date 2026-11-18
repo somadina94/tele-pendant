@@ -294,7 +294,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
           host: connection.host,
           port: connection.port,
           unitId: connection.unitId,
-          timeoutMs: 3000,
+          timeoutMs: 1000,
         });
         if (generation !== this.connectGeneration) {
           await this.driver.disconnect();

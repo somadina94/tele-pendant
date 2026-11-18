@@ -44,6 +44,12 @@ pnpm docker:dev
 # or: pnpm docker:dev:watch
 ```
 
+## Production build (what is shipped)
+
+The production API image copies `apps/api/dist` only. TypeScript sources are not deployed. `apps/api/tsconfig.json` sets `sourceMap` to false, and the image build deletes any `.map` files under `apps/api/dist`. The web image copies the Vite `dist` assets. The phone binary from `pnpm --filter @tele-pendant/mobile apk:release` is already minified.
+
+Node still runs JavaScript. `dist` is compiled JavaScript, not a native binary. A reader of the image can still open those files. Shipping `dist` without the TypeScript sources and without source maps is what this build does. It is not a native compile.
+
 ## Docker production
 
 ```bash
@@ -62,7 +68,7 @@ cp .env.example .env
 
 ## Database migrations (upgrades)
 
-TypeORM migrations live in `apps/api/src/database/migrations/`. `DATABASE_SYNC` stays off in production. After pulling a release that adds migrations (for example `1762380000000-AddUserSuspended` for account suspension), run:
+TypeORM migrations live in `apps/api/src/database/migrations/`. `DATABASE_SYNC` stays off in production. After pulling a release that adds migrations (for example `1762385000000-AddOperatorEStopLatched` for the persisted STOP latch, or `1762380000000-AddUserSuspended` for account suspension), run:
 
 ```bash
 pnpm --filter @tele-pendant/api build

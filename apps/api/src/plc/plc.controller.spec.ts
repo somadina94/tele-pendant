@@ -13,6 +13,9 @@ describe('PlcController', () => {
   const auditService = {
     write: jest.fn().mockResolvedValue({ id: 'a1' }),
   };
+  const hmi = {
+    writeGuardedCoil: jest.fn().mockResolvedValue({ ok: true }),
+  };
   const adminReq = {
     user: {
       sub: 'admin-1',
@@ -21,13 +24,18 @@ describe('PlcController', () => {
       role: UserRole.ADMIN,
     },
     ip: '127.0.0.1',
+    headers: {},
   };
 
   let controller: PlcController;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new PlcController(plcService as never, auditService as never);
+    controller = new PlcController(
+      plcService as never,
+      auditService as never,
+      hmi as never,
+    );
   });
 
   it('allows only admin on raw coil and holding writes (TP-36)', () => {
@@ -47,7 +55,15 @@ describe('PlcController', () => {
     await expect(
       controller.writeCoil({ address: 11, value: false }, adminReq as never),
     ).resolves.toEqual({ ok: true });
-    expect(plcService.writeCoil).toHaveBeenCalledWith(11, false);
+    expect(hmi.writeGuardedCoil).toHaveBeenCalledWith(11, false, {
+      userId: 'admin-1',
+      userEmail: 'admin@example.com',
+      userDisplayName: 'Administrator',
+      role: UserRole.ADMIN,
+      pin: undefined,
+      ip: '127.0.0.1',
+      clientId: '',
+    });
     expect(auditService.write).toHaveBeenCalledWith({
       userId: 'admin-1',
       userEmail: 'admin@example.com',

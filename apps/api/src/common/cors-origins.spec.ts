@@ -90,6 +90,21 @@ describe('cors-origins (TP-44)', () => {
     expect(isCorsOriginAllowed('https://evil.example', env)).toBe(false);
     expect(isCorsOriginAllowed('not-a-url', env)).toBe(false);
     expect(isCorsOriginAllowed('ftp://localhost', env)).toBe(false);
+    expect(isCorsOriginAllowed('https://pendant.ngrok-free.app', env)).toBe(
+      true,
+    );
+    expect(isCorsOriginAllowed('https://pendant.ngrok.app', env)).toBe(true);
+    expect(isCorsOriginAllowed('https://pendant.ngrok.io', env)).toBe(true);
+    expect(isCorsOriginAllowed('https://ngrok.io', env)).toBe(true);
+    expect(isCorsOriginAllowed('https://ngrok.app', env)).toBe(true);
+    expect(isCorsOriginAllowed('https://ngrok.dev', env)).toBe(true);
+    expect(isCorsOriginAllowed('https://pendant.ngrok.dev', env)).toBe(true);
+    expect(isCorsOriginAllowed('https://pendant.ngrok-free.dev', env)).toBe(
+      true,
+    );
+    expect(isCorsOriginAllowed('https://evil.ngrok.io.attacker.com', env)).toBe(
+      false,
+    );
   });
 
   it('delegates for Nest/Socket.IO cors callbacks', () => {

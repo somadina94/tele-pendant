@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { getControlClientId } from './control-client-id';
 import { notifyUnauthorized } from './session';
+import { ApiStatusError } from './session-failure';
 import { clearAccessToken } from './token-storage';
 
 const LIVE_API = 'https://api.tele-pendant.jahbyte.com/api/v1';
@@ -59,7 +60,10 @@ async function apiSend<T>(
     } catch {
       message = text;
     }
-    throw new Error(message || `Request failed (${res.status})`);
+    throw new ApiStatusError(
+      message || `Request failed (${res.status})`,
+      res.status,
+    );
   }
   const json = (await res.json()) as { data: T };
   return json.data;

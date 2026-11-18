@@ -13,7 +13,6 @@ The lockfile also installs their dependencies. Those stay under the licence of e
 | @babel/core | 7.29.13 | MIT |
 | @babel/plugin-transform-react-jsx | 7.29.7 | MIT |
 | @babel/runtime | 7.29.13 | MIT |
-| @cursor/sdk | 1.3.1 | Cursor Terms of Service |
 | @nestjs/common | 11.2.8 | MIT |
 | @nestjs/config | 4.0.4 | MIT |
 | @nestjs/core | 11.2.8 | MIT |
@@ -100,7 +99,7 @@ The lockfile also installs their dependencies. Those stay under the licence of e
 | tailwindcss | 3.4.19 | MIT |
 | typeorm | 0.3.31 | MIT |
 
-`@cursor/sdk` is the assistant client. Its package `LICENSE.md` says use is subject to Cursor's Terms of Service (https://cursor.com/terms-of-service). It is not an open-source licence.
+The assistant answers from the local manual index. `@cursor/sdk` is not a dependency of this delivery, so a commercial build does not accept the Cursor Terms of Service. If someone installs that package later, its `LICENSE.md` says use is subject to https://cursor.com/terms-of-service. That is not an open-source licence.
 
 ## Development tools
 
@@ -170,6 +169,10 @@ These are not direct dependencies. They are in the lockfile because another pack
 
 `node-forge` offers either licence. This delivery uses the BSD-3-Clause option.
 
-A few older transitive packages do not ship a licence field or a LICENSE file: `callsite` 1.0.0, `pause` 0.0.1, and `precond` 0.2.3. Their texts are the files installed with the package.
+`caniuse-lite` is CC-BY-4.0. It carries browser-support data from caniuse.com, used by the web build tools. Attribution: Can I Use (https://caniuse.com). The licence is https://creativecommons.org/licenses/by/4.0/.
+
+`argparse` is under the Python Software Foundation Licence, version 2 (PSF-2.0). The text is the historical PSF licence shipped with that package: https://docs.python.org/3/license.html. It is not the MIT licence.
+
+`callsite` 1.0.0, `pause` 0.0.1, and `precond` 0.2.3 ship no licence field and no LICENSE file. This delivery does not treat them as MIT, BSD, or Apache. No grant text was included with those packages, so their terms are unstated. Do not assume a right to relicense them.
 
 Other transitive packages are MIT, MIT-0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, or a dual grant of those (for example Apache-2.0 OR MIT).

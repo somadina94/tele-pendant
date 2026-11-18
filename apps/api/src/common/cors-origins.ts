@@ -37,7 +37,19 @@ export function isCorsOriginAllowed(
   try {
     const url = new URL(normalized);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-    return url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    const host = url.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1') return true;
+    // Phone testing via ngrok. Production stays on FRONTEND_URL only.
+    return (
+      host === 'ngrok.io' ||
+      host.endsWith('.ngrok.io') ||
+      host === 'ngrok.app' ||
+      host.endsWith('.ngrok.app') ||
+      host === 'ngrok.dev' ||
+      host.endsWith('.ngrok.dev') ||
+      host.endsWith('.ngrok-free.app') ||
+      host.endsWith('.ngrok-free.dev')
+    );
   } catch {
     return false;
   }

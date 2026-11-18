@@ -30,6 +30,8 @@ export default defineConfig({
   },
   server: {
     host: process.env.VITE_DEV_API_PROXY ? '0.0.0.0' : '127.0.0.1',
+    // ngrok sends its public hostname. Vite otherwise answers 403.
+    allowedHosts: true,
     port: 5173,
     headers: webSecurityHeaders,
     proxy: {

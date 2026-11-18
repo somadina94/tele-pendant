@@ -1,4 +1,8 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { SafeActionPinService } from './safe-action-pin.service';
 
@@ -13,12 +17,60 @@ describe('SafeActionPinService', () => {
     findOneByOrFail: jest.fn(),
     save: jest.fn(async (u) => u),
   };
+  const audit = {
+    write: jest.fn().mockResolvedValue({}),
+  };
   let service: SafeActionPinService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useRealTimers();
     delete process.env.SAFE_ACTION_PIN;
-    service = new SafeActionPinService(users as never);
+    service = new SafeActionPinService(users as never, audit as never);
+  });
+
+  it('locks a user for 15 minutes after 5 wrong PINs', async () => {
+    process.env.SAFE_ACTION_PIN = 'plant';
+    users.findOneBy.mockResolvedValue({ id: 'u1', safeActionPinHash: null });
+    for (let i = 0; i < 4; i += 1) {
+      await expect(service.verify('u1', 'wrong')).resolves.toBe(false);
+    }
+    await expect(service.verify('u1', 'wrong')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(audit.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'safety.pin_lockout',
+        userId: 'u1',
+        result: 'failure',
+      }),
+    );
+    await expect(service.verify('u1', 'plant')).rejects.toThrow(/locked/);
+    await expect(service.changePin('u1', 'plant', '5678')).rejects.toThrow(
+      /locked/,
+    );
+
+    jest.useFakeTimers();
+    jest.setSystemTime(Date.now() + 15 * 60 * 1000 + 1);
+    await expect(service.verify('u1', 'wrong')).resolves.toBe(false);
+    await expect(service.verify('u1', 'plant')).resolves.toBe(true);
+
+    audit.write.mockRejectedValueOnce(new Error('disk'));
+    for (let i = 0; i < 4; i += 1) {
+      await expect(service.verify('u1', 'wrong')).resolves.toBe(false);
+    }
+    await expect(service.verify('u1', 'wrong')).rejects.toThrow(/locked/);
+
+    for (let i = 0; i < 4; i += 1) {
+      await expect(service.verify(undefined, 'nope')).resolves.toBe(false);
+    }
+    await expect(service.verify(undefined, 'nope')).rejects.toThrow(/locked/);
+    expect(audit.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'safety.pin_lockout',
+        userId: null,
+      }),
+    );
   });
 
   it('verifies plant fallback when user has no personal hash', async () => {

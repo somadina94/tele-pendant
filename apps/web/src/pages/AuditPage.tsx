@@ -261,13 +261,14 @@ export function AuditPage() {
                   <TableHead>Action</TableHead>
                   <TableHead>Resource</TableHead>
                   <TableHead>Result</TableHead>
+                  <TableHead>Device</TableHead>
                   <TableHead>Time</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
+                    <TableCell colSpan={6} className="text-muted-foreground">
                       No audit entries match these filters.
                     </TableCell>
                   </TableRow>
@@ -278,6 +279,7 @@ export function AuditPage() {
                     <TableCell>{row.action}</TableCell>
                     <TableCell>{row.resource ?? '—'}</TableCell>
                     <TableCell>{row.result}</TableCell>
+                    <TableCell>{row.clientId ?? ''}</TableCell>
                     <TableCell>
                       {format(new Date(row.createdAt), 'PPpp')}
                     </TableCell>

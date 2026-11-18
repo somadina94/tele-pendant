@@ -6,8 +6,8 @@ import { ApiBearerAuth, ApiCookieAuth, ApiOAuth2 } from '@nestjs/swagger';
  */
 export function ApiAuth() {
   return applyDecorators(
-    ApiCookieAuth('access_token'),
-    ApiBearerAuth(),
+    ApiBearerAuth('bearer'),
+    ApiCookieAuth('cookie'),
     ApiOAuth2([], 'oauth2'),
   );
 }

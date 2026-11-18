@@ -68,6 +68,9 @@ describe('HmiService', () => {
     canIssueMotion: jest.fn().mockReturnValue(false),
     snapshot: jest.fn().mockReturnValue({ mode: 'normal', eStopActive: false }),
     latchOperatorEStop: jest.fn().mockResolvedValue({ mode: 'e_stop' }),
+    resetEStop: jest
+      .fn()
+      .mockResolvedValue({ mode: 'normal', eStopActive: false }),
     noteMotionCoilAsserted: jest.fn(),
     noteMotionCoilCleared: jest.fn(),
     getRoles: jest.fn().mockResolvedValue({
@@ -368,6 +371,36 @@ describe('HmiService', () => {
     expect(plcService.writeCoil).toHaveBeenCalledWith(27, false);
   });
 
+  it('drops jog coils when Enable is released through the API', async () => {
+    cells.findOne.mockResolvedValue({
+      id: 'en',
+      label: 'Enable',
+      style: 'enable',
+      isMotion: false,
+      primaryRegister: {
+        kind: 'coil',
+        address: 43,
+        name: 'coil.p03a21.di.enable',
+      },
+    });
+    cells.find.mockResolvedValue([
+      {
+        isMotion: true,
+        primaryRegister: { kind: 'coil', address: 26 },
+        secondaryRegister: { kind: 'coil', address: 27 },
+      },
+    ]);
+    await service.activateCell('en', false, {
+      role: UserRole.OPERATOR,
+      userId: 'u1',
+    });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(43, false);
+    expect(plcService.writeCoil).toHaveBeenCalledWith(26, false);
+    expect(plcService.writeCoil).toHaveBeenCalledWith(27, false);
+    expect(safetyState.noteMotionCoilCleared).toHaveBeenCalledWith(26);
+    expect(safetyState.noteMotionCoilCleared).toHaveBeenCalledWith(27);
+  });
+
   it('blocks jog selectors when Enable is not held', async () => {
     cells.findOne.mockResolvedValue({
       ...motionCell,
@@ -583,10 +616,13 @@ describe('HmiService', () => {
       variableSpeed: false,
     });
     plcService.writeCoil.mockRejectedValueOnce(new Error('write failed'));
-    await expect(
-      service.activateCell('stop', true, { role: UserRole.OPERATOR }),
-    ).rejects.toThrow('write failed');
+    const result = await service.activateCell('stop', true, {
+      role: UserRole.OPERATOR,
+    });
+    expect(result).toEqual(expect.objectContaining({ ok: true, value: true }));
     expect(safetyState.latchOperatorEStop).toHaveBeenCalledWith('STOP: STOP');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(plcService.writeCoil).toHaveBeenCalled();
   });
 
   it('writes holding.speedPct for slow vs fast motion jogs (FEAT-A2)', async () => {
@@ -835,6 +871,236 @@ describe('HmiService', () => {
     feedbackRegisterId: 'f1',
     statusRegisterId: 's1',
   };
+
+  it('audits a refused press with the control client id', async () => {
+    safetyState.holdsControl.mockReturnValue(false);
+    cells.findOne.mockResolvedValue({
+      ...motionCell,
+      isMotion: false,
+      style: 'pushbutton',
+      label: 'Teach',
+    });
+    await expect(
+      service.activateCell('c1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+        clientId: 'device-2',
+      }),
+    ).rejects.toThrow(/Claim control/);
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'cell.activate',
+        resource: 'Teach',
+        result: 'failure',
+        details: expect.stringContaining('client=device-2'),
+      }),
+    );
+
+    auditService.write.mockClear();
+    auditService.write.mockRejectedValueOnce(new Error('disk'));
+    await expect(
+      service.activateCell('c1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+        clientId: 'device-2',
+      }),
+    ).rejects.toThrow(/Claim control/);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    auditService.write.mockClear();
+    await expect(
+      service.activateCell('c1', true, {
+        role: UserRole.OPERATOR,
+        userId: 'u1',
+        clientId: 'device-2',
+        refresh: true,
+      }),
+    ).rejects.toThrow(/Claim control/);
+    expect(auditService.write).not.toHaveBeenCalled();
+  });
+
+  it('applies pendant rules to a raw coil write', async () => {
+    const jog = {
+      id: 'jog',
+      label: 'Jog',
+      style: 'selector',
+      isMotion: true,
+      primaryRegister: { kind: 'coil', address: 26, name: 'coil.up' },
+      secondaryRegister: { kind: 'coil', address: 27, name: 'coil.down' },
+    };
+    cells.find.mockResolvedValue([jog]);
+    cells.findOne.mockImplementation(async () => jog);
+    safetyState.canIssueMotion.mockReturnValue(false);
+    await expect(
+      service.writeGuardedCoil(26, true, { userId: 'u1', clientId: 'c1' }),
+    ).rejects.toThrow(/Motion blocked/);
+    expect(plcService.writeCoil).not.toHaveBeenCalled();
+
+    safetyState.canIssueMotion.mockReturnValue(true);
+    registers.findOneBy.mockResolvedValue(null);
+    plcService.getDriver.mockReturnValue({
+      readCoils: jest.fn().mockResolvedValue([true]),
+    });
+    await service.writeGuardedCoil(26, true, {
+      userId: 'u1',
+      clientId: 'c1',
+      role: UserRole.OPERATOR,
+    });
+    await service.writeGuardedCoil(27, true, {
+      userId: 'u1',
+      clientId: 'c1',
+      role: UserRole.OPERATOR,
+    });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(27, true);
+
+    const enable = {
+      id: 'en',
+      label: 'Enable',
+      style: 'enable',
+      isMotion: false,
+      primaryRegister: {
+        kind: 'coil',
+        address: 43,
+        name: 'coil.p03a21.di.enable',
+      },
+    };
+    cells.find.mockResolvedValue([enable]);
+    cells.findOne.mockResolvedValue(enable);
+    await service.writeGuardedCoil(43, false, {
+      userId: 'u1',
+      clientId: 'c1',
+    });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(43, false);
+
+    cells.find.mockResolvedValue([]);
+    safetyState.resetEStop.mockRejectedValueOnce(
+      new ForbiddenException('PIN does not match'),
+    );
+    registers.findOneBy.mockResolvedValue({
+      name: 'coil.eStop',
+      kind: 'coil',
+      address: 11,
+    });
+    await expect(
+      service.writeGuardedCoil(11, false, { userId: 'u1', pin: 'nope' }),
+    ).rejects.toThrow(/PIN does not match/);
+
+    safetyState.getRoles.mockResolvedValueOnce({
+      eStopRegisterId: 'bound-estop',
+      deadmanRegisterId: null,
+      heartbeatRegisterId: null,
+      safeStateRegisterId: null,
+    });
+    registers.findOneBy.mockImplementation(
+      async (q: { name?: string; id?: string }) => {
+        if (q.name === 'coil.eStop') return null;
+        if (q.id === 'bound-estop') {
+          return { id: q.id, kind: 'coil', address: 12, name: 'coil.bound' };
+        }
+        return null;
+      },
+    );
+    await service.writeGuardedCoil(12, false, { userId: 'u1', pin: '1234' });
+    expect(safetyState.resetEStop).toHaveBeenCalled();
+
+    registers.findOneBy.mockResolvedValue({
+      name: 'coil.eStop',
+      kind: 'coil',
+      address: 11,
+    });
+    await service.writeGuardedCoil(11, false, { userId: 'u1' });
+    await service.writeGuardedCoil(11, true, { userId: 'u1' });
+    expect(safetyState.latchOperatorEStop).toHaveBeenCalledWith(
+      'STOP: raw coil',
+    );
+    expect(plcService.writeCoil).toHaveBeenCalledWith(11, true);
+
+    safetyState.getRoles.mockResolvedValueOnce({
+      eStopRegisterId: null,
+      deadmanRegisterId: null,
+      heartbeatRegisterId: null,
+      safeStateRegisterId: null,
+    });
+    registers.findOneBy.mockResolvedValue(null);
+    await service.writeGuardedCoil(99, true, { userId: 'u1' });
+    expect(plcService.writeCoil).toHaveBeenCalledWith(99, true);
+  });
+
+  it('requires a PIN to move Enable or turn motion off', async () => {
+    registers.findOneBy.mockResolvedValue({
+      id: 'en',
+      name: 'coil.p03a21.di.enable',
+      address: 43,
+    });
+    await expect(
+      service.updateRegister('en', 44, { userId: 'u1' }, { pin: 'nope' }),
+    ).rejects.toThrow(/PIN does not match/);
+    expect(registers.save).not.toHaveBeenCalled();
+
+    registers.findOneBy.mockResolvedValue({
+      id: 'custom-en',
+      name: 'coil.customEnable',
+      address: 43,
+    });
+    cells.findOne.mockResolvedValue({
+      style: 'enable',
+      primaryRegister: { id: 'custom-en' },
+    });
+    await expect(
+      service.updateRegister('custom-en', 44, { userId: 'u1' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    cells.findOne.mockResolvedValue({
+      style: 'enable',
+      primaryRegister: { id: 'other' },
+    });
+    await service.updateRegister('custom-en', 44, { userId: 'u1' });
+    expect(registers.save).toHaveBeenCalled();
+
+    cells.findOne.mockResolvedValue({
+      id: 'jog',
+      label: 'Jog',
+      isMotion: true,
+      style: 'pushbutton',
+      primaryRegister: { name: 'coil.jog' },
+    });
+    registers.findOneBy.mockImplementation(async ({ id }: { id: string }) => ({
+      id,
+      name: id,
+    }));
+    await expect(
+      service.updateCell(
+        'jog',
+        {
+          row: 0,
+          col: 0,
+          label: 'Jog',
+          style: 'pushbutton',
+          isMotion: false,
+          requiresSafeAction: false,
+          primaryRegisterId: 'p1',
+        },
+        { userId: 'u1' },
+      ),
+    ).rejects.toThrow(/turn motion off/);
+    expect(cells.save).not.toHaveBeenCalled();
+
+    const saved = await service.updateCell(
+      'jog',
+      {
+        row: 0,
+        col: 0,
+        label: 'Jog',
+        style: 'pushbutton',
+        isMotion: false,
+        requiresSafeAction: false,
+        primaryRegisterId: 'p1',
+        pin: '1234',
+      },
+      { userId: 'u1' },
+    );
+    expect(saved.isMotion).toBe(false);
+  });
 
   it('creates and updates cells with optional addresses', async () => {
     registers.findOneBy.mockImplementation(async ({ id }: { id: string }) => ({

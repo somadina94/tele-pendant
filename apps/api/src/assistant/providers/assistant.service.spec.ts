@@ -1,4 +1,4 @@
-import { AssistantService } from './assistant.service';
+import { AssistantService, loadCursorSdk } from './assistant.service';
 import {
   mkdtempSync,
   rmSync,
@@ -10,14 +10,18 @@ import {
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-jest.mock('@cursor/sdk', () => ({
-  Agent: {
-    prompt: jest.fn(),
-  },
-  CursorAgentError: class CursorAgentError extends Error {
-    isRetryable = false;
-  },
-}));
+jest.mock(
+  '@cursor/sdk',
+  () => ({
+    Agent: {
+      prompt: jest.fn(),
+    },
+    CursorAgentError: class CursorAgentError extends Error {
+      isRetryable = false;
+    },
+  }),
+  { virtual: true },
+);
 
 import { Agent, CursorAgentError } from '@cursor/sdk';
 
@@ -36,7 +40,7 @@ describe('AssistantService', () => {
   let service: AssistantService;
   let prevCwd: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     prevCwd = process.cwd();
     mkdirSync(docsDir, { recursive: true });
     writeFileSync(join(docsDir, 'tip.md'), 'deadman hold tip');
@@ -48,6 +52,7 @@ describe('AssistantService', () => {
     process.chdir(dir);
     service = new AssistantService(configService as never);
     service.onModuleInit();
+    await service.loadSdk();
   });
 
   afterAll(() => {
@@ -56,6 +61,10 @@ describe('AssistantService', () => {
   });
 
   beforeEach(() => {
+    service.loadSdk = async () => ({
+      Agent: Agent,
+      CursorAgentError: CursorAgentError,
+    });
     (Agent.prompt as jest.Mock).mockReset();
     configService.get.mockImplementation((key: string) => {
       if (key === 'database.path') return join(dir, 'tele.sqlite');
@@ -181,6 +190,24 @@ describe('AssistantService', () => {
     expect(updated.indexed).toBeGreaterThan(0);
     expect(service.search('shelve').length).toBeGreaterThan(0);
     service.updateSettings({ docsRoot: 'docs', docsLink: '' });
+  });
+
+  it('answers from local search when the Cursor SDK is absent', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'database.path') return join(dir, 'tele.sqlite');
+      if (key === 'appConfig.cursor.apiKey') return 'cursor_test_key';
+      return undefined;
+    });
+    service.loadSdk = async () => null;
+    const missing = await service.ask('How does deadman work?');
+    expect(missing.mode).toBe('local-fts');
+    expect(missing.note).toContain('not installed');
+    await loadCursorSdk();
+    await expect(
+      loadCursorSdk(async () => {
+        throw new Error('absent');
+      }),
+    ).resolves.toBeNull();
   });
 
   it('uses Cursor Agent when API key is configured', async () => {

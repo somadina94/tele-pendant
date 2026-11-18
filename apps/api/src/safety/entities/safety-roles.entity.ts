@@ -20,4 +20,12 @@ export class SafetyRoles {
   /** One-tap Media UP/DOWN and spoken jogs. Default off (hold-to-run only). */
   @Column({ name: 'allow_timed_media_motion', type: 'boolean', default: false })
   allowTimedMediaMotion!: boolean;
+
+  /** Software STOP latch. Survives an API restart while the PLC coil is low. */
+  @Column({
+    name: 'operator_estop_latched',
+    type: 'boolean',
+    default: false,
+  })
+  operatorEStopLatched!: boolean;
 }

@@ -212,9 +212,8 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
   /** Secondary Modbus work — never blocks the live 250ms path. */
   private async heavyRefresh(): Promise<void> {
     if (this.heavyInFlight) return;
-    // Pause named-map reads while Operator is holding — frees the bus for coils.
-    if (this.safetyState.snapshot().deadmanActive) return;
     if (!this.plcService.getDriver().isConnected()) return;
+    const holding = this.safetyState.snapshot().deadmanActive;
     this.heavyInFlight = true;
     try {
       if (this.lastTags) {
@@ -232,9 +231,11 @@ export class TagPollerService implements OnModuleInit, OnModuleDestroy {
           // keep core snapshot
         }
       }
-      const series = await this.plcService.trendedSamples();
-      for (const sample of series) {
-        await this.trends.record(sample.key, sample.value);
+      if (!holding) {
+        const series = await this.plcService.trendedSamples();
+        for (const sample of series) {
+          await this.trends.record(sample.key, sample.value);
+        }
       }
     } catch (err) {
       this.logger.debug(

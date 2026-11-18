@@ -5,6 +5,7 @@ export interface AuditRow {
   action: string;
   resource?: string | null;
   result: string;
+  clientId?: string | null;
   createdAt: string;
 }
 

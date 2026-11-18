@@ -1,0 +1,11 @@
+Tele-Pendant proprietary licence
+
+Copyright (c) 2026 Williams. All rights reserved.
+
+This licence covers the Tele-Pendant software in this repository, including the API, web operator, phone app, and the project packages under packages/. Third-party libraries keep the licences named in docs/LICENSES.md.
+
+Parijat may use, copy, modify, and sell the delivered software as part of Parijat's products and services. Parijat does not have to publish the source code of this software.
+
+No other person receives a licence to use, copy, modify, or distribute the software. The software is not open source.
+
+The software is provided as delivered. It is a software supervisor for a pendant. It is not a certified safety system.

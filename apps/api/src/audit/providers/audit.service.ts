@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { ParsedAuditListQuery } from '../dtos/list-audit-query.dto';
+import { auditRequestContext } from '../audit-request-context';
 import { AuditLog } from '../entities/audit-log.entity';
 import { auditLogsToCsv } from './audit-csv';
 
@@ -14,6 +15,8 @@ export interface WriteAuditInput {
   resource?: string | null;
   details?: string | null;
   ip?: string | null;
+  /** Tab/device. Omitted writes use the header from the current request. */
+  clientId?: string | null;
   result?: string;
 }
 
@@ -48,6 +51,7 @@ export class AuditService {
       resource: input.resource ?? null,
       details: input.details ?? null,
       ip: input.ip ?? null,
+      clientId: this.resolveClientId(input.clientId),
       result: input.result ?? 'success',
     });
     return this.auditRepository.save(entry);
@@ -103,6 +107,12 @@ export class AuditService {
       pageSize: EXPORT_MAX_ROWS,
     });
     return auditLogsToCsv(result.items);
+  }
+
+  private resolveClientId(explicit?: string | null): string | null {
+    const chosen = explicit ?? auditRequestContext.getStore()?.clientId ?? null;
+    const trimmed = chosen?.trim() || null;
+    return trimmed;
   }
 
   private async enrichDisplayNames(rows: AuditLog[]): Promise<void> {

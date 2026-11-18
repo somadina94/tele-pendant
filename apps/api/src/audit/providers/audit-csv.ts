@@ -17,6 +17,7 @@ export function auditLogsToCsv(rows: AuditLog[]): string {
     'Result',
     'Details',
     'IP',
+    'Device',
   ];
   const lines = [header.join(',')];
   for (const row of rows) {
@@ -30,6 +31,7 @@ export function auditLogsToCsv(rows: AuditLog[]): string {
         row.result,
         row.details ?? '',
         row.ip ?? '',
+        row.clientId ?? '',
       ]
         .map((cell) => csvCell(String(cell)))
         .join(','),

@@ -12,6 +12,8 @@ import { LogIn, ScanFace } from 'lucide-react-native';
 import type { Locale, UserRole } from '@tele-pendant/shared';
 import { isUserRole } from '@tele-pendant/shared';
 import { apiGet, apiPost } from './src/api';
+import { HardwareStopNotice } from './src/hardware-stop';
+import { isUnauthorized, rejectIfSlow } from './src/session-failure';
 import {
   clearStoredUser,
   getStoredUserRole,
@@ -265,37 +267,55 @@ function Pendant() {
   const [token, setToken] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [booting, setBooting] = useState(true);
+  const [offline, setOffline] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    let timer = 0;
     const started = Date.now();
-    void (async () => {
+    const probe = async () => {
+      const saved = await getAccessToken();
+      if (!saved) {
+        if (!cancelled) {
+          setToken(null);
+          setOffline(false);
+        }
+        return;
+      }
       try {
-        const saved = await getAccessToken();
-        if (!saved) return;
-        try {
-          const me = await apiGet<StoredUser>('/auth/me', saved);
-          await persistUser(me);
-          if (!cancelled) {
-            setToken(saved);
-            setUserRole(isUserRole(me.role) ? me.role : null);
-          }
-        } catch {
+        const me = await rejectIfSlow(apiGet<StoredUser>('/auth/me', saved));
+        await persistUser(me);
+        if (!cancelled) {
+          setToken(saved);
+          setUserRole(isUserRole(me.role) ? me.role : null);
+          setOffline(false);
+        }
+      } catch (err) {
+        if (isUnauthorized(err)) {
           await clearAccessToken();
           await clearStoredUser();
           if (!cancelled) {
             setToken(null);
             setUserRole(null);
+            setOffline(false);
           }
+          return;
         }
-      } finally {
-        const wait = Math.max(0, SPLASH_MIN_MS - (Date.now() - started));
-        await new Promise((resolve) => setTimeout(resolve, wait));
-        if (!cancelled) setBooting(false);
+        if (!cancelled) {
+          setOffline(true);
+          timer = setTimeout(() => void probe(), 1000);
+        }
       }
+    };
+    void (async () => {
+      await probe();
+      const wait = Math.max(0, SPLASH_MIN_MS - (Date.now() - started));
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      if (!cancelled) setBooting(false);
     })();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, []);
 
@@ -360,6 +380,10 @@ function Pendant() {
 
   if (booting) {
     return <BootSplash />;
+  }
+
+  if (offline) {
+    return <HardwareStopNotice />;
   }
 
   if (!token) {

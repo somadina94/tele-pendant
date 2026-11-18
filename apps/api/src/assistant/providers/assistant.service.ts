@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Agent, CursorAgentError } from '@cursor/sdk';
 import Database from 'better-sqlite3';
 import { mkdirSync, readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { basename, isAbsolute, join, resolve } from 'path';
@@ -19,6 +18,32 @@ export interface AssistantSettings {
   cursorConfigured: boolean;
 }
 
+type CursorSdk = {
+  Agent: {
+    prompt: (
+      prompt: string,
+      options: {
+        apiKey: string;
+        model: { id: string };
+        local: { cwd: string };
+      },
+    ) => Promise<{ status?: string; result?: string }>;
+  };
+  CursorAgentError: new (message?: string) => Error;
+};
+
+/** Local FTS stays available when a commercial build omits @cursor/sdk. */
+export async function loadCursorSdk(
+  importer?: () => Promise<CursorSdk>,
+): Promise<CursorSdk | null> {
+  try {
+    const load = importer ?? (() => import('@cursor/sdk'));
+    return await load();
+  } catch {
+    return null;
+  }
+}
+
 const DEFAULT_DOCS_ROOT = 'docs';
 const FALLBACK_HANDBOOK = `Tele-Pendant advisory handbook: NxM cells with PLC registers; deadman for motion; safe-action PIN for e-stop; Modbus loss clears motion and writes safe-state; alarms/trends/diagnostics on Ops; camera/QR/voice on Media; face login is local challenge liveness (not ISO; never for e-stop); Config for PLC/registers/cells; Audit logs actions; OTA for mobile JS; assistant default is local FTS. Never issue PLC or safety commands.`;
 
@@ -30,6 +55,8 @@ export class AssistantService implements OnModuleInit {
   private readonly logger = new Logger(AssistantService.name);
   private db!: Database.Database;
   private readonly configService: ConfigService;
+  /** Production uses the optional package. Tests can point this at a stub. */
+  loadSdk: () => Promise<CursorSdk | null> = () => loadCursorSdk();
 
   constructor(@Inject(ConfigService) configService: ConfigService) {
     this.configService = configService;
@@ -249,6 +276,13 @@ export class AssistantService implements OnModuleInit {
     if (!apiKey) {
       return ftsPayload;
     }
+    const sdk = await this.loadSdk();
+    if (!sdk) {
+      return {
+        ...ftsPayload,
+        note: 'Cursor SDK is not installed. Showing the local manual answer.',
+      };
+    }
 
     try {
       const prompt = this.buildPrompt(question, hits);
@@ -256,7 +290,7 @@ export class AssistantService implements OnModuleInit {
       const model =
         this.configService.get<string>('appConfig.cursor.model') ||
         'composer-2.5';
-      const result = await Agent.prompt(prompt, {
+      const result = await sdk.Agent.prompt(prompt, {
         apiKey,
         model: { id: model },
         local: { cwd },
@@ -277,7 +311,7 @@ export class AssistantService implements OnModuleInit {
       };
     } catch (err) {
       const message =
-        err instanceof CursorAgentError
+        err instanceof sdk.CursorAgentError
           ? err.message
           : err instanceof Error
             ? err.message

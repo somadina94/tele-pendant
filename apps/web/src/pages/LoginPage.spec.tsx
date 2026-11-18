@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { LoginPage } from './LoginPage';
 import { renderWithProviders } from '../test/render';
 import * as api from '../lib/api';
+import { ApiError } from '../lib/api';
 
 describe('LoginPage', () => {
   it('ignores password login responses with neither OTP nor token', async () => {
@@ -221,7 +222,7 @@ describe('LoginPage', () => {
   });
 
   it('switches the chrome to Spanish and saves a pinned locale', async () => {
-    vi.spyOn(api, 'apiGet').mockRejectedValue(new Error('expired'));
+    vi.spyOn(api, 'apiGet').mockRejectedValue(new ApiError('expired', 401));
     const patch = vi.spyOn(api, 'apiPatch').mockRejectedValue(new Error('no'));
     localStorage.setItem('accessToken', 'tok');
     renderWithProviders(<LoginPage />);
@@ -241,6 +242,44 @@ describe('LoginPage', () => {
       target: { value: 'en' },
     });
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+  });
+
+  it('ignores a login session result after unmount', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    const mocked = vi.spyOn(api, 'apiGet');
+    let rejectMe: (err: unknown) => void = () => undefined;
+    mocked.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectMe = reject;
+        }),
+    );
+    try {
+      const view = renderWithProviders(<LoginPage />);
+      view.unmount();
+      rejectMe(new ApiError('Unauthorized', 401));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(localStorage.getItem('accessToken')).toBeNull();
+
+      localStorage.setItem('accessToken', 'tok');
+      const again = renderWithProviders(<LoginPage />);
+      again.unmount();
+      rejectMe(new TypeError('Failed to fetch'));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(localStorage.getItem('accessToken')).toBe('tok');
+    } finally {
+      mocked.mockRestore();
+    }
+  });
+
+  it('keeps a stored session when the API is down', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    vi.spyOn(api, 'apiGet').mockRejectedValue(new TypeError('Failed to fetch'));
+    renderWithProviders(<LoginPage />);
+    expect(
+      await screen.findByText('Use the hardware e-stop'),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem('accessToken')).toBe('tok');
   });
 
   it('sends a still-valid session from login to operator on refresh', async () => {

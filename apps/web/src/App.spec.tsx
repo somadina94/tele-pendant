@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import { App } from './App';
+import { ApiError } from './lib/api';
 import { renderWithProviders } from './test/render';
 
 vi.mock('./lib/realtime', () => ({
@@ -100,10 +101,56 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
+  it('ignores a session result that arrives after unmount', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    const api = await import('./lib/api');
+    const mocked = vi.mocked(api.apiGet);
+    const original = mocked.getMockImplementation();
+    let rejectMe: (err: unknown) => void = () => undefined;
+    mocked.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectMe = reject;
+        }),
+    );
+    try {
+      const view = renderWithProviders(<App />, { route: '/operator' });
+      view.unmount();
+      rejectMe(new ApiError('Unauthorized', 401));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(localStorage.getItem('accessToken')).toBeNull();
+
+      localStorage.setItem('accessToken', 'tok');
+      const again = renderWithProviders(<App />, { route: '/operator' });
+      again.unmount();
+      rejectMe(new TypeError('Failed to fetch'));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(localStorage.getItem('accessToken')).toBe('tok');
+    } finally {
+      if (original) mocked.mockImplementation(original);
+    }
+  });
+
+  it('keeps the session and shows STOP when the API is down', async () => {
+    localStorage.setItem('accessToken', 'tok');
+    const api = await import('./lib/api');
+    vi.mocked(api.apiGet).mockRejectedValueOnce(
+      new TypeError('Failed to fetch'),
+    );
+    renderWithProviders(<App />, { route: '/operator' });
+    expect(
+      await screen.findByText('Use the hardware e-stop'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'STOP' })).toBeDisabled();
+    expect(localStorage.getItem('accessToken')).toBe('tok');
+  });
+
   it('sends expired tokens back to login after session check', async () => {
     localStorage.setItem('accessToken', 'dead');
     const api = await import('./lib/api');
-    vi.mocked(api.apiGet).mockRejectedValueOnce(new Error('Unauthorized'));
+    vi.mocked(api.apiGet).mockRejectedValueOnce(
+      new ApiError('Unauthorized', 401),
+    );
     renderWithProviders(<App />, { route: '/operator' });
     expect(
       await screen.findByRole('button', { name: 'Sign in' }),

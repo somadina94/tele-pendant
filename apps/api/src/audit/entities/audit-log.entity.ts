@@ -31,6 +31,10 @@ export class AuditLog {
   @Column({ type: 'varchar', nullable: true })
   ip?: string | null;
 
+  /** Operator tab/device from x-control-client-id. Empty when the write had no screen. */
+  @Column({ name: 'client_id', type: 'varchar', nullable: true })
+  clientId?: string | null;
+
   @Column({ type: 'varchar', default: 'success' })
   result!: string;
 

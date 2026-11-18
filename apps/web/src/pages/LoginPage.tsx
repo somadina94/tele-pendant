@@ -2,12 +2,19 @@ import { FormEvent, useEffect, useState } from 'react';
 import { LogIn, ScanFace } from 'lucide-react';
 import { translate, type Locale } from '@tele-pendant/shared';
 import { Link, useNavigate } from 'react-router-dom';
-import { apiGet, apiPost, PublicUser } from '../lib/api';
+import {
+  apiGet,
+  apiPost,
+  isUnauthorized,
+  rejectIfSlow,
+  PublicUser,
+} from '../lib/api';
 import { LanguageSelect } from '../lib/LanguageSelect';
 import { readLocale } from '../lib/i18n';
 import { clearSession } from '../lib/session';
 import { HelpTip, PageTourBar } from '../lib/tour';
 import { BrandMark } from '@/components/brand-mark';
+import { HardwareStopNotice } from '@/components/hardware-stop';
 import { PageSpinner } from '@/components/page-spinner';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
@@ -45,24 +52,42 @@ export function LoginPage() {
   const [checking, setChecking] = useState(() =>
     Boolean(localStorage.getItem('accessToken')),
   );
+  const [offline, setOffline] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      setChecking(false);
-      return;
-    }
-    void apiGet('/auth/me')
-      .then(() => {
-        if (!cancelled) navigate('/operator', { replace: true });
-      })
-      .catch(() => {
-        clearSession();
-        if (!cancelled) setChecking(false);
-      });
+    let timer = 0;
+    const probe = () => {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        setChecking(false);
+        setOffline(false);
+        return;
+      }
+      void rejectIfSlow(apiGet('/auth/me'))
+        .then(() => {
+          if (!cancelled) navigate('/operator', { replace: true });
+        })
+        .catch((err: unknown) => {
+          if (isUnauthorized(err)) {
+            clearSession();
+            if (!cancelled) {
+              setOffline(false);
+              setChecking(false);
+            }
+            return;
+          }
+          if (!cancelled) {
+            setOffline(true);
+            setChecking(false);
+            timer = window.setTimeout(probe, 1000);
+          }
+        });
+    };
+    probe();
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [navigate]);
 
@@ -134,6 +159,7 @@ export function LoginPage() {
   if (checking) {
     return <PageSpinner label="Checking session" className="min-h-svh" />;
   }
+  if (offline) return <HardwareStopNotice />;
 
   return (
     <main className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-4 p-6">

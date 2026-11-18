@@ -555,9 +555,22 @@ describe('AdminPage', () => {
       target: { value: '' },
     });
     fireEvent.click(screen.getByLabelText('c1 motion'));
-    fireEvent.click(screen.getByLabelText('c1 safe'));
-    // Motion was on; click toggled it off — turn back on for FEAT-A2 fields.
+    fireEvent.click(screen.getByRole('button', { name: 'Save Up' }));
+    expect(
+      await screen.findByText('Reset PIN is required to turn motion off'),
+    ).toBeInTheDocument();
+    expect(patch).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('c1 motion pin'), {
+      target: { value: '1234' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Up' }));
+    await screen.findByText('Saved Lift.');
+    expect(patch).toHaveBeenCalledWith(
+      '/hmi/cells/c1',
+      expect.objectContaining({ isMotion: false, pin: '1234' }),
+    );
     fireEvent.click(screen.getByLabelText('c1 motion'));
+    fireEvent.click(screen.getByLabelText('c1 safe'));
     expect(screen.getByLabelText('c1 variable-speed')).toBeChecked();
     fireEvent.change(screen.getByLabelText('c1 slow-speed'), {
       target: { value: '' },
@@ -566,17 +579,18 @@ describe('AdminPage', () => {
       target: { value: '' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save Up' }));
-    await screen.findByText('Saved Lift.');
-    expect(patch).toHaveBeenCalledWith(
-      '/hmi/cells/c1',
-      expect.objectContaining({
-        label: 'Lift',
-        row: 1,
-        col: 2,
-        variableSpeed: true,
-        slowSpeedPct: 30,
-        fastSpeedPct: 100,
-      }),
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(
+        '/hmi/cells/c1',
+        expect.objectContaining({
+          label: 'Lift',
+          row: 1,
+          col: 2,
+          variableSpeed: true,
+          slowSpeedPct: 30,
+          fastSpeedPct: 100,
+        }),
+      ),
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete Lift' }));

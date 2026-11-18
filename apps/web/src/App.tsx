@@ -18,8 +18,15 @@ import { OperatorPage } from './pages/OperatorPage';
 import { OpsPage } from './pages/OpsPage';
 import { RequireRole } from '@/components/require-role';
 import { AppShell } from './layouts/AppShell';
-import { apiGet, type HmiLayout, type PublicUser } from './lib/api';
+import {
+  apiGet,
+  isUnauthorized,
+  rejectIfSlow,
+  type HmiLayout,
+  type PublicUser,
+} from './lib/api';
 import { clearSession, registerSoftLoginRedirect } from './lib/session';
+import { HardwareStopNotice } from '@/components/hardware-stop';
 import { PageSpinner } from '@/components/page-spinner';
 
 /** Mid-session 401: soft-replace to login so STOP is not left under a paint. */
@@ -36,38 +43,51 @@ function SoftLoginRedirectBridge() {
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const [state, setState] = useState<'loading' | 'ok' | 'out'>(() =>
-    localStorage.getItem('accessToken') ? 'loading' : 'out',
+  const [state, setState] = useState<'loading' | 'ok' | 'out' | 'offline'>(
+    () => (localStorage.getItem('accessToken') ? 'loading' : 'out'),
   );
 
   useEffect(() => {
     let cancelled = false;
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      setState('out');
-      return;
-    }
-    void apiGet<PublicUser>('/auth/me')
-      .then((user) => {
-        localStorage.setItem('user', JSON.stringify(user));
-        void queryClient.prefetchQuery({
-          queryKey: ['hmi-layout'],
-          queryFn: () => apiGet<HmiLayout>('/hmi/layout'),
+    let timer = 0;
+    const probe = () => {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        setState('out');
+        return;
+      }
+      void rejectIfSlow(apiGet<PublicUser>('/auth/me'))
+        .then((user) => {
+          localStorage.setItem('user', JSON.stringify(user));
+          void queryClient.prefetchQuery({
+            queryKey: ['hmi-layout'],
+            queryFn: () => apiGet<HmiLayout>('/hmi/layout'),
+          });
+          if (!cancelled) setState('ok');
+        })
+        .catch((err: unknown) => {
+          if (isUnauthorized(err)) {
+            clearSession();
+            if (!cancelled) setState('out');
+            return;
+          }
+          if (!cancelled) {
+            setState('offline');
+            timer = window.setTimeout(probe, 1000);
+          }
         });
-        if (!cancelled) setState('ok');
-      })
-      .catch(() => {
-        clearSession();
-        if (!cancelled) setState('out');
-      });
+    };
+    probe();
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, []);
+  }, [queryClient]);
 
   if (state === 'loading') {
     return <PageSpinner label="Checking session" className="min-h-svh" />;
   }
+  if (state === 'offline') return <HardwareStopNotice />;
   if (state === 'out') return <Navigate to="/" replace />;
   return children;
 }

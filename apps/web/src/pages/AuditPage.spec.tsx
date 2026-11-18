@@ -33,6 +33,7 @@ const samplePage = {
       action: 'register.update',
       resource: 'holding.hoistHeightMm',
       result: 'success',
+      clientId: 'tab-a',
       createdAt: '2026-01-02T03:04:00.000Z',
     },
     {
@@ -64,6 +65,7 @@ describe('AuditPage', () => {
     renderWithProviders(<AuditPage />);
     expect(await screen.findByText('Administrator')).toBeInTheDocument();
     expect(screen.getByText(/register.update/)).toBeInTheDocument();
+    expect(screen.getByText('tab-a')).toBeInTheDocument();
     expect(screen.getByText(/holding.hoistHeightMm/)).toBeInTheDocument();
     expect(screen.getByText(/success/)).toBeInTheDocument();
     expect(screen.getByText(/cell.activate/)).toBeInTheDocument();

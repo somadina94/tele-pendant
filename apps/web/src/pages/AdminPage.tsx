@@ -107,6 +107,7 @@ const SAFETY_REGISTER_NAMES = new Set([
   'coil.deadman',
   'holding.heartbeat',
   'holding.safeState',
+  'coil.p03a21.di.enable',
 ]);
 
 function isSafetyRegister(
@@ -1312,8 +1313,9 @@ function RegisterEditor({
       </div>
       {safetyCritical ? (
         <p className="text-xs text-muted-foreground">
-          Changing this address retargets e-stop, deadman, heartbeat, or
-          safe-state. A reset PIN is required when the address changes.
+          Changing this address retargets e-stop, deadman, heartbeat,
+          safe-state, or Enable. A reset PIN is required when the address
+          changes.
         </p>
       ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
@@ -1390,6 +1392,7 @@ interface CellForm {
   secondaryRegisterId: string;
   feedbackRegisterId: string;
   statusRegisterId: string;
+  pin?: string;
 }
 
 function RegisterSelect({
@@ -1468,12 +1471,23 @@ function CellEditor({
     initial.statusRegisterId,
   );
   const motionId = useId();
+  const [motionPin, setMotionPin] = useState('');
+  const demotingMotion = initial.isMotion && !isMotion;
   const safeId = useId();
   const variableId = useId();
   const { askDelete, deleteConfirmDialog } = useDeleteConfirmDialog();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (demotingMotion && !motionPin.trim()) {
+      const failure = {
+        ok: false as const,
+        text: 'Reset PIN is required to turn motion off',
+      };
+      onNote(failure);
+      toastErr(failure.text);
+      return;
+    }
     try {
       await onSubmit({
         row: Number(row),
@@ -1489,6 +1503,7 @@ function CellEditor({
         secondaryRegisterId: secondaryRegisterId || '',
         feedbackRegisterId,
         statusRegisterId,
+        ...(demotingMotion ? { pin: motionPin.trim() } : {}),
       });
       const success = {
         ok: true as const,
@@ -1598,6 +1613,19 @@ function CellEditor({
           />
           <Label htmlFor={motionId}>Motion</Label>
         </div>
+        {demotingMotion ? (
+          <div className="grid gap-2">
+            <Label htmlFor={`${noteKey}-motion-pin`}>Reset PIN</Label>
+            <Input
+              id={`${noteKey}-motion-pin`}
+              type="password"
+              autoComplete="off"
+              aria-label={`${noteKey} motion pin`}
+              value={motionPin}
+              onChange={(event) => setMotionPin(event.target.value)}
+            />
+          </div>
+        ) : null}
         <div className="flex items-center gap-2">
           <Checkbox
             id={safeId}

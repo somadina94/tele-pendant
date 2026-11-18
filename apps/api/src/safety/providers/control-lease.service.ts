@@ -23,6 +23,8 @@ export class ControlLeaseService {
   private holderDisplayName: string | null = null;
   private holderClientId: string | null = null;
   private lastBeatAt: number | null = null;
+  /** Set when a live lease ends so the safety service can drop command coils. */
+  private controlLost = false;
 
   snapshot(
     forUserId?: string | null,
@@ -118,6 +120,7 @@ export class ControlLeaseService {
       if (!this.holds(id, client)) {
         throw new ForbiddenException('You do not hold control');
       }
+      this.controlLost = true;
     }
     this.clear();
     return this.snapshot(id, client);
@@ -142,6 +145,7 @@ export class ControlLeaseService {
       (this.holderUserId !== id || this.holderClientId !== client)
         ? this.holderUserId
         : null;
+    if (previousUserId) this.controlLost = true;
     this.holderUserId = id;
     this.holderDisplayName = (displayName ?? '').trim() || id;
     this.holderClientId = client;
@@ -153,7 +157,15 @@ export class ControlLeaseService {
     if (!this.holderUserId || this.lastBeatAt == null) return false;
     if (Date.now() - this.lastBeatAt <= this.ttlMs) return false;
     this.clear();
+    this.controlLost = true;
     return true;
+  }
+
+  /** True once after a holder loses the lease (release, steal, or timeout). */
+  consumeControlLost(): boolean {
+    const lost = this.controlLost;
+    this.controlLost = false;
+    return lost;
   }
 
   private clear(): void {

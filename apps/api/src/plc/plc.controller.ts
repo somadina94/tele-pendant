@@ -8,6 +8,7 @@ import {
   Post,
   Req,
   UseGuards,
+  forwardRef,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
@@ -18,6 +19,8 @@ import { JwtAuthGuard } from '../auth/providers/jwt-auth.guard';
 import { RolesGuard } from '../auth/providers/roles.guard';
 import { auditActorFromRequest, auditWriteFields } from '../common/audit-actor';
 import { AuditService } from '../audit/providers/audit.service';
+import { HmiService } from '../hmi/providers/hmi.service';
+import { readControlClientId } from '../safety/control-client-id';
 import { UserRole } from '../users/enums/user-role.enum';
 import { SavePlcConnectionDto } from './dtos/save-plc-connection.dto';
 import { WriteCoilDto } from './dtos/write-coil.dto';
@@ -32,6 +35,8 @@ export class PlcController {
   constructor(
     @Inject(PlcService) private readonly plcService: PlcService,
     @Inject(AuditService) private readonly auditService: AuditService,
+    @Inject(forwardRef(() => HmiService))
+    private readonly hmi: HmiService,
   ) {}
 
   @Get('health')
@@ -133,17 +138,26 @@ export class PlcController {
     return { address: Number(address), value: values[0] ?? 0 };
   }
 
-  /** Admin maintenance only (TP-36). Operators must use HMI cell.activate. */
+  /** Same safety rules as a pendant press. Motion needs control, Enable, and deadman. */
   @Post('coil')
   @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: 'Write a coil (admin maintenance; audited, bypasses HMI gates)',
+    summary:
+      'Write a coil under pendant safety rules (audited). Clearing e-stop needs the reset PIN.',
   })
   async writeCoil(
     @Body() dto: WriteCoilDto,
     @Req() req: Request & { user: JwtPayload },
   ) {
-    await this.plcService.writeCoil(dto.address, dto.value);
+    await this.hmi.writeGuardedCoil(dto.address, dto.value, {
+      userId: req.user.sub,
+      userEmail: req.user.email,
+      userDisplayName: req.user.displayName ?? null,
+      role: req.user.role,
+      pin: dto.pin,
+      ip: req.ip,
+      clientId: readControlClientId(req),
+    });
     await this.auditService.write({
       ...auditWriteFields(auditActorFromRequest(req.user, req.ip)),
       action: 'plc.coil.write',
