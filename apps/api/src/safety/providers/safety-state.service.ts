@@ -509,6 +509,7 @@ export class SafetyStateService implements OnModuleInit {
     const driver = this.plcService.getDriver();
     if (!driver.isConnected()) {
       this.watchdogOk = false;
+      this.plcService.markExchange(false, 'PLC disconnected');
       // TP-39: never clear the software e-stop latch on comms loss.
       await this.enterMode('comms_lost', 'PLC disconnected');
       return this.snapshot();
@@ -523,6 +524,8 @@ export class SafetyStateService implements OnModuleInit {
         DEMO_CRANE_MAP.coils.eStop,
       );
       const coils = await driver.readCoils(eStopAddress, 1);
+      this.plcService.markExchange(true);
+      this.watchdogOk = true;
       const coilHigh = Boolean(coils[0]);
       // Latch sticks until resetEStop (PIN); coil high also asserts it.
       const wasLatched = this.eStopActive;
@@ -551,6 +554,7 @@ export class SafetyStateService implements OnModuleInit {
       );
       await driver.writeRegister(heartbeat, beat);
       this.lastHeartbeatAt = new Date();
+      this.plcService.markExchange(true);
       this.watchdogOk = true;
 
       // Deadman expiry (lost pulses) or pending drop after explicit release.
@@ -591,6 +595,7 @@ export class SafetyStateService implements OnModuleInit {
     } catch (err) {
       this.watchdogOk = false;
       const message = err instanceof Error ? err.message : 'watchdog failure';
+      this.plcService.markExchange(false, message);
       await this.enterMode('comms_lost', message);
     }
 

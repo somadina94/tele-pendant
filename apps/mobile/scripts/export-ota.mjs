@@ -9,11 +9,12 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { loadMobileEnv } from './load-env.mjs';
+import { loadMobileEnv, resolveOtaOrigin } from './load-env.mjs';
 import { loadMobileSigningEnv } from './load-mobile-signing.mjs';
 
 loadMobileEnv();
 loadMobileSigningEnv();
+const configured = resolveOtaOrigin();
 
 const mobileRoot = resolve(import.meta.dirname, '..');
 const exportDir = join(mobileRoot, 'dist-ota');
@@ -41,12 +42,6 @@ const bundleName = basename(bundleRel);
 const bundleBytes = readFileSync(join(exportDir, bundleRel));
 cpSync(join(exportDir, bundleRel), join(assetDir, bundleName));
 const hash = createHash('sha256').update(bundleBytes).digest('hex');
-const configured = process.env.OTA_PUBLIC_URL?.trim();
-if (!configured) {
-  throw new Error(
-    'Set OTA_PUBLIC_URL before publishing an OTA update. Example: https://api.example.com',
-  );
-}
 const baseUrl = new URL(
   configured.includes('://') ? configured : `https://${configured}`,
 );

@@ -1339,7 +1339,8 @@ export function OperatorScreen({ token }: { token: string }) {
     !isPendantScreen &&
     (tags?.hoistHeightMm != null ||
       tags?.values?.['holding.hoistHeightMm'] != null);
-  const plantMinHeight = isPendantScreen ? 40 : windowWidth >= 768 ? 140 : 110;
+  const plantMinHeight = isPendantScreen ? 256 : windowWidth >= 768 ? 140 : 110;
+  const showOverlays = isPendantScreen || showCraneMetrics || useCustomGraphic;
 
   return (
     <View className="flex-1 bg-background" style={{ minHeight: 0 }}>
@@ -1456,7 +1457,7 @@ export function OperatorScreen({ token }: { token: string }) {
                 <CraneMimic tags={tags} safety={safety} />
               </View>
             ) : null}
-            {showCraneMetrics || useCustomGraphic ? (
+            {showOverlays ? (
               <View
                 className={`absolute inset-x-0 top-7 z-[10] ${
                   showCraneMetrics ? 'bottom-10' : 'bottom-2'
@@ -1464,7 +1465,11 @@ export function OperatorScreen({ token }: { token: string }) {
                 pointerEvents="none"
               >
                 {(layoutQuery.data?.overlays ?? [])
-                  .filter((o) => !isClusterMetricRegister(o.register?.name))
+                  .filter(
+                    (o) =>
+                      isPendantScreen ||
+                      !isClusterMetricRegister(o.register?.name),
+                  )
                   .map((o) => (
                     <View
                       key={o.id}
@@ -1472,7 +1477,15 @@ export function OperatorScreen({ token }: { token: string }) {
                       style={{
                         left: `${o.xPct}%`,
                         top: `${o.yPct}%`,
-                        transform: [{ translateX: -28 }, { translateY: -12 }],
+                        maxWidth: '42%',
+                        ...(isPendantScreen
+                          ? {}
+                          : {
+                              transform: [
+                                { translateX: -28 },
+                                { translateY: -12 },
+                              ],
+                            }),
                       }}
                     >
                       <Text className="text-[8px] uppercase text-white/55">

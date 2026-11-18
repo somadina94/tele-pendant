@@ -37,29 +37,21 @@ function resolveApiUrl() {
   if (explicit) return explicit.replace(/\/$/, '');
 
   const appUrl = process.env.APP_URL?.trim().replace(/\/$/, '');
-  if (
-    appUrl &&
-    /localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\./i.test(
-      appUrl,
-    )
-  ) {
+  if (appUrl) {
     return `${appUrl.replace(/\/api\/v1$/, '')}/api/v1`;
   }
-  if (appUrl) return `${appUrl.replace(/\/api\/v1$/, '')}/api/v1`;
 
   throw new Error(
-    'Set EXPO_PUBLIC_API_URL or APP_URL before building the phone app. Example: https://api.example.com/api/v1',
+    'Set EXPO_PUBLIC_API_URL or APP_URL before building the phone app.',
   );
 }
 
-function otaManifestUrl() {
-  const base = process.env.OTA_PUBLIC_URL?.trim().replace(/\/$/, '');
-  if (!base) {
-    throw new Error(
-      'Set OTA_PUBLIC_URL before building the phone app. Example: https://api.example.com',
-    );
+function resolveOtaUrl() {
+  const origin = process.env.OTA_PUBLIC_URL?.trim().replace(/\/$/, '');
+  if (!origin) {
+    throw new Error('Set OTA_PUBLIC_URL before building the phone app.');
   }
-  return `${base}/ota/manifest`;
+  return `${origin}/ota/manifest`;
 }
 
 const apiUrl = resolveApiUrl();
@@ -71,7 +63,7 @@ module.exports = {
     ...appJson.expo,
     updates: {
       ...(appJson.expo.updates ?? {}),
-      url: otaManifestUrl(),
+      url: resolveOtaUrl(),
       codeSigningCertificate:
         appJson.expo.updates?.codeSigningCertificate ??
         './certs/certificate.pem',

@@ -420,17 +420,31 @@
 .matrix-cell-state {
   @apply inline-flex shrink-0 items-center gap-0.5 truncate rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide md:text-[10px];
 }
-/* Welding pendant screen: thin chrome only — no empty plant void. */
+/* Welding pendant: full plant picture with live labels. Crane mimic and the metric strip stay off. */
 .operator-shell[data-pendant='p03a21'] .operator-plant-slot {
   @apply flex-none;
 }
 .operator-shell[data-pendant='p03a21'] .operator-plant-slot .plant-graphic {
-  @apply h-[2.75rem] max-h-[2.75rem] min-h-[2.75rem];
+  height: 16rem;
+  min-height: 16rem;
+  max-height: 16rem;
 }
 .operator-shell[data-pendant='p03a21'] .plant-mimic-stage,
-.operator-shell[data-pendant='p03a21'] .plant-overlay-stage,
 .operator-shell[data-pendant='p03a21'] .plant-readout {
   display: none;
+}
+.operator-shell[data-pendant='p03a21'] .plant-overlay-stage {
+  display: block;
+  overflow: hidden;
+  top: 2.75rem;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  left: 0.75rem;
+}
+/* Top-left of the chip is the X/Y point, so a corner value stays inside the picture. */
+.operator-shell[data-pendant='p03a21'] .plant-overlay {
+  transform: none;
+  max-width: 42%;
 }
 .operator-shell[data-pendant='p03a21'] .plant-cluster-chrome {
   padding-block: 0.4rem;
@@ -676,9 +690,10 @@
   .matrix-cell-label {
     -webkit-line-clamp: 2;
   }
-  .operator-shell[data-pendant='p03a21'] .operator-plant-slot .plant-graphic {
-    min-height: 0;
-    max-height: 2.75rem;
+  .operator-shell[data-pendant='p03a21'] .plant-overlay-stage {
+    display: block;
+    top: 2rem;
+    bottom: 0.25rem;
   }
 }
 @media (max-width: 767px) and (max-height: 700px) {

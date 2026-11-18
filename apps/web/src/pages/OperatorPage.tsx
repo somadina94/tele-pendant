@@ -1132,7 +1132,11 @@ export function OperatorPage() {
               ) : null}
               <div className="plant-overlay-stage">
                 {(layout.overlays ?? [])
-                  .filter((o) => !isClusterMetricRegister(o.register?.name))
+                  .filter(
+                    (o) =>
+                      isPendantScreen ||
+                      !isClusterMetricRegister(o.register?.name),
+                  )
                   .map((o) => (
                     <div
                       key={o.id}

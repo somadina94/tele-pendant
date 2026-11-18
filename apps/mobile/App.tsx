@@ -250,14 +250,12 @@ function LoginScreen({
                 <BtnText>{t('signIn')}</BtnText>
               </Btn>
             </HelpTip>
-            {faceLoginEnabled ? (
-              <HelpTip id="tour.login.face">
-                <Btn onPress={() => setMode('face')}>
-                  <ScanFace size={16} color="#041018" />
-                  <BtnText>{t('faceLogin')}</BtnText>
-                </Btn>
-              </HelpTip>
-            ) : null}
+            <HelpTip id="tour.login.face">
+              <Btn onPress={() => setMode('face')}>
+                <ScanFace size={16} color="#041018" />
+                <BtnText>{t('faceLogin')}</BtnText>
+              </Btn>
+            </HelpTip>
           </>
         )}
       </ScrollView>

@@ -1,3 +1,5 @@
+import { copyFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -12,6 +14,7 @@ import { Cell } from '../../cells/entities/cell.entity';
 import { OverlayLabel } from '../../overlays/entities/overlay-label.entity';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { SafetyRoles } from '../../safety/entities/safety-roles.entity';
+import { hmiAssetPublicPath, hmiAssetsDirectory } from '../hmi-assets';
 
 const DEMO_NODE_IDS: Record<string, string> = {
   'coil.deadman': 'ns=1;s=Deadman',
@@ -62,10 +65,15 @@ export class HmiSeedService implements OnModuleInit {
     if (count === 0) {
       this.logger.log('Seeding P03A21 welding pendant HMI layout');
       await this.seed();
+    } else {
+      await this.ensureP03a21Layout();
     }
     await this.syncP03a21DrawingLabels();
+    await this.syncP03a21LakshmiFixes();
     await this.ensureRuntimeRegisters();
     await this.ensureSafetyRoles();
+    await this.ensureDemoPlantPicture();
+    await this.ensureSampleTrends();
   }
 
   /**
@@ -243,6 +251,86 @@ export class HmiSeedService implements OnModuleInit {
     }
   }
 
+  /**
+   * Phase 1 example: one plant drawing and three numeric labels.
+   * Existing pictures and labels are left in place.
+   */
+  private async ensureDemoPlantPicture(): Promise<void> {
+    const background = await this.backgrounds.findOne({
+      where: { active: true },
+    });
+    if (!background) return;
+
+    if (!background.imageUrl) {
+      const source = join(
+        __dirname,
+        '../../../../../docs/samples/hmi/demo-crane.svg',
+      );
+      if (existsSync(source)) {
+        const filename = 'demo-crane.svg';
+        copyFileSync(source, join(hmiAssetsDirectory(), filename));
+        background.imageUrl = hmiAssetPublicPath(filename);
+        await this.backgrounds.save(background);
+      }
+    }
+
+    const existing = await this.overlays.find();
+    const names = new Set(existing.map((row) => row.label));
+    const examples: Array<{
+      label: string;
+      xPct: number;
+      yPct: number;
+      format: string;
+      register: string;
+      address: number;
+    }> = [
+      {
+        label: 'Height',
+        xPct: 22,
+        yPct: 58,
+        format: '{value} mm',
+        register: 'holding.hoistHeightMm',
+        address: DEMO_CRANE_MAP.holdings.hoistHeightMm,
+      },
+      {
+        label: 'Load',
+        xPct: 50,
+        yPct: 72,
+        format: '{value} kg',
+        register: 'holding.loadKg',
+        address: DEMO_CRANE_MAP.holdings.loadKg,
+      },
+      {
+        label: 'Trolley',
+        xPct: 74,
+        yPct: 28,
+        format: '{value} mm',
+        register: 'holding.trolleyPosition',
+        address: DEMO_CRANE_MAP.holdings.trolleyPosition,
+      },
+    ];
+    for (const example of examples) {
+      if (names.has(example.label)) continue;
+      const register = await this.upsertRegister(
+        example.register,
+        example.address,
+        'holding',
+        'uint16',
+        'rw',
+      );
+      await this.overlays.save(
+        this.overlays.create({
+          label: example.label,
+          xPct: example.xPct,
+          yPct: example.yPct,
+          format: example.format,
+          background,
+          register,
+        }),
+      );
+    }
+  }
+
   private async upsertRegister(
     name: string,
     address: number,
@@ -278,6 +366,22 @@ export class HmiSeedService implements OnModuleInit {
       row = await this.registers.save(row);
     }
     return row;
+  }
+
+  /** A database with no trend flags gets the three simulator series. */
+  private async ensureSampleTrends(): Promise<void> {
+    const rows = await this.registers.find();
+    if (rows.some((row) => row.trended)) return;
+    for (const name of [
+      'holding.hoistHeightMm',
+      'holding.loadKg',
+      'holding.trolleyPosition',
+    ]) {
+      const row = rows.find((item) => item.name === name);
+      if (!row) continue;
+      row.trended = true;
+      await this.registers.save(row);
+    }
   }
 
   private async ensureSafetyRoles(): Promise<void> {

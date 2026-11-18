@@ -54,6 +54,7 @@ export class AlarmEngineService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.seedDefaults();
+    await this.ensureQuietSample();
     await this.reloadOpenEvents();
   }
 
@@ -120,6 +121,62 @@ export class AlarmEngineService implements OnModuleInit {
         }),
       );
     }
+  }
+
+  /**
+   * The quiet simulator leaves the e-stop coil off, so the default alarm
+   * never becomes a row. Add one enabled sample that is true at the
+   * simulator's starting hoist height. Leave any existing definition alone.
+   */
+  private async ensureQuietSample(): Promise<void> {
+    const enabled = await this.definitions.find({ where: { enabled: true } });
+    const alreadyTrue = enabled.some((def) =>
+      this.trueOnQuietSimulator(
+        def.register?.name,
+        def.compareOp,
+        def.threshold,
+      ),
+    );
+    if (alreadyTrue) return;
+
+    const name = 'Hoist height sample';
+    const existing = await this.definitions.findOne({ where: { name } });
+    if (existing) return;
+
+    const hoist = await this.registers.findOne({
+      where: { name: 'holding.hoistHeightMm' },
+    });
+    if (!hoist) return;
+
+    await this.definitions.save(
+      this.definitions.create({
+        name,
+        severity: 'info',
+        compareOp: 'gt',
+        threshold: 0,
+        enabled: true,
+        register: hoist,
+      }),
+    );
+    this.logger.log('Added sample alarm Hoist height sample');
+  }
+
+  /** Values the Modbus simulator holds while the plant is idle. */
+  private trueOnQuietSimulator(
+    registerName: string | undefined,
+    op: AlarmDefinition['compareOp'],
+    threshold: number,
+  ): boolean {
+    const quiet: Record<string, number> = {
+      'holding.hoistHeightMm': 1250,
+      'holding.loadKg': 0,
+      'holding.trolleyPosition': 0,
+      'coil.eStop': 0,
+      'discrete.motorRunning': 0,
+    };
+    const value = registerName ? quiet[registerName] : undefined;
+    if (value === undefined) return false;
+    return this.compare(value, op, threshold);
   }
 
   async listActive() {

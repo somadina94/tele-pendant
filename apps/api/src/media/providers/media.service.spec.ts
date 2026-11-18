@@ -402,7 +402,7 @@ describe('MediaService', () => {
       clientId: 'device-1',
     });
     expect(stop.ok).toBe(true);
-    expect(String(stop.message)).toMatch(/commanded to stop/i);
+    expect(stop.message).toBe('STOP commanded (STOP).');
   });
 
   it('exposes camera config with and without RTSP', () => {

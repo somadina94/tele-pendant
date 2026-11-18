@@ -56,7 +56,7 @@ Same as freelancer_bot: `SERVER_HOST`, `SERVER_USERNAME`, `SERVER_PORT`, and eit
 
 A push to main verifies the repo and publishes images. Production deploy is a manual run of the CI workflow on main. It does not run on every push.
 
-Images published on main: `tele-pendant-api`, `tele-pendant-sim`, `tele-pendant-web` under `ghcr.io/<owner>/`.
+Images pushed on main: `tele-pendant-api`, `tele-pendant-sim`, and `tele-pendant-web`. Set `TELE_PENDANT_API_IMAGE`, `TELE_PENDANT_SIM_IMAGE`, and `TELE_PENDANT_WEB_IMAGE` in the server `.env` to the GHCR refs you pull.
 
 Manual server deploy needs `GHCR_USERNAME` + `GHCR_PULL_TOKEN` (`read:packages`) in `.env`, then `./deploy.sh`. Roll back the previous database and images with `./deploy.sh rollback`.
 

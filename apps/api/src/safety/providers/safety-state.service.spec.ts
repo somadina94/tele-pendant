@@ -11,6 +11,7 @@ describe('SafetyStateService', () => {
   const plcService = {
     getDriver: () => driver,
     addressFor: jest.fn(async (_name: string, fallback: number) => fallback),
+    markExchange: jest.fn(),
   };
   const auditService = {
     write: jest.fn().mockResolvedValue({}),
@@ -779,6 +780,13 @@ describe('SafetyStateService', () => {
     const snap = await service.tick();
     expect(snap.mode).toBe('comms_lost');
     expect(snap.watchdogOk).toBe(false);
+    expect(plcService.markExchange).toHaveBeenCalledWith(false, 'timeout');
+  });
+
+  it('marks the exchange ok when the coil read succeeds', async () => {
+    await service.tick();
+    expect(plcService.markExchange).toHaveBeenCalledWith(true);
+    expect(service.snapshot().watchdogOk).toBe(true);
   });
 
   it('swallows safe-state write failures', async () => {

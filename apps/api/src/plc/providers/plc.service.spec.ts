@@ -327,4 +327,17 @@ describe('PlcService configuration', () => {
     await expect(service.addressFor('coil.eStop', 11)).resolves.toBe(7);
     jest.useRealTimers();
   });
+
+  it('stays disconnected when the socket is open and the last exchange failed', () => {
+    jest.spyOn(service.getDriver(), 'isConnected').mockReturnValue(true);
+    expect(service.health().connected).toBe(false);
+
+    service.markExchange(true);
+    expect(service.health().connected).toBe(true);
+    expect(service.health().lastError).toBeNull();
+
+    service.markExchange(false, 'Req timed out');
+    expect(service.health().connected).toBe(false);
+    expect(service.health().lastError).toBe('Req timed out');
+  });
 });

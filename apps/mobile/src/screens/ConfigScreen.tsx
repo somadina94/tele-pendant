@@ -1188,16 +1188,16 @@ function OverlayForm({
   onDelete?: () => Promise<void>;
 }) {
   const [label, setLabel] = useState(overlay?.label ?? '');
-  const [xPct, setX] = useState(String(overlay?.xPct ?? 10));
-  const [yPct, setY] = useState(String(overlay?.yPct ?? 10));
+  const [xPct, setX] = useState(String(overlay?.xPct ?? 55));
+  const [yPct, setY] = useState(String(overlay?.yPct ?? 45));
   const [format, setFormat] = useState(overlay?.format ?? '{value}');
   const [registerId, setRegisterId] = useState(overlay?.register?.id ?? '');
   const regOpts = registerOptions(registers);
 
   function resetAddForm() {
     setLabel('');
-    setX('10');
-    setY('10');
+    setX('55');
+    setY('45');
     setFormat('{value}');
     setRegisterId('');
   }

@@ -16,13 +16,12 @@
 #   Auth (either or both): SERVER_PASSWORD, SERVER_SSH_KEY
 #   SERVER_DEPLOY_PATH (optional, default ~/tele-pendant)
 #
-# Manual server .env (pull mode):
+# Manual server .env (pull mode). All three image names are required:
 #   GHCR_USERNAME=<github user>
 #   GHCR_PULL_TOKEN=<PAT with read:packages>
-#   Optional overrides:
-#   TELE_PENDANT_API_IMAGE=ghcr.io/somadina94/tele-pendant-api:latest
-#   TELE_PENDANT_SIM_IMAGE=ghcr.io/somadina94/tele-pendant-sim:latest
-#   TELE_PENDANT_WEB_IMAGE=ghcr.io/somadina94/tele-pendant-web:latest
+#   TELE_PENDANT_API_IMAGE=ghcr.io/<owner>/tele-pendant-api:latest
+#   TELE_PENDANT_SIM_IMAGE=ghcr.io/<owner>/tele-pendant-sim:latest
+#   TELE_PENDANT_WEB_IMAGE=ghcr.io/<owner>/tele-pendant-web:latest
 # =============================================================================
 
 set -euo pipefail
@@ -87,18 +86,10 @@ read_env_var MODBUS_SIM_PORT
 COMPOSE_FILE="docker-compose.prod.yml"
 PROJECT="tele-pendant-prod"
 DEPLOY_LOCK="${TMPDIR:-/tmp}/tele-pendant-deploy.lock"
-# Must be lowercase (Docker). Override in .env if your GHCR owner differs.
-DEFAULT_OWNER="somadina94"
-DEFAULT_API_IMAGE="ghcr.io/${DEFAULT_OWNER}/tele-pendant-api:latest"
-DEFAULT_SIM_IMAGE="ghcr.io/${DEFAULT_OWNER}/tele-pendant-sim:latest"
-DEFAULT_WEB_IMAGE="ghcr.io/${DEFAULT_OWNER}/tele-pendant-web:latest"
 DEPLOY_BUILD_LOCAL="${DEPLOY_BUILD_LOCAL:-0}"
 export PORT="${PORT:-3010}"
 export WEB_PORT="${WEB_PORT:-8080}"
 export MODBUS_SIM_PORT="${MODBUS_SIM_PORT:-1502}"
-export TELE_PENDANT_API_IMAGE="${TELE_PENDANT_API_IMAGE:-$DEFAULT_API_IMAGE}"
-export TELE_PENDANT_SIM_IMAGE="${TELE_PENDANT_SIM_IMAGE:-$DEFAULT_SIM_IMAGE}"
-export TELE_PENDANT_WEB_IMAGE="${TELE_PENDANT_WEB_IMAGE:-$DEFAULT_WEB_IMAGE}"
 export COMPOSE_BAKE=false
 BACKUP_ROOT="./backups"
 
@@ -166,26 +157,33 @@ fail_deploy() {
   exit 1
 }
 
+require_image_ref() {
+  local name="$1"
+  local ref="${!name:-}"
+  if [ -z "$ref" ]; then
+    echo "ERROR: ${name} is required."
+    echo "  Set ${name} in .env to the image to pull."
+    echo "  Example: ${name}=ghcr.io/<owner>/tele-pendant-api:latest"
+    exit 1
+  fi
+  if [[ "$ref" == *OWNER* ]] || [[ "$ref" =~ [A-Z] ]]; then
+    echo "ERROR: ${name} must be a real lowercase GHCR ref."
+    echo "  Got: ${ref}"
+    echo "  Set ${name} in .env."
+    exit 1
+  fi
+  export "${name}=${ref}"
+}
+
+require_image_ref TELE_PENDANT_API_IMAGE
+require_image_ref TELE_PENDANT_SIM_IMAGE
+require_image_ref TELE_PENDANT_WEB_IMAGE
+
 if [ "${1:-}" = "rollback" ]; then
   restore_previous
   echo "Rollback complete."
   exit 0
 fi
-
-validate_image_ref() {
-  local name="$1"
-  local ref="$2"
-  if [[ "$ref" == *OWNER* ]] || [[ "$ref" =~ [A-Z] ]]; then
-    echo "ERROR: ${name} must be a real lowercase GHCR ref."
-    echo "  Got: ${ref}"
-    echo "  Set in .env, e.g. ${name}=ghcr.io/${DEFAULT_OWNER}/tele-pendant-api:latest"
-    exit 1
-  fi
-}
-
-validate_image_ref TELE_PENDANT_API_IMAGE "$TELE_PENDANT_API_IMAGE"
-validate_image_ref TELE_PENDANT_SIM_IMAGE "$TELE_PENDANT_SIM_IMAGE"
-validate_image_ref TELE_PENDANT_WEB_IMAGE "$TELE_PENDANT_WEB_IMAGE"
 
 exec 9>"$DEPLOY_LOCK"
 if ! flock -n 9; then
@@ -196,6 +194,7 @@ fi
 echo "Disk before deploy:"
 df -h / /var/lib/docker 2>/dev/null || df -h /
 
+# Free stopped containers only. Running images stay until the new images are on disk.
 echo "Removing stopped containers..."
 $DOCKER container prune -f >/dev/null || true
 df -h / /var/lib/docker 2>/dev/null || df -h /
@@ -253,8 +252,6 @@ build_images_local() {
 }
 
 mkdir -p ./data
-backup_before_deploy
-stop_own_stack
 
 if [ "$DEPLOY_BUILD_LOCAL" = "1" ]; then
   build_images_local || exit 1
@@ -262,6 +259,9 @@ else
   echo "Deploy mode: pull prebuilt images (set DEPLOY_BUILD_LOCAL=1 to build on server)"
   pull_images || exit 1
 fi
+
+backup_before_deploy
+stop_own_stack
 
 echo "Starting stack..."
 $DOCKER_COMPOSE -p "$PROJECT" -f "$COMPOSE_FILE" --env-file .env up -d --no-build --force-recreate --remove-orphans

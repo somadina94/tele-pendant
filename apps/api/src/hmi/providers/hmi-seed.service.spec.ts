@@ -30,6 +30,9 @@ describe('HmiSeedService', () => {
     };
     const registers = {
       findOne: jest.fn().mockResolvedValue(null),
+      find: jest
+        .fn()
+        .mockResolvedValue([{ name: 'holding.hoistHeightMm', trended: true }]),
       save: jest.fn(async (row: unknown) => ({
         id: 'reg',
         ...(row as object),
@@ -41,7 +44,8 @@ describe('HmiSeedService', () => {
         delete: jest.fn().mockReturnThis(),
         execute: jest.fn().mockResolvedValue(undefined),
       })),
-      save: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn(async (row: unknown) => row),
       create: jest.fn((row: unknown) => row),
     };
     const roles = {
@@ -57,7 +61,7 @@ describe('HmiSeedService', () => {
       overlays as never,
       roles as never,
     );
-    return { service, cells, backgrounds, overlays };
+    return { service, cells, backgrounds, overlays, registers };
   }
 
   it('seeds when the database has no cells', async () => {
@@ -110,7 +114,7 @@ describe('HmiSeedService', () => {
     expect(cells.save).toHaveBeenCalledWith(shortened);
   });
 
-  it('does not wipe an existing layout on boot', async () => {
+  it('migrates legacy crane layouts to P03A21 on boot', async () => {
     const { service } = makeService({
       cellCount: 12,
       selectorCount: 0,
@@ -119,14 +123,7 @@ describe('HmiSeedService', () => {
     const reset = jest
       .spyOn(service, 'resetP03a21Demo')
       .mockResolvedValue({ ok: true, cells: 20 });
-    const lakshmi = jest
-      .spyOn(
-        service as unknown as { syncP03a21LakshmiFixes: () => Promise<void> },
-        'syncP03a21LakshmiFixes',
-      )
-      .mockResolvedValue(undefined);
     await service.onModuleInit();
-    expect(reset).not.toHaveBeenCalled();
-    expect(lakshmi).not.toHaveBeenCalled();
+    expect(reset).toHaveBeenCalled();
   });
 });

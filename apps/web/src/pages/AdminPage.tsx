@@ -611,8 +611,8 @@ export function AdminPage() {
                   registers={registers}
                   initial={{
                     label: '',
-                    xPct: 10,
-                    yPct: 10,
+                    xPct: 55,
+                    yPct: 45,
                     format: '{value}',
                     registerId: '',
                   }}

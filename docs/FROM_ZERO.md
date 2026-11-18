@@ -33,6 +33,12 @@ FACE_TEMPLATE_KEY=<your key, at least 32 characters>
 
 Leave `FACE_LOGIN_ENABLED` false unless you want face enroll and face login. The web button stays hidden unless you also set `VITE_FACE_LOGIN=true` for the web build. The phone button stays hidden unless you set `EXPO_PUBLIC_FACE_LOGIN=true`.
 
+Install Node 26. Node 26 has no corepack. Install pnpm with npm:
+
+```bash
+npm install -g pnpm@12.18.0
+```
+
 ```bash
 pnpm install
 pnpm --filter @tele-pendant/shared build

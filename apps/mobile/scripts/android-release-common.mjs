@@ -7,7 +7,7 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadMobileEnv } from './load-env.mjs';
+import { loadMobileEnv, resolveApiUrl, resolveOtaOrigin } from './load-env.mjs';
 import { loadMobileSigningEnv } from './load-mobile-signing.mjs';
 
 loadMobileEnv();
@@ -18,16 +18,6 @@ export const repoRoot = resolve(mobileRoot, '../..');
 export const appJsonPath = join(mobileRoot, 'app.json');
 export const androidDir = join(mobileRoot, 'android');
 export const outDir = join(mobileRoot, 'dist');
-
-function requiredPublicUrl(name) {
-  const value = process.env[name]?.trim().replace(/\/$/, '');
-  if (!value) {
-    throw new Error(
-      `Set ${name} before building the phone app. Example: https://api.example.com`,
-    );
-  }
-  return value;
-}
 
 export function run(command, opts = {}) {
   console.log(`\n$ ${command}`);
@@ -154,9 +144,9 @@ export function ensureAndroidReleaseSigningGradle(
 }
 
 export function patchAppJsonForBuild() {
-  const otaBase = requiredPublicUrl('OTA_PUBLIC_URL');
+  const otaBase = resolveOtaOrigin();
   const updatesUrl = `${otaBase}/ota/manifest`;
-  const apiUrl = requiredPublicUrl('EXPO_PUBLIC_API_URL');
+  const apiUrl = resolveApiUrl();
   process.env.EXPO_PUBLIC_API_URL = apiUrl;
   console.log(`EXPO_PUBLIC_API_URL=${apiUrl}`);
 

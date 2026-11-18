@@ -248,7 +248,7 @@ export class MediaService implements OnModuleInit {
       label,
       transcript: heard,
       message: cell.requiresSafeAction
-        ? `Crane commanded to stop (${label}).`
+        ? `STOP commanded (${label}).`
         : undefined,
     };
   }

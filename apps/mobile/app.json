@@ -60,7 +60,7 @@
       }
     },
     "extra": {
-      "otaNote": "updates.url comes from OTA_PUBLIC_URL at build time. Native modules (camera, speech) still need a binary rebuild."
+      "otaNote": "Set OTA_PUBLIC_URL to the public API origin. The phone loads that origin plus /ota/manifest. Manifests are code-signed (TP-43); native modules (camera, speech) still need a binary rebuild."
     }
   }
 }

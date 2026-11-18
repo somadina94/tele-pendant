@@ -4,7 +4,7 @@ import { notifyUnauthorized } from './session';
 import { ApiStatusError } from './session-failure';
 import { clearAccessToken } from './token-storage';
 
-/** API base from the build (`EXPO_PUBLIC_API_URL` or app config extra.apiUrl). */
+/** API base baked in by app.config.js (`extra.apiUrl` or `EXPO_PUBLIC_API_URL`). */
 export function getApiBase(): string {
   const fromExtra = Constants.expoConfig?.extra?.apiUrl;
   if (typeof fromExtra === 'string' && fromExtra.trim()) {
@@ -13,7 +13,7 @@ export function getApiBase(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, '');
   throw new Error(
-    'EXPO_PUBLIC_API_URL is not set. Set it to your API base, for example https://api.example.com/api/v1',
+    'Set EXPO_PUBLIC_API_URL or APP_URL before building the phone app.',
   );
 }
 

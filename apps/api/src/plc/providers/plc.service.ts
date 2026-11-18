@@ -35,6 +35,8 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
   private active: PlcConnection | null = null;
   private lastConnectionId: string | null = null;
   private lastError: string | null = null;
+  /** False until a Modbus read or write succeeds. A silent TCP accept stays false. */
+  private lastExchangeOk = false;
   private reconnecting: Promise<void> | null = null;
   /** Bumped on every intentional connect/disconnect so poller reconnect cannot race a swap (TP-41). */
   private connectGeneration = 0;
@@ -104,13 +106,23 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
 
   health(): PlcHealth {
     return {
-      connected: this.getDriver().isConnected(),
+      connected: this.getDriver().isConnected() && this.lastExchangeOk,
       connectionId: this.active?.id ?? null,
       label: this.active?.label ?? null,
       host: this.active?.host ?? null,
       port: this.active?.port ?? null,
       lastError: this.lastError,
     };
+  }
+
+  /** A successful read or write is the only thing that counts as connected. */
+  markExchange(ok: boolean, error?: string): void {
+    this.lastExchangeOk = ok;
+    if (ok) {
+      this.lastError = null;
+      return;
+    }
+    this.lastError = error ?? this.lastError ?? 'Modbus exchange failed';
   }
 
   async list(): Promise<PlcConnection[]> {
@@ -304,6 +316,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
       this.active = connection;
       this.lastConnectionId = connection.id;
       this.lastError = null;
+      this.lastExchangeOk = false;
       const all = await this.connections.find();
       for (const row of all) {
         row.enabled = row.id === id;
@@ -313,6 +326,7 @@ export class PlcService implements OnModuleInit, OnModuleDestroy {
       if (generation !== this.connectGeneration) return this.health();
       this.activeProtocol = 'modbus-tcp';
       this.active = null;
+      this.lastExchangeOk = false;
       this.lastError = err instanceof Error ? err.message : 'connect failed';
       throw err;
     }

@@ -113,6 +113,72 @@ describe('AlarmEngineService', () => {
     expect(definitions.save).not.toHaveBeenCalled();
   });
 
+  it('adds a quiet-simulator sample without removing existing alarms', async () => {
+    definitions.count.mockResolvedValue(2);
+    definitions.find.mockResolvedValue([
+      {
+        id: 'd1',
+        name: 'E-Stop asserted',
+        compareOp: 'eq',
+        threshold: 1,
+        enabled: true,
+        register: { name: 'coil.eStop' },
+      },
+    ]);
+    registers.findOne.mockImplementation(
+      async (query: { where?: { name?: string } }) =>
+        query?.where?.name === 'holding.hoistHeightMm'
+          ? { id: 'hoist', name: 'holding.hoistHeightMm' }
+          : null,
+    );
+    await service.onModuleInit();
+    expect(definitions.remove).not.toHaveBeenCalled();
+    expect(definitions.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Hoist height sample',
+        compareOp: 'gt',
+        threshold: 0,
+        enabled: true,
+        severity: 'info',
+      }),
+    );
+  });
+
+  it('does not recreate the sample when that name already exists', async () => {
+    definitions.count.mockResolvedValue(2);
+    definitions.find.mockResolvedValue([
+      {
+        name: 'E-Stop asserted',
+        compareOp: 'eq',
+        threshold: 1,
+        enabled: true,
+        register: { name: 'coil.eStop' },
+      },
+    ]);
+    definitions.findOne.mockResolvedValue({
+      id: 'sample',
+      name: 'Hoist height sample',
+      enabled: false,
+    });
+    await service.onModuleInit();
+    expect(definitions.save).not.toHaveBeenCalled();
+  });
+
+  it('leaves definitions alone when one is already true on the quiet simulator', async () => {
+    definitions.count.mockResolvedValue(2);
+    definitions.find.mockResolvedValue([
+      {
+        name: 'Load is zero',
+        compareOp: 'eq',
+        threshold: 0,
+        enabled: true,
+        register: { name: 'holding.loadKg' },
+      },
+    ]);
+    await service.onModuleInit();
+    expect(definitions.save).not.toHaveBeenCalled();
+  });
+
   it('reloads shelved alarms on init so they clear after restart (TP-09)', async () => {
     // Mimic order: { createdAt: 'DESC' } — newest open row wins per definition.
     events.find.mockResolvedValueOnce([

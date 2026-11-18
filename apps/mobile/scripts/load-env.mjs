@@ -35,3 +35,29 @@ export function loadMobileEnv() {
   loadEnvFile(join(mobileRoot, '../../.env'));
   loadEnvFile(join(mobileRoot, '.env'), { override: true });
 }
+
+/** Same order as apps/mobile/app.config.js. A missing URL stops the build. */
+export function resolveApiUrl() {
+  const mobileDev = process.env.MOBILE_API_URL?.trim();
+  if (mobileDev) return mobileDev.replace(/\/$/, '');
+
+  const explicit = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, '');
+
+  const appUrl = process.env.APP_URL?.trim().replace(/\/$/, '');
+  if (appUrl) {
+    return `${appUrl.replace(/\/api\/v1$/, '')}/api/v1`;
+  }
+
+  throw new Error(
+    'Set EXPO_PUBLIC_API_URL or APP_URL before building the phone app.',
+  );
+}
+
+export function resolveOtaOrigin() {
+  const origin = process.env.OTA_PUBLIC_URL?.trim().replace(/\/$/, '');
+  if (!origin) {
+    throw new Error('Set OTA_PUBLIC_URL before building the phone app.');
+  }
+  return origin;
+}
