@@ -58,9 +58,31 @@ const apiUrl = resolveApiUrl();
 process.env.EXPO_PUBLIC_API_URL = apiUrl;
 console.log(`[tele-pendant] Expo API base: ${apiUrl}`);
 
+function allowPlainHttp(url) {
+  const flag = process.env.EXPO_PUBLIC_ALLOW_HTTP?.trim().toLowerCase();
+  if (flag === 'true') return true;
+  if (flag === 'false') return false;
+  return url.startsWith('http://');
+}
+
+const httpAllowed = allowPlainHttp(apiUrl);
+
 module.exports = {
   expo: {
     ...appJson.expo,
+    android: {
+      ...appJson.expo.android,
+      usesCleartextTraffic: httpAllowed,
+    },
+    ios: {
+      ...appJson.expo.ios,
+      infoPlist: {
+        ...(appJson.expo.ios?.infoPlist ?? {}),
+        ...(httpAllowed
+          ? { NSAppTransportSecurity: { NSAllowsLocalNetworking: true } }
+          : {}),
+      },
+    },
     updates: {
       ...(appJson.expo.updates ?? {}),
       url: resolveOtaUrl(),

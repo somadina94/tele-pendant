@@ -70,6 +70,8 @@ describe('AlarmEngineService', () => {
       },
     ]);
     definitions.findOne.mockResolvedValue(null);
+    registers.findOne.mockReset();
+    registers.findOne.mockResolvedValue(null);
     driver.isConnected.mockReturnValue(true);
     driver.readCoils.mockResolvedValue([true]);
     driver.readDiscreteInputs.mockResolvedValue([false]);
@@ -135,7 +137,7 @@ describe('AlarmEngineService', () => {
     expect(definitions.remove).not.toHaveBeenCalled();
     expect(definitions.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'Hoist height sample',
+        name: 'Wire height above home',
         compareOp: 'gt',
         threshold: 0,
         enabled: true,
@@ -179,8 +181,57 @@ describe('AlarmEngineService', () => {
     expect(definitions.save).not.toHaveBeenCalled();
   });
 
+  it('retires the crane sample and still adds a welding example', async () => {
+    definitions.count.mockResolvedValue(2);
+    const crane = {
+      name: 'Hoist height sample',
+      compareOp: 'gt' as const,
+      threshold: 0,
+      enabled: true,
+      register: { name: 'holding.hoistHeightMm' },
+    };
+    definitions.find.mockResolvedValue([crane]);
+    registers.findOne.mockImplementation(
+      async (query: { where?: { name?: string } }) =>
+        query?.where?.name === 'holding.hoistHeightMm'
+          ? { id: 'hoist', name: 'holding.hoistHeightMm' }
+          : null,
+    );
+    await service.onModuleInit();
+    expect(crane.enabled).toBe(false);
+    expect(definitions.save).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Wire height above home' }),
+    );
+  });
+
+  it('does not retire a crane sample that has no register', async () => {
+    definitions.count.mockResolvedValue(2);
+    const crane = {
+      name: 'Hoist height sample',
+      compareOp: 'gt' as const,
+      threshold: 0,
+      enabled: true,
+    };
+    definitions.find.mockResolvedValue([crane]);
+    await service.onModuleInit();
+    expect(crane.enabled).toBe(true);
+  });
+
+  it('leaves a crane-named alarm enabled when it is not true on the quiet simulator', async () => {
+    definitions.count.mockResolvedValue(2);
+    const crane = {
+      name: 'Hoist height sample',
+      compareOp: 'gt' as const,
+      threshold: 99999,
+      enabled: true,
+      register: { name: 'holding.unknown' },
+    };
+    definitions.find.mockResolvedValue([crane]);
+    await service.onModuleInit();
+    expect(crane.enabled).toBe(true);
+  });
+
   it('reloads shelved alarms on init so they clear after restart (TP-09)', async () => {
-    // Mimic order: { createdAt: 'DESC' } — newest open row wins per definition.
     events.find.mockResolvedValueOnce([
       {
         id: 'e-shelved',

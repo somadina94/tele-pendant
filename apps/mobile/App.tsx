@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LogIn, ScanFace } from 'lucide-react-native';
 import type { Locale, UserRole } from '@tele-pendant/shared';
 import { isUserRole } from '@tele-pendant/shared';
-import { apiGet, apiPost } from './src/api';
+import { apiGet, apiPost, getApiBase } from './src/api';
 import { HardwareStopNotice } from './src/hardware-stop';
 import { isUnauthorized, rejectIfSlow } from './src/session-failure';
 import {
@@ -48,6 +48,15 @@ import {
 const queryClient = new QueryClient();
 const SPLASH_MIN_MS = 1600;
 const faceLoginEnabled = process.env.EXPO_PUBLIC_FACE_LOGIN === 'true';
+
+function plainHttpApiNote(): string | null {
+  try {
+    if (!getApiBase().startsWith('http://')) return null;
+  } catch {
+    return null;
+  }
+  return 'This phone is pointed at a plain HTTP API. Android allows that when EXPO_PUBLIC_ALLOW_HTTP is true, or when that setting is left empty and the API address starts with http://. Set EXPO_PUBLIC_ALLOW_HTTP=false and rebuild to refuse plain HTTP.';
+}
 
 function LoginScreen({
   onLoggedIn,
@@ -250,12 +259,15 @@ function LoginScreen({
                 <BtnText>{t('signIn')}</BtnText>
               </Btn>
             </HelpTip>
-            <HelpTip id="tour.login.face">
-              <Btn onPress={() => setMode('face')}>
-                <ScanFace size={16} color="#041018" />
-                <BtnText>{t('faceLogin')}</BtnText>
-              </Btn>
-            </HelpTip>
+            {faceLoginEnabled ? (
+              <HelpTip id="tour.login.face">
+                <Btn onPress={() => setMode('face')}>
+                  <ScanFace size={16} color="#041018" />
+                  <BtnText>{t('faceLogin')}</BtnText>
+                </Btn>
+              </HelpTip>
+            ) : null}
+            {plainHttpApiNote() ? <Hint>{plainHttpApiNote()}</Hint> : null}
           </>
         )}
       </ScrollView>

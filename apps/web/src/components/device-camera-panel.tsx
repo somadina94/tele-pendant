@@ -17,6 +17,7 @@ export function CameraAccessAlert({
   const { t } = useT();
   if (!camError) return null;
 
+  const blockedOnHttp = camError.includes('plain HTTP');
   const permissionCopy =
     camShowSettingsHint || camPermissionDenied
       ? t('cameraPermissionSettingsHint')
@@ -26,10 +27,12 @@ export function CameraAccessAlert({
     <Alert variant="destructive">
       <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <span>
-          {!camPermissionDenied && camError !== 'Camera permission denied'
-            ? `${camError}. `
-            : null}
-          {permissionCopy}
+          {blockedOnHttp
+            ? camError
+            : !camPermissionDenied && camError !== 'Camera permission denied'
+              ? `${camError}. `
+              : null}
+          {blockedOnHttp ? null : permissionCopy}
         </span>
         <Button
           type="button"

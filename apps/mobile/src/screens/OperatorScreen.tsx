@@ -8,9 +8,7 @@ import type {
 import {
   ActivityIndicator,
   AppState,
-  Image,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   useWindowDimensions,
@@ -22,6 +20,7 @@ import {
   cellPulsesDeadman,
   cellRequiresControlLease,
   cellUsesHoldToRun,
+  containedImageRect,
   formatOverlay,
   isClusterMetricRegister,
   isOperatorScreenReady,
@@ -50,6 +49,7 @@ import {
 } from '../haptics';
 import { CraneMimic } from '../crane-mimic';
 import { ESTOP, matrixCellStatePalette } from '../hmi-styles';
+import { PlantImage } from '../plant-graphic';
 import { useTheme } from '../theme';
 import { Card, showErrorAlert } from '../ui';
 import { syncFingers, touchesStillDown, type Finger } from '../multi-touch';
@@ -207,6 +207,18 @@ export function OperatorScreen({ token }: { token: string }) {
   }, [jogSpeed]);
 
   const [photoOk, setPhotoOk] = useState(true);
+  const [plantFrame, setPlantFrame] = useState({ width: 0, height: 0 });
+  const [boardBox, setBoardBox] = useState({ width: 0, height: 0 });
+  const [plantNatural, setPlantNatural] = useState({ width: 0, height: 0 });
+  const onPlantSize = useCallback((size: { width: number; height: number }) => {
+    setPlantNatural((prev) =>
+      Math.abs(prev.width - size.width) < 1 &&
+      Math.abs(prev.height - size.height) < 1
+        ? prev
+        : size,
+    );
+  }, []);
+  const onPlantError = useCallback(() => setPhotoOk(false), []);
   const [liveFallback, setLiveFallback] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const inflight = useRef(new Set<string>());
@@ -564,12 +576,12 @@ export function OperatorScreen({ token }: { token: string }) {
     }
   }
 
-  const isPendantScreen = (layoutQuery.data?.background?.name ?? '').includes(
-    'p03a21',
+  const hasPicture = Boolean(layoutQuery.data?.background?.imageUrl);
+  const hasSelectors = Boolean(
+    layoutQuery.data?.cells.some((c) => c.style === 'selector'),
   );
-  const isP03a21 =
-    isPendantScreen ||
-    Boolean(layoutQuery.data?.cells.some((c) => c.style === 'selector'));
+  const isPendantScreen = hasPicture || hasSelectors;
+  const isP03a21 = hasSelectors;
 
   const grid = useMemo(() => {
     const layout = layoutQuery.data;
@@ -597,10 +609,24 @@ export function OperatorScreen({ token }: { token: string }) {
     [isP03a21, layoutQuery.data?.cells],
   );
 
-  /** Pendant: keep 3-col layout on phones; otherwise 1 col until tablet. */
-  const matrixCols =
-    isP03a21 || windowWidth >= 768 ? Math.max(1, grid?.cols ?? 1) : 1;
-  const matrixGap = isP03a21 ? 6 : 8;
+  /** Keep the authored columns on every width so a 1-col stack cannot scroll. */
+  const matrixCols = Math.max(1, grid?.cols ?? 1);
+  const matrixGap = 2;
+  const rowCount = Math.max(1, grid?.rows.length ?? 1);
+  const fitLegend = 20;
+  const fitCap = (() => {
+    const padY = isP03a21 ? 4 : 0;
+    const padX = isP03a21 ? 8 : 0;
+    if (boardBox.height <= padY || boardBox.width <= padX) return 28;
+    const rowH = (boardBox.height - padY) / rowCount;
+    const colW =
+      (boardBox.width - padX - matrixGap * (matrixCols - 1)) /
+      Math.max(1, matrixCols);
+    return Math.max(
+      16,
+      Math.min(36, Math.floor(Math.min(colW - 2, rowH - fitLegend))),
+    );
+  })();
 
   const needsLive = useMemo(
     () => operatorNeedsLiveTags(layoutQuery.data),
@@ -680,6 +706,17 @@ export function OperatorScreen({ token }: { token: string }) {
           applyTouches(event.allTouches, event.changedTouches);
         }),
     [applyTouches],
+  );
+
+  const drawnImage = useMemo(
+    () =>
+      containedImageRect(
+        plantFrame.width,
+        plantFrame.height,
+        plantNatural.width,
+        plantNatural.height,
+      ),
+    [plantFrame, plantNatural],
   );
 
   if (layoutQuery.isError) {
@@ -804,13 +841,13 @@ export function OperatorScreen({ token }: { token: string }) {
     if (isP03a21 && !isEstop) {
       const legend = (
         <Text
-          numberOfLines={4}
+          numberOfLines={2}
           style={{
             width: '100%',
             textAlign: 'center',
             color: '#1c1917',
-            fontSize: 12,
-            lineHeight: 15,
+            fontSize: 8,
+            lineHeight: 10,
             fontWeight: '600',
           }}
         >
@@ -819,13 +856,16 @@ export function OperatorScreen({ token }: { token: string }) {
       );
       if (isLamp) {
         return (
-          <View key={cell.id} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+          <View
+            key={cell.id}
+            style={{ flex: 1, alignItems: 'center', minWidth: 0 }}
+          >
             <View
               accessibilityRole="text"
               accessibilityLabel={`${cell.label}: ${lampOn ? 'on' : 'off'}`}
               style={{
-                width: 72,
-                height: 72,
+                width: fitCap,
+                height: fitCap,
                 borderRadius: 999,
                 borderWidth: 1,
                 borderColor: '#a8a29e',
@@ -871,12 +911,15 @@ export function OperatorScreen({ token }: { token: string }) {
           Boolean(tagValueForRegister(tags, cell.secondaryRegister?.name));
         const latch = !holdToRun;
         return (
-          <View key={cell.id} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+          <View
+            key={cell.id}
+            style={{ flex: 1, alignItems: 'center', minWidth: 0 }}
+          >
             <View
               style={{
-                width: 72,
-                height: 72,
-                borderRadius: 36,
+                width: '100%',
+                height: 24,
+                borderRadius: 999,
                 overflow: 'hidden',
                 flexDirection: 'row',
                 backgroundColor: '#1c1c1c',
@@ -889,19 +932,21 @@ export function OperatorScreen({ token }: { token: string }) {
                 const active = dir === 'a' ? aActive : bActive;
                 const sideStyle = {
                   flex: 1,
-                  height: 72,
+                  height: 24,
+                  minWidth: 0,
                   alignItems: 'center' as const,
                   justifyContent: 'center' as const,
                   backgroundColor: active ? '#3D9CFD' : 'transparent',
-                  paddingHorizontal: 1,
+                  paddingHorizontal: 6,
                 };
                 const sideLabel = (
                   <Text
-                    numberOfLines={2}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
                     style={{
                       color: '#f4f4f5',
                       fontSize: 9,
-                      lineHeight: 11,
                       fontWeight: '700',
                       textAlign: 'center',
                     }}
@@ -980,8 +1025,8 @@ export function OperatorScreen({ token }: { token: string }) {
                     position: 'absolute',
                     left: '50%',
                     top: 0,
-                    width: 16,
-                    height: 72,
+                    width: 12,
+                    height: 24,
                     marginLeft: -8,
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -997,8 +1042,8 @@ export function OperatorScreen({ token }: { token: string }) {
         );
       }
       const capStyle = {
-        width: 72,
-        height: 72,
+        width: fitCap,
+        height: fitCap,
         borderRadius: 36,
         alignItems: 'center' as const,
         justifyContent: 'center' as const,
@@ -1035,7 +1080,10 @@ export function OperatorScreen({ token }: { token: string }) {
         </Pressable>
       );
       return (
-        <View key={cell.id} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+        <View
+          key={cell.id}
+          style={{ flex: 1, alignItems: 'center', minWidth: 0 }}
+        >
           {cap}
           {legend}
         </View>
@@ -1062,7 +1110,7 @@ export function OperatorScreen({ token }: { token: string }) {
           style={{
             borderColor: palette.border,
             backgroundColor: palette.background,
-            minHeight: 56,
+            minHeight: 0,
             flex: 1,
           }}
         >
@@ -1111,7 +1159,7 @@ export function OperatorScreen({ token }: { token: string }) {
                     compactButtons ? 'px-[2.5px]' : 'px-1'
                   }`}
                   style={{
-                    minHeight: 36,
+                    minHeight: 0,
                     borderColor: palette.border,
                     backgroundColor: active ? palette.chip : 'transparent',
                     opacity: needsLease && !youHold ? 0.5 : 1,
@@ -1144,7 +1192,7 @@ export function OperatorScreen({ token }: { token: string }) {
                     compactButtons ? 'px-[2.5px]' : 'px-1'
                   }`}
                   style={{
-                    minHeight: 36,
+                    minHeight: 0,
                     borderColor: palette.border,
                     backgroundColor: active ? palette.chip : 'transparent',
                     opacity: needsLease && !youHold ? 0.5 : 1,
@@ -1184,7 +1232,7 @@ export function OperatorScreen({ token }: { token: string }) {
                 className={`items-center justify-center rounded-md border ${
                   compactButtons ? 'px-[3.75px]' : 'px-1.5'
                 }`}
-                style={{ minHeight: 36, borderColor: palette.border }}
+                style={{ minHeight: 0, borderColor: palette.border }}
                 onPress={() => void clearSelector(cell)}
               >
                 <Text style={{ color: palette.foreground }}>·</Text>
@@ -1207,7 +1255,7 @@ export function OperatorScreen({ token }: { token: string }) {
               : 'gap-1 px-1.5 py-1'
           }`}
           style={{
-            minHeight: 44,
+            minHeight: 0,
             flex: 1,
             borderColor: palette.border,
             backgroundColor: lampOn ? '#d1fae5' : palette.background,
@@ -1278,7 +1326,7 @@ export function OperatorScreen({ token }: { token: string }) {
       </Text>
     );
     const faceStyle = {
-      minHeight: 44,
+      minHeight: 0,
       flex: 1,
       backgroundColor: palette.background,
       borderColor: palette.border,
@@ -1339,15 +1387,15 @@ export function OperatorScreen({ token }: { token: string }) {
     !isPendantScreen &&
     (tags?.hoistHeightMm != null ||
       tags?.values?.['holding.hoistHeightMm'] != null);
-  const plantMinHeight = isPendantScreen ? 256 : windowWidth >= 768 ? 140 : 110;
+  const panelMax = windowWidth < 768 ? 320 : 352;
   const showOverlays = isPendantScreen || showCraneMetrics || useCustomGraphic;
 
   return (
     <View className="flex-1 bg-background" style={{ minHeight: 0 }}>
-      <View className="shrink-0 gap-1.5 px-2 pt-2">
+      <View className="shrink-0 px-2 pt-1">
         <HelpTip id="tour.operator.banner">
-          <View className="flex-row flex-wrap items-center gap-1.5 rounded-lg border border-border bg-card px-2 py-1.5">
-            <Text className="text-sm text-foreground">
+          <View className="flex-row flex-wrap items-center gap-1 rounded-lg border border-border bg-card px-2 py-0.5">
+            <Text className="text-xs text-foreground">
               {t('safety')}: <Text className="font-semibold">{safetyMode}</Text>
             </Text>
             {safety.deadmanActive || holdsRef.current.size > 0 ? (
@@ -1368,14 +1416,14 @@ export function OperatorScreen({ token }: { token: string }) {
         </HelpTip>
       </View>
 
-      <View className="min-h-0 flex-1 gap-1.5 px-2 pb-1 pt-1.5">
+      <View className="min-h-0 flex-1 gap-1 px-2 pb-1 pt-1">
         {screens.length > 1 ? (
-          <View className="shrink-0 flex-row flex-wrap gap-1.5">
+          <View className="shrink-0 flex-row flex-wrap gap-1">
             {screens.map((screen) => (
               <Pressable
                 key={screen.id}
                 accessibilityRole="button"
-                className={`min-h-[36px] rounded-md border px-3 py-1.5 ${
+                className={`min-h-[22px] rounded-md border px-2 py-0.5 ${
                   screen.active
                     ? 'border-primary bg-primary'
                     : 'border-border bg-card'
@@ -1383,7 +1431,7 @@ export function OperatorScreen({ token }: { token: string }) {
                 onPress={() => void switchScreen(screen.id)}
               >
                 <Text
-                  className={`text-sm ${
+                  className={`text-[10px] ${
                     screen.active
                       ? 'text-primary-foreground'
                       : 'text-foreground'
@@ -1396,28 +1444,36 @@ export function OperatorScreen({ token }: { token: string }) {
           </View>
         ) : null}
 
-        <HelpTip
-          id="tour.operator.graphic"
-          className={isPendantScreen ? 'shrink-0' : 'min-h-0 flex-1'}
-        >
+        <HelpTip id="tour.operator.graphic" className="min-h-0 flex-1">
           <View
-            className={`relative overflow-hidden rounded-xl border border-white/10 ${
-              isPendantScreen ? 'shrink-0' : 'min-h-0 flex-1'
-            }`}
+            className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10"
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              setPlantFrame((prev) =>
+                Math.abs(prev.width - width) < 1 &&
+                Math.abs(prev.height - height) < 1
+                  ? prev
+                  : { width, height },
+              );
+            }}
             style={{
-              flex: isPendantScreen ? undefined : 1,
-              minHeight: plantMinHeight,
-              maxHeight: isPendantScreen ? plantMinHeight + 8 : undefined,
+              flex: 1,
+              minHeight: 64,
               backgroundColor: solidBackground || '#07090c',
             }}
           >
             {useCustomGraphic ? (
-              <Image
-                source={{ uri: imageUrl }}
-                className="absolute inset-0 h-full w-full"
-                style={{ opacity: 1, resizeMode: 'contain' }}
-                onError={() => setPhotoOk(false)}
+              <PlantImage
+                uri={imageUrl}
+                onSize={onPlantSize}
+                onError={onPlantError}
               />
+            ) : hasPicture ? (
+              <View className="absolute inset-0 items-center justify-center px-3">
+                <Text className="text-center text-xs text-white/80">
+                  The plant picture did not load.
+                </Text>
+              </View>
             ) : (
               <View
                 className="absolute inset-0"
@@ -1459,10 +1515,22 @@ export function OperatorScreen({ token }: { token: string }) {
             ) : null}
             {showOverlays ? (
               <View
-                className={`absolute inset-x-0 top-7 z-[10] ${
-                  showCraneMetrics ? 'bottom-10' : 'bottom-2'
+                className={`absolute z-[10] ${
+                  useCustomGraphic && drawnImage.width > 0
+                    ? ''
+                    : `inset-x-0 top-7 ${showCraneMetrics ? 'bottom-10' : 'bottom-2'}`
                 }`}
                 pointerEvents="none"
+                style={
+                  useCustomGraphic && drawnImage.width > 0
+                    ? {
+                        left: drawnImage.left,
+                        top: drawnImage.top,
+                        width: drawnImage.width,
+                        height: drawnImage.height,
+                      }
+                    : undefined
+                }
               >
                 {(layoutQuery.data?.overlays ?? [])
                   .filter(
@@ -1473,7 +1541,7 @@ export function OperatorScreen({ token }: { token: string }) {
                   .map((o) => (
                     <View
                       key={o.id}
-                      className="absolute min-w-[3.5rem] items-center rounded-md border border-white/18 bg-black/70 px-1.5 py-0.5"
+                      className="absolute min-w-0 items-center rounded border border-white/18 bg-black/70 px-1 py-px"
                       style={{
                         left: `${o.xPct}%`,
                         top: `${o.yPct}%`,
@@ -1488,10 +1556,10 @@ export function OperatorScreen({ token }: { token: string }) {
                             }),
                       }}
                     >
-                      <Text className="text-[8px] uppercase text-white/55">
+                      <Text className="text-[7px] uppercase leading-none text-white/55">
                         {o.label}
                       </Text>
-                      <Text className="font-mono text-xs font-semibold text-white">
+                      <Text className="font-mono text-[10px] font-semibold leading-none text-white">
                         {formatOverlay(
                           o.format,
                           tagValueForRegister(tags, o.register?.name),
@@ -1541,17 +1609,17 @@ export function OperatorScreen({ token }: { token: string }) {
                     }`}
                   >
                     <Text
-                      className="text-[7px] font-medium uppercase text-white/45"
-                      style={{ letterSpacing: 1 }}
+                      className="text-[6px] font-medium uppercase leading-none text-white/45"
+                      style={{ letterSpacing: 0.4 }}
                     >
                       {metric.label}
                     </Text>
-                    <Text className="font-mono text-sm font-semibold text-white">
+                    <Text className="font-mono text-[10px] font-semibold leading-none text-white">
                       {metric.value}
                     </Text>
                     <Text
-                      className="text-[8px] uppercase text-white/40"
-                      style={{ letterSpacing: 0.8 }}
+                      className="text-[6px] uppercase leading-none text-white/40"
+                      style={{ letterSpacing: 0.3 }}
                     >
                       {metric.unit}
                     </Text>
@@ -1562,174 +1630,172 @@ export function OperatorScreen({ token }: { token: string }) {
           </View>
         </HelpTip>
 
-        <Card compact className="min-h-0 flex-1">
-          <HelpTip id="tour.operator.safePin">
-            <View className="gap-0.5">
-              <View className="flex-row items-center gap-1">
-                <TextInput
-                  className="h-9 min-h-9 flex-1 rounded-md border border-border bg-input px-2.5 text-xs text-foreground"
-                  value={pin}
-                  onChangeText={setPin}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  placeholder={t('safePin')}
-                  placeholderTextColor="#5C6B7A"
-                  accessibilityLabel={t('safePin')}
-                />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t('resetEstop')}
-                  className="h-9 min-h-9 shrink-0 items-center justify-center rounded-md border border-border px-2.5"
-                  onPress={() => void resetEStop()}
-                >
-                  <Text className="text-[11px] font-semibold text-foreground">
-                    {t('resetEstop')}
-                  </Text>
-                </Pressable>
-              </View>
-              {showJogSpeed ? (
-                <View
-                  className="flex-row flex-wrap items-center gap-1.5"
-                  accessibilityLabel={t('jogSpeed')}
-                >
-                  <Text className="text-[11px] text-muted-foreground">
-                    {t('jogSpeed')}
-                  </Text>
+        <View
+          style={{
+            flexGrow: 0,
+            flexShrink: 1,
+            flexBasis: panelMax,
+            maxHeight: panelMax,
+            minHeight: 0,
+          }}
+        >
+          <Card compact style={{ flex: 1, minHeight: 0 }}>
+            <HelpTip id="tour.operator.safePin">
+              <View className="gap-0.5">
+                <View className="flex-row items-center gap-1">
+                  <TextInput
+                    className="h-7 min-h-7 flex-1 rounded-md border border-border bg-input px-2 text-[10px] text-foreground"
+                    value={pin}
+                    onChangeText={setPin}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    placeholder={t('safePin')}
+                    placeholderTextColor="#5C6B7A"
+                    accessibilityLabel={t('safePin')}
+                  />
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityState={{ selected: jogSpeed === 'slow' }}
-                    className="h-8 min-h-8 items-center justify-center rounded-md border px-2.5"
-                    style={{
-                      borderColor: jogSpeed === 'slow' ? '#3D9CFD' : '#5C6B7A',
-                      backgroundColor:
-                        jogSpeed === 'slow'
-                          ? 'rgba(61,156,253,0.2)'
-                          : 'transparent',
-                    }}
-                    onPress={() => setJogSpeed('slow')}
+                    accessibilityLabel={t('resetEstop')}
+                    className="h-7 min-h-7 shrink-0 items-center justify-center rounded-md border border-border px-2"
+                    onPress={() => void resetEStop()}
                   >
                     <Text className="text-[11px] font-semibold text-foreground">
-                      {t('jogSlow')}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: jogSpeed === 'fast' }}
-                    className="h-8 min-h-8 items-center justify-center rounded-md border px-2.5"
-                    style={{
-                      borderColor: jogSpeed === 'fast' ? '#3D9CFD' : '#5C6B7A',
-                      backgroundColor:
-                        jogSpeed === 'fast'
-                          ? 'rgba(61,156,253,0.2)'
-                          : 'transparent',
-                    }}
-                    onPress={() => setJogSpeed('fast')}
-                  >
-                    <Text className="text-[11px] font-semibold text-foreground">
-                      {t('jogFast')}
+                      {t('resetEstop')}
                     </Text>
                   </Pressable>
                 </View>
-              ) : null}
-            </View>
-          </HelpTip>
-          <HelpTip id="tour.operator.holdHint">
-            <HelpTip id="tour.operator.matrix">
-              <ScrollView
-                className="mt-1 min-h-0 flex-1"
-                contentContainerStyle={{ paddingBottom: 8 }}
-                showsVerticalScrollIndicator={false}
-              >
-                <GestureDetector gesture={matrixGesture}>
+                {showJogSpeed ? (
                   <View
-                    ref={boardRef as never}
-                    collapsable={false}
-                    style={
-                      isP03a21
-                        ? {
-                            alignSelf: 'center',
-                            width: '100%',
-                            maxWidth: 576,
-                            backgroundColor: '#f4f1ea',
-                            borderRadius: 12,
-                            borderWidth: 1,
-                            borderColor: '#d5d0c6',
-                            paddingTop: 12,
-                            paddingHorizontal: 8,
-                            paddingBottom: 4,
-                          }
-                        : undefined
-                    }
+                    className="flex-row flex-wrap items-center gap-1.5"
+                    accessibilityLabel={t('jogSpeed')}
                   >
-                    {grid && matrixCols > 1
-                      ? grid.rows.map((row, rowIdx) => (
-                          <View
-                            key={`row-${rowIdx}`}
-                            className="flex-row"
-                            style={{
-                              gap: matrixGap,
-                              marginBottom: matrixGap,
-                              alignItems: 'stretch',
-                            }}
-                          >
-                            {row.map((cell, colIdx) => {
-                              const isStop =
-                                Boolean(cell) &&
-                                Boolean(stopCell) &&
-                                (cell!.id === stopCell!.id ||
-                                  cell!.style === 'estop');
-                              if (!cell || isStop) {
+                    <Text className="text-[11px] text-muted-foreground">
+                      {t('jogSpeed')}
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: jogSpeed === 'slow' }}
+                      className="h-8 min-h-8 items-center justify-center rounded-md border px-2.5"
+                      style={{
+                        borderColor:
+                          jogSpeed === 'slow' ? '#3D9CFD' : '#5C6B7A',
+                        backgroundColor:
+                          jogSpeed === 'slow'
+                            ? 'rgba(61,156,253,0.2)'
+                            : 'transparent',
+                      }}
+                      onPress={() => setJogSpeed('slow')}
+                    >
+                      <Text className="text-[11px] font-semibold text-foreground">
+                        {t('jogSlow')}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: jogSpeed === 'fast' }}
+                      className="h-8 min-h-8 items-center justify-center rounded-md border px-2.5"
+                      style={{
+                        borderColor:
+                          jogSpeed === 'fast' ? '#3D9CFD' : '#5C6B7A',
+                        backgroundColor:
+                          jogSpeed === 'fast'
+                            ? 'rgba(61,156,253,0.2)'
+                            : 'transparent',
+                      }}
+                      onPress={() => setJogSpeed('fast')}
+                    >
+                      <Text className="text-[11px] font-semibold text-foreground">
+                        {t('jogFast')}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+            </HelpTip>
+            <HelpTip id="tour.operator.holdHint" className="min-h-0 flex-1">
+              <HelpTip id="tour.operator.matrix" className="min-h-0 flex-1">
+                <View className="min-h-0 flex-1">
+                  <GestureDetector gesture={matrixGesture}>
+                    <View
+                      ref={boardRef as never}
+                      collapsable={false}
+                      onLayout={(event) => {
+                        const { width, height } = event.nativeEvent.layout;
+                        setBoardBox((prev) =>
+                          Math.abs(prev.width - width) < 1 &&
+                          Math.abs(prev.height - height) < 1
+                            ? prev
+                            : { width, height },
+                        );
+                      }}
+                      style={
+                        isP03a21
+                          ? {
+                              flex: 1,
+                              minHeight: 0,
+                              width: '100%',
+                              backgroundColor: '#f4f1ea',
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderColor: '#d5d0c6',
+                              paddingVertical: 2,
+                              paddingHorizontal: 4,
+                            }
+                          : { flex: 1, minHeight: 0, width: '100%' }
+                      }
+                    >
+                      {grid
+                        ? grid.rows.map((row, rowIdx) => (
+                            <View
+                              key={`row-${rowIdx}`}
+                              className="flex-row"
+                              style={{
+                                flex: 1,
+                                minHeight: 0,
+                                gap: matrixGap,
+                                alignItems: 'stretch',
+                              }}
+                            >
+                              {row.map((cell, colIdx) => {
+                                const isStop =
+                                  Boolean(cell) &&
+                                  Boolean(stopCell) &&
+                                  (cell!.id === stopCell!.id ||
+                                    cell!.style === 'estop');
+                                if (!cell || isStop) {
+                                  return (
+                                    <View
+                                      key={`hole-${rowIdx}-${colIdx}`}
+                                      style={{ flex: 1, minWidth: 0 }}
+                                      accessibilityElementsHidden
+                                    />
+                                  );
+                                }
                                 return (
                                   <View
-                                    key={`hole-${rowIdx}-${colIdx}`}
+                                    key={cell.id}
                                     style={{ flex: 1, minWidth: 0 }}
-                                    accessibilityElementsHidden
-                                  />
+                                  >
+                                    {renderMobileCell(cell, true)}
+                                  </View>
                                 );
-                              }
-                              return (
-                                <View
-                                  key={cell.id}
-                                  style={{ flex: 1, minWidth: 0 }}
-                                >
-                                  {renderMobileCell(cell, true)}
-                                </View>
-                              );
-                            })}
-                          </View>
-                        ))
-                      : grid?.rows.flatMap((row) =>
-                          row.flatMap((cell) => {
-                            if (!cell) return [];
-                            if (
-                              stopCell &&
-                              (cell.id === stopCell.id ||
-                                cell.style === 'estop')
-                            ) {
-                              return [];
-                            }
-                            return [
-                              <View
-                                key={cell.id}
-                                style={{ width: '100%', marginBottom: 6 }}
-                              >
-                                {renderMobileCell(cell, true)}
-                              </View>,
-                            ];
-                          }),
-                        )}
-                  </View>
-                </GestureDetector>
-              </ScrollView>
+                              })}
+                            </View>
+                          ))
+                        : null}
+                    </View>
+                  </GestureDetector>
+                </View>
+              </HelpTip>
             </HelpTip>
-          </HelpTip>
-        </Card>
+          </Card>
+        </View>
       </View>
 
       {stopCell ? (
         <View
-          className="border-t border-border bg-background px-2 pt-2"
-          style={{ paddingBottom: 12 }}
+          className="border-t border-border bg-background px-2 pt-1"
+          style={{ paddingBottom: 8 }}
           accessibilityLabel="Stop dock"
         >
           {renderMobileCell(stopCell)}

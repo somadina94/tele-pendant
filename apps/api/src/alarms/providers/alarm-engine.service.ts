@@ -130,35 +130,68 @@ export class AlarmEngineService implements OnModuleInit {
    */
   private async ensureQuietSample(): Promise<void> {
     const enabled = await this.definitions.find({ where: { enabled: true } });
-    const alreadyTrue = enabled.some((def) =>
-      this.trueOnQuietSimulator(
-        def.register?.name,
-        def.compareOp,
-        def.threshold,
-      ),
-    );
-    if (alreadyTrue) return;
+    for (const def of enabled) {
+      if (def.name !== 'Hoist height sample') continue;
+      if (
+        !this.trueOnQuietSimulator(
+          def.register?.name,
+          def.compareOp,
+          def.threshold,
+        )
+      ) {
+        continue;
+      }
+      def.enabled = false;
+      await this.definitions.save(def);
+      this.logger.log('Retired crane sample alarm Hoist height sample');
+    }
 
-    const name = 'Hoist height sample';
-    const existing = await this.definitions.findOne({ where: { name } });
-    if (existing) return;
-
-    const hoist = await this.registers.findOne({
-      where: { name: 'holding.hoistHeightMm' },
-    });
-    if (!hoist) return;
-
-    await this.definitions.save(
-      this.definitions.create({
-        name,
-        severity: 'info',
+    const samples: Array<{
+      name: string;
+      register: string;
+      compareOp: AlarmDefinition['compareOp'];
+      threshold: number;
+    }> = [
+      {
+        name: 'Wire height above home',
+        register: 'holding.hoistHeightMm',
         compareOp: 'gt',
         threshold: 0,
-        enabled: true,
-        register: hoist,
-      }),
-    );
-    this.logger.log('Added sample alarm Hoist height sample');
+      },
+      {
+        name: 'Fixture load clear',
+        register: 'holding.loadKg',
+        compareOp: 'eq',
+        threshold: 0,
+      },
+      {
+        name: 'Weld travel idle',
+        register: 'discrete.motorRunning',
+        compareOp: 'eq',
+        threshold: 0,
+      },
+    ];
+    for (const sample of samples) {
+      const existing = await this.definitions.findOne({
+        where: { name: sample.name },
+      });
+      if (existing) continue;
+      const register = await this.registers.findOne({
+        where: { name: sample.register },
+      });
+      if (!register) continue;
+      await this.definitions.save(
+        this.definitions.create({
+          name: sample.name,
+          severity: 'info',
+          compareOp: sample.compareOp,
+          threshold: sample.threshold,
+          enabled: true,
+          register,
+        }),
+      );
+      this.logger.log(`Added sample alarm ${sample.name}`);
+    }
   }
 
   /** Values the Modbus simulator holds while the plant is idle. */

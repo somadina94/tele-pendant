@@ -42,11 +42,20 @@ export function useDeviceCamera({
 
   useEffect(() => {
     if (!enabled) return;
+    const insecure =
+      typeof window !== 'undefined' && window.isSecureContext === false;
+    const media = navigator.mediaDevices;
+    if (insecure || !media?.getUserMedia) {
+      setCamError(
+        'The browser blocks the camera and microphone on plain HTTP. Typed codes and Listen still work on this page.',
+      );
+      return;
+    }
     let stream: MediaStream | null = null;
     let cancelled = false;
     setCamError(null);
     setCamPermissionDenied(false);
-    void navigator.mediaDevices
+    void media
       .getUserMedia({
         video: { facingMode },
         audio: false,

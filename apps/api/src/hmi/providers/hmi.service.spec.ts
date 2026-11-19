@@ -7,6 +7,19 @@ import { tmpdir } from 'node:os';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { HmiService } from './hmi.service';
+import { renderPdfFirstPage } from '../hmi-pdf';
+
+jest.mock('../hmi-pdf', () => ({
+  renderPdfFirstPage: jest.fn(async (bytes: Buffer) => {
+    if (bytes.includes('bad-pdf')) throw new Error('Could not read that PDF');
+    if (bytes.includes('odd-pdf')) {
+      // The upload path must still reject when the renderer throws a non-Error.
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw 'nope';
+    }
+    return Buffer.from('png-page');
+  }),
+}));
 import { UserRole } from '../../users/enums/user-role.enum';
 
 describe('HmiService', () => {
@@ -1453,20 +1466,51 @@ describe('HmiService', () => {
         mimetype: 'image/png',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+    const pdf = await service.uploadBackgroundAsset({
+      buffer: Buffer.from('%PDF-1.1'),
+      mimetype: 'application/pdf',
+    });
+    expect(pdf.imageUrl).toMatch(/\.png$/);
+    expect(renderPdfFirstPage).toHaveBeenCalled();
+    const pdfName = pdf
+      .imageUrl!.split('/')
+      .pop()!
+      .replace(/\.png$/, '.pdf');
+    expect(
+      readFileSync(join(tmpdir(), 'hmi-assets', pdfName), 'utf8'),
+    ).toContain('%PDF');
     await expect(
       service.uploadBackgroundAsset({
-        buffer: Buffer.from('x'),
+        buffer: Buffer.from('bad-pdf'),
         mimetype: 'application/pdf',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       service.uploadBackgroundAsset({
-        buffer: Buffer.alloc(2_000_001),
+        buffer: Buffer.from('zip'),
+        mimetype: 'application/zip',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.uploadBackgroundAsset({
+        buffer: Buffer.from('odd-pdf'),
+        mimetype: 'application/pdf',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.uploadBackgroundAsset({
+        buffer: Buffer.from('png'),
         mimetype: 'image/png',
         size: 2_000_001,
       }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-
+    ).rejects.toThrow('Plant graphic must be 2 MB or smaller');
+    await expect(
+      service.uploadBackgroundAsset({
+        buffer: Buffer.from('%PDF'),
+        mimetype: 'application/pdf',
+        size: 8_000_001,
+      }),
+    ).rejects.toThrow('PDF must be 8 MB or smaller');
     const saved = await service.uploadBackgroundAsset({
       buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
       mimetype: 'image/svg+xml',

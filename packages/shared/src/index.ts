@@ -28,6 +28,8 @@ export {
   shouldApplyLiveTags,
   tagValueForRegister,
 } from './tags';
+export { containedImageRect, percentInRect } from './image-rect';
+export type { ImageRect } from './image-rect';
 export { isOperatorScreenReady, operatorNeedsLiveTags } from './operator-ready';
 export type { OperatorLayoutLike } from './operator-ready';
 export type { TagSnapshot } from './tags';

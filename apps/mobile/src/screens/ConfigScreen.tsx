@@ -2,7 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check } from 'lucide-react-native';
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../api';
+import {
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  apiPut,
+  apiUploadFile,
+  getApiBase,
+} from '../api';
+import { PlantImage } from '../plant-graphic';
 import type {
   Cell,
   Layout,
@@ -19,7 +28,9 @@ import { HelpTip } from '../tour';
 import { getStoredUserRole } from '../user-session';
 import {
   alarmSeveritySelectOptions,
+  containedImageRect,
   normalizeAlarmSeverity,
+  percentInRect,
   type AlarmSeverity,
   type UserRole,
 } from '@tele-pendant/shared';
@@ -374,6 +385,9 @@ export function ConfigScreen({ token }: { token: string }) {
             <OverlayForm
               key={overlay.id}
               overlay={overlay}
+              imageUrl={resolvePlantImageUrl(
+                layout?.background?.imageUrl ?? '',
+              )}
               registers={registers}
               note={notes[overlay.id]}
               saveLabel={`Save ${overlay.label}`}
@@ -404,6 +418,7 @@ export function ConfigScreen({ token }: { token: string }) {
           ))}
           <Text className="mb-1 mt-2 text-muted-foreground">Add a label</Text>
           <OverlayForm
+            imageUrl={resolvePlantImageUrl(layout?.background?.imageUrl ?? '')}
             registers={registers}
             note={notes['new-label']}
             saveLabel="Add label"
@@ -428,9 +443,8 @@ export function ConfigScreen({ token }: { token: string }) {
             </Text>
           </HelpTip>
           <Text className="mt-1 text-xs text-muted-foreground">
-            Upload graphics on web Config. Here: switch screens and edit the
-            active name / CSS / image URL. Empty image URL keeps the crane
-            mimic.
+            Upload an SVG, a photo, or a PDF for this screen. Page 1 of a PDF
+            becomes the picture. An empty image keeps the crane mimic.
           </Text>
           <BackgroundScreens
             screens={layout?.backgrounds ?? []}
@@ -457,10 +471,15 @@ export function ConfigScreen({ token }: { token: string }) {
           {layout?.background ? (
             <BackgroundForm
               key={layout.background.id}
+              token={token}
               name={layout.background.name}
               cssBackground={layout.background.cssBackground ?? ''}
               imageUrl={layout.background.imageUrl ?? ''}
               note={notes.background}
+              onUploaded={async () => {
+                await refreshLayout();
+                remember('background', 'Uploaded plant graphic.');
+              }}
               onSave={async (value) => {
                 try {
                   await apiPatch('/hmi/background', value, token);
@@ -1164,8 +1183,97 @@ function CellForm({
   );
 }
 
+const PLANT_UPLOAD_TYPES = [
+  'image/svg+xml',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'application/pdf',
+];
+
+function resolvePlantImageUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const origin = getApiBase().replace(/\/api\/v1\/?$/, '');
+  return `${origin}${trimmed.startsWith('/') ? trimmed : `/${trimmed}`}`;
+}
+
+function LabelTap({
+  imageUrl,
+  xPct,
+  yPct,
+  label,
+  onPlace,
+}: {
+  imageUrl: string;
+  xPct: string;
+  yPct: string;
+  label: string;
+  onPlace: (xPct: number, yPct: number) => void;
+}) {
+  const [frame, setFrame] = useState({ width: 0, height: 0 });
+  const [natural, setNatural] = useState({ width: 0, height: 0 });
+  const drawn = containedImageRect(
+    frame.width,
+    frame.height,
+    natural.width,
+    natural.height,
+  );
+  if (!imageUrl) {
+    return (
+      <Text className="text-xs text-muted-foreground">
+        Upload a picture on Background, then tap it to place this label. Typing
+        X and Y still works.
+      </Text>
+    );
+  }
+  const x = Number(xPct);
+  const y = Number(yPct);
+  return (
+    <View className="gap-1">
+      <Text className="text-xs text-muted-foreground">
+        Tap the picture to place the label. Typing X and Y still works.
+      </Text>
+      <Pressable
+        style={{ height: 180 }}
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          setFrame({ width, height });
+        }}
+        onPress={(event) => {
+          const next = percentInRect(
+            event.nativeEvent.locationX - drawn.left,
+            event.nativeEvent.locationY - drawn.top,
+            drawn,
+          );
+          onPlace(next.xPct, next.yPct);
+        }}
+      >
+        <PlantImage uri={imageUrl} onSize={(size) => setNatural(size)} />
+        {drawn.width > 0 && Number.isFinite(x) && Number.isFinite(y) ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: drawn.left + (x / 100) * drawn.width,
+              top: drawn.top + (y / 100) * drawn.height,
+            }}
+          >
+            <Text className="rounded bg-black/70 px-1 text-xs text-white">
+              {label || 'Label'}
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
+    </View>
+  );
+}
+
 function OverlayForm({
   overlay,
+  imageUrl = '',
   registers,
   note,
   saveLabel,
@@ -1174,6 +1282,7 @@ function OverlayForm({
   onDelete,
 }: {
   overlay?: Overlay;
+  imageUrl?: string;
   registers: RegisterRef[];
   note?: string;
   saveLabel: string;
@@ -1213,6 +1322,16 @@ function OverlayForm({
         value={registerId || regOpts[0]?.value || ''}
         options={regOpts}
         onChange={setRegisterId}
+      />
+      <LabelTap
+        imageUrl={imageUrl}
+        xPct={xPct}
+        yPct={yPct}
+        label={label}
+        onPlace={(nextX, nextY) => {
+          setX(String(nextX));
+          setY(String(nextY));
+        }}
       />
       <Btn
         onPress={async () => {
@@ -1303,12 +1422,15 @@ function BackgroundScreens({
 }
 
 function BackgroundForm({
+  token,
   name: initialName,
   cssBackground: initialCss,
   imageUrl: initialImage,
   note,
   onSave,
+  onUploaded,
 }: {
+  token: string;
   name: string;
   cssBackground: string;
   imageUrl: string;
@@ -1318,10 +1440,12 @@ function BackgroundForm({
     cssBackground: string;
     imageUrl: string;
   }) => Promise<void>;
+  onUploaded?: () => Promise<void>;
 }) {
   const [name, setName] = useState(initialName);
   const [cssBackground, setCss] = useState(initialCss);
   const [imageUrl, setImage] = useState(initialImage);
+  const [uploading, setUploading] = useState(false);
   useEffect(() => {
     setName(initialName);
     setCss(initialCss);
@@ -1336,6 +1460,40 @@ function BackgroundForm({
         onChangeText={setCss}
       />
       <Field label="Image URL" value={imageUrl} onChangeText={setImage} />
+      <Btn
+        onPress={() => {
+          void (async () => {
+            setUploading(true);
+            try {
+              const DocumentPicker = await import('expo-document-picker');
+              const picked = await DocumentPicker.getDocumentAsync({
+                type: PLANT_UPLOAD_TYPES,
+                copyToCacheDirectory: true,
+              });
+              if (picked.canceled || !picked.assets[0]) return;
+              const asset = picked.assets[0];
+              await apiUploadFile(
+                '/hmi/background/asset',
+                {
+                  uri: asset.uri,
+                  name: asset.name,
+                  type: asset.mimeType || 'application/octet-stream',
+                },
+                token,
+              );
+              await onUploaded?.();
+            } catch (err) {
+              showErrorFrom(err, 'Upload failed');
+            } finally {
+              setUploading(false);
+            }
+          })();
+        }}
+      >
+        <Text className="font-bold text-primary-foreground">
+          {uploading ? 'Uploading…' : 'Upload SVG, image, or PDF'}
+        </Text>
+      </Btn>
       <Btn onPress={() => onSave({ name, cssBackground, imageUrl })}>
         <Text className="font-bold text-primary-foreground">
           Save background

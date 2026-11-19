@@ -9,7 +9,7 @@ import {
 } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { OperatorPage } from './OperatorPage';
+import { OperatorPage, readPlantImageRect } from './OperatorPage';
 import { renderOperator } from '../test/render';
 import * as api from '../lib/api';
 import type { ControlLease } from '../lib/api';
@@ -191,6 +191,40 @@ const heldControl = {
 };
 
 describe('OperatorPage', () => {
+  it('measures a loaded plant picture and skips an empty one', () => {
+    const frame = document.createElement('div');
+    const img = document.createElement('img');
+    expect(readPlantImageRect(null, img)).toBeNull();
+    expect(readPlantImageRect(frame, null)).toBeNull();
+    Object.defineProperty(img, 'naturalWidth', {
+      configurable: true,
+      value: 0,
+    });
+    expect(readPlantImageRect(frame, img)).toBeNull();
+    Object.defineProperty(img, 'naturalWidth', {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(img, 'naturalHeight', {
+      configurable: true,
+      value: 0,
+    });
+    expect(readPlantImageRect(frame, img)).toBeNull();
+    Object.defineProperty(img, 'naturalHeight', {
+      configurable: true,
+      value: 200,
+    });
+    expect(readPlantImageRect(frame, img)).toEqual(
+      expect.objectContaining({ width: 0, height: 0 }),
+    );
+  });
+
+  it('opens the crane view when the screen has no background record', async () => {
+    mockGetWithControl({ ...layout, background: null });
+    renderOperator(<OperatorPage />);
+    expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
+  });
+
   beforeEach(() => {
     socket.on.mockClear();
     socket.off.mockClear();
@@ -1717,7 +1751,7 @@ describe('OperatorPage', () => {
     const { unmount } = renderOperator(<OperatorPage />);
     expect(await screen.findByText('demo-p03a21')).toBeInTheDocument();
     expect(screen.queryByText('Height')).not.toBeInTheDocument();
-    expect(document.querySelector('[data-pendant="p03a21"]')).toBeTruthy();
+    expect(document.querySelector('[data-pendant="screen"]')).toBeTruthy();
     unmount();
 
     vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
@@ -1725,14 +1759,18 @@ describe('OperatorPage', () => {
       if (path === '/realtime/tags') return pendantTags as never;
       return {
         ...layout,
-        background: { ...layout.background, name: 'demo-crane' },
-        cells: [selectorCell],
+        background: {
+          ...layout.background,
+          name: 'demo-crane',
+          imageUrl: null,
+        },
+        cells: layout.cells,
       } as never;
     });
     renderOperator(<OperatorPage />);
     expect(await screen.findByText('demo-crane')).toBeInTheDocument();
     expect(await screen.findByText('Height')).toBeInTheDocument();
-    expect(document.querySelector('[data-pendant="p03a21"]')).toBeNull();
+    expect(document.querySelector('[data-pendant="screen"]')).toBeNull();
   });
 
   it('switches plant screens and hides mimic when a custom graphic is set', async () => {
@@ -1761,9 +1799,25 @@ describe('OperatorPage', () => {
       return { ok: true } as never;
     });
     renderOperator(<OperatorPage />);
-    expect(
-      await screen.findByRole('img', { name: 'Plant background' }),
-    ).toHaveAttribute('src', '/hmi-assets/plant.svg');
+    const plant = (await screen.findByRole('img', {
+      name: 'Plant background',
+    })) as HTMLImageElement;
+    expect(plant).toHaveAttribute('src', '/hmi-assets/plant.svg');
+    Object.defineProperty(plant, 'naturalWidth', {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(plant, 'naturalHeight', {
+      configurable: true,
+      value: 200,
+    });
+    fireEvent.load(plant);
+    await waitFor(() => {
+      const stage = document.querySelector(
+        '.plant-overlay-stage',
+      ) as HTMLElement;
+      expect(stage.style.left).not.toBe('');
+    });
     expect(screen.getByRole('tablist', { name: 'Plant screens' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'demo-crane' }));
     fireEvent.click(screen.getByRole('button', { name: 'yard' }));
@@ -2777,6 +2831,24 @@ describe('OperatorPage', () => {
           imageUrl: null,
         },
         cells: [
+          {
+            id: 'sel-off',
+            row: 0,
+            col: 1,
+            label: 'OWVA up/down',
+            style: 'selector',
+            isMotion: true,
+            requiresSafeAction: false,
+            primaryRegister: {
+              id: 'up-off',
+              name: 'coil.p03a21.di.owvaUp',
+              address: 26,
+              kind: 'coil',
+            },
+            secondaryRegister: null,
+            feedbackRegister: null,
+            statusRegister: null,
+          },
           {
             id: 'pb1',
             row: 0,

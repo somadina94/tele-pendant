@@ -3,6 +3,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -19,6 +20,7 @@ import {
   HmiLayout,
   RegisterRef,
 } from '@/lib/api';
+import { containedImageRect, percentInRect } from '@tele-pendant/shared';
 import { useT } from '@/lib/i18n';
 import { HelpTip, useTour } from '@/lib/tour';
 import { toastErr, toastOk } from '@/lib/toast';
@@ -579,6 +581,7 @@ export function AdminPage() {
                 <OverlayEditor
                   key={overlay.id}
                   noteKey={overlay.id}
+                  imageUrl={layout?.background?.imageUrl ?? ''}
                   registers={registers}
                   initial={{
                     label: overlay.label,
@@ -608,6 +611,7 @@ export function AdminPage() {
                 <OverlayEditor
                   key={labelFormKey}
                   noteKey="new-label"
+                  imageUrl={layout?.background?.imageUrl ?? ''}
                   registers={registers}
                   initial={{
                     label: '',
@@ -638,9 +642,10 @@ export function AdminPage() {
             <CardHeader>
               <CardTitle>Background</CardTitle>
               <CardDescription>
-                Upload an SVG or photo for the active Operator screen, or keep
-                the built-in crane mimic when no image is set. Add extra screens
-                to switch plant views on Operator.
+                Upload an SVG, a photo, or a PDF for this screen. Page 1 of a
+                PDF becomes the picture. Add extra screens to switch plant views
+                on Operator. A screen with no picture keeps the built-in crane
+                mimic.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1707,8 +1712,122 @@ interface OverlayForm {
   registerId: string;
 }
 
+function LabelPlacement({
+  imageUrl,
+  xPct,
+  yPct,
+  label,
+  onPlace,
+}: {
+  imageUrl: string;
+  xPct: string;
+  yPct: string;
+  label: string;
+  onPlace: (xPct: number, yPct: number) => void;
+}) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [drawn, setDrawn] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  function measure() {
+    const frame = frameRef.current;
+    const img = imgRef.current;
+    if (!frame || !img?.naturalWidth || !img.naturalHeight) return;
+    const box = frame.getBoundingClientRect();
+    setDrawn(
+      containedImageRect(
+        box.width,
+        box.height,
+        img.naturalWidth,
+        img.naturalHeight,
+      ),
+    );
+  }
+
+  useEffect(() => {
+    measure();
+    const frame = frameRef.current;
+    const img = imgRef.current;
+    if (!frame) return;
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(frame);
+    img?.addEventListener('load', measure);
+    return () => {
+      observer.disconnect();
+      img?.removeEventListener('load', measure);
+    };
+  }, [imageUrl]);
+
+  if (!imageUrl) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Upload a picture on the Background screen, then click it to place this
+        label. Typing X and Y still works.
+      </p>
+    );
+  }
+
+  const x = Number(xPct);
+  const y = Number(yPct);
+  return (
+    <div className="grid gap-2">
+      <p className="text-sm text-muted-foreground">
+        Click the picture to place the label. Typing X and Y still works.
+      </p>
+      <div
+        ref={frameRef}
+        className="relative h-48 w-full cursor-crosshair overflow-hidden rounded-md border bg-muted"
+        onClick={(event) => {
+          const frame = frameRef.current;
+          const img = imgRef.current;
+          if (!frame || !img?.naturalWidth || !img.naturalHeight) return;
+          const box = frame.getBoundingClientRect();
+          const rect = containedImageRect(
+            box.width,
+            box.height,
+            img.naturalWidth,
+            img.naturalHeight,
+          );
+          const next = percentInRect(
+            event.clientX - box.left - rect.left,
+            event.clientY - box.top - rect.top,
+            rect,
+          );
+          setDrawn(rect);
+          onPlace(next.xPct, next.yPct);
+        }}
+      >
+        <img
+          ref={imgRef}
+          alt=""
+          src={imageUrl}
+          className="h-full w-full object-contain"
+          onLoad={measure}
+        />
+        {drawn && Number.isFinite(x) && Number.isFinite(y) ? (
+          <span
+            className="pointer-events-none absolute rounded bg-black/75 px-1.5 py-0.5 text-xs text-white"
+            style={{
+              left: drawn.left + (x / 100) * drawn.width,
+              top: drawn.top + (y / 100) * drawn.height,
+            }}
+          >
+            {label || 'Label'}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function OverlayEditor({
   noteKey,
+  imageUrl,
   registers,
   initial,
   submitLabel,
@@ -1718,7 +1837,8 @@ function OverlayEditor({
   onDelete,
 }: {
   noteKey: string;
-  registers: RegisterOption[];
+  imageUrl: string;
+  registers: RegisterRef[];
   initial: OverlayForm;
   submitLabel: string;
   note?: Note;
@@ -1778,6 +1898,16 @@ function OverlayEditor({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="grid gap-2">
           <Label htmlFor={`${noteKey}-overlay-label`}>Label</Label>
+          <LabelPlacement
+            imageUrl={imageUrl}
+            xPct={xPct}
+            yPct={yPct}
+            label={label}
+            onPlace={(nextX, nextY) => {
+              setXPct(String(nextX));
+              setYPct(String(nextY));
+            }}
+          />
           <Input
             id={`${noteKey}-overlay-label`}
             aria-label={`${noteKey} overlay-label`}
@@ -2034,12 +2164,12 @@ function BackgroundEditor({
         />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="background-upload">Upload SVG or image</Label>
+        <Label htmlFor="background-upload">Upload SVG, image, or PDF</Label>
         <Input
           id="background-upload"
           aria-label="background upload"
           type="file"
-          accept="image/svg+xml,image/png,image/jpeg,image/webp,image/gif,.svg"
+          accept="image/svg+xml,image/png,image/jpeg,image/webp,image/gif,.svg,application/pdf,.pdf"
           disabled={uploading}
           onChange={(event) => {
             const file = event.target.files?.[0];

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { queryCameraPermissionState } from '@/lib/camera-permission';
 import { useDeviceCamera } from './use-device-camera';
@@ -18,6 +18,32 @@ vi.mock('@/lib/camera-permission', () => ({
 }));
 
 describe('useDeviceCamera', () => {
+  afterEach(() => {
+    Object.defineProperty(window, 'isSecureContext', {
+      configurable: true,
+      value: true,
+    });
+  });
+
+  it('skips the camera on plain HTTP and explains the block', async () => {
+    const getUserMedia = vi.fn();
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: undefined,
+    });
+    Object.defineProperty(window, 'isSecureContext', {
+      configurable: true,
+      value: false,
+    });
+    const { result } = renderHook(() => useDeviceCamera({ enabled: true }));
+    await waitFor(() => expect(result.current.camError).toMatch(/plain HTTP/i));
+    expect(getUserMedia).not.toHaveBeenCalled();
+    Object.defineProperty(window, 'isSecureContext', {
+      configurable: true,
+      value: true,
+    });
+  });
+
   it('retries when permission becomes granted after denial', async () => {
     permissionState.value = 'granted';
     const getUserMedia = vi.fn().mockRejectedValue(new Error('denied'));

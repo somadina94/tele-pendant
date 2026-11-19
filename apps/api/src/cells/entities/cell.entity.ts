@@ -7,6 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { BackgroundDisplay } from '../../backgrounds/entities/background-display.entity';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 
 @Entity('cells')
@@ -66,6 +67,10 @@ export class Cell {
   @ManyToOne(() => RegisterMap, { nullable: true, eager: true })
   @JoinColumn({ name: 'status_register_id' })
   statusRegister?: RegisterMap | null;
+
+  @ManyToOne(() => BackgroundDisplay, { nullable: true, eager: true })
+  @JoinColumn({ name: 'background_id' })
+  background?: BackgroundDisplay | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

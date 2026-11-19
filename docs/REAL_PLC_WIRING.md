@@ -207,6 +207,24 @@ Fill **Node id** on each register row (Config shows that field when an OPC UA co
 
 ---
 
+## What the PLC must do when this app stops talking
+
+These addresses are the **demo simulator** addresses. They are not your plant addresses. This pendant has not been run on your PLC.
+
+While exchanges succeed, the app writes `holding.heartbeat` (demo holding register **10**) on each safety tick, about four times a second. If the PLC stops seeing that value change, the PLC drops motion. The app’s own silent-peer loss is the software watchdog. In the Docker check that timeout was about six seconds, which is the Modbus request timeout, not a measured hardwired stop.
+
+When the deadman times out (about 2.5 seconds) or the operator releases it, the app writes the deadman coil false and clears motion coils. Demo deadman coil is **10**.
+
+On comms loss, e-stop, or safe state, the app writes `holding.safeState` (demo holding register **11**) to **1**, writes the deadman coil false, and clears motion coils. The PLC must drop motion outputs when that register is 1.
+
+Example, in words, using the demo addresses:
+
+1. If holding register 10 has not changed for longer than your chosen timeout, reset every motion output.
+2. If coil 10 is false, reset every motion output.
+3. If holding register 11 is 1, reset every motion output.
+
+Replace 10 and 11 with the addresses your program actually uses. Do not treat this as a certified safety function. Keep the hardwired e-stop.
+
 ## Related docs
 
 - [DRIVERS.md](./DRIVERS.md); Modbus / OPC UA / adding drivers  

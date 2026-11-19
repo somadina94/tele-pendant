@@ -54,7 +54,11 @@ export const HMI_ASSET_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
   'image/gif': 'gif',
+  'application/pdf': 'pdf',
 };
+
+export const HMI_IMAGE_BYTE_LIMIT = 2_000_000;
+export const HMI_PDF_BYTE_LIMIT = 8_000_000;
 
 export function svgFailureMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Invalid SVG';

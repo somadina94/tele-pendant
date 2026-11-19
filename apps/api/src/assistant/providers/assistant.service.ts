@@ -1,8 +1,16 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+  Optional,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Database from 'better-sqlite3';
 import { mkdirSync, readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { basename, isAbsolute, join, resolve } from 'path';
+import { AlarmEngineService } from '../../alarms/providers/alarm-engine.service';
+import { TagPollerService } from '../../realtime/providers/tag-poller.service';
 
 export interface AssistantHit {
   title: string;
@@ -58,7 +66,15 @@ export class AssistantService implements OnModuleInit {
   /** Production uses the optional package. Tests can point this at a stub. */
   loadSdk: () => Promise<CursorSdk | null> = () => loadCursorSdk();
 
-  constructor(@Inject(ConfigService) configService: ConfigService) {
+  constructor(
+    @Inject(ConfigService) configService: ConfigService,
+    @Optional()
+    @Inject(AlarmEngineService)
+    private readonly alarms?: AlarmEngineService,
+    @Optional()
+    @Inject(TagPollerService)
+    private readonly tags?: TagPollerService,
+  ) {
     this.configService = configService;
   }
 
@@ -260,16 +276,17 @@ export class AssistantService implements OnModuleInit {
 
   async ask(question: string) {
     const hits = this.search(question, 5);
-    const ftsAnswer =
+    const manual =
       hits.length === 0
         ? 'No local documents matched. Try words like deadman, e-stop, Modbus, alarm, or PLC wiring.'
         : hits.map((h) => `• ${h.title}: ${h.snippet}`).join('\n');
+    const ftsAnswer = `${await this.liveBrief()}\n\n${manual}`;
     const ftsPayload = {
       question,
       answer: ftsAnswer,
       hits,
       mode: 'local-fts' as const,
-      note: 'Answers are from the local manuals.',
+      note: 'Names the active alarms and current tag values, then the matching manual paragraph. This is not a model and it does not write coils.',
     };
 
     const apiKey = this.cursorApiKey();
@@ -355,6 +372,34 @@ export class AssistantService implements OnModuleInit {
       '## Operator question',
       question,
     ].join('\n');
+  }
+
+  private async liveBrief(): Promise<string> {
+    let alarms = 'Active alarms: none.';
+    try {
+      const rows = this.alarms ? await this.alarms.listActive() : [];
+      const names = rows
+        .map((row) => row.definition?.name?.trim())
+        .filter((name): name is string => Boolean(name));
+      if (names.length > 0) alarms = `Active alarms: ${names.join(', ')}.`;
+    } catch {
+      alarms = 'Active alarms: unavailable.';
+    }
+    let tags = 'Current tags: none.';
+    try {
+      const snap = this.tags?.latest();
+      const values =
+        snap && 'values' in snap && snap.values ? snap.values : undefined;
+      const bits = values
+        ? Object.entries(values)
+            .slice(0, 12)
+            .map(([name, value]) => `${name}=${String(value)}`)
+        : [];
+      if (bits.length > 0) tags = `Current tags: ${bits.join(', ')}.`;
+    } catch {
+      tags = 'Current tags: unavailable.';
+    }
+    return `${alarms}\n${tags}`;
   }
 
   private loadHandbook(): string {

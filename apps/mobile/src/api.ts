@@ -26,6 +26,36 @@ function isAuthBootstrapPath(path: string): boolean {
   );
 }
 
+function rethrowFetch(base: string, err: unknown): never {
+  if (base.startsWith('http://')) {
+    throw new Error(
+      `Cannot reach ${base}. This API is plain HTTP. Rebuild the Android app with EXPO_PUBLIC_ALLOW_HTTP=true, or leave that setting empty when the API address starts with http://.`,
+    );
+  }
+  throw err;
+}
+
+async function throwIfNotOk(res: Response, path: string): Promise<void> {
+  if (res.ok) return;
+  if (res.status === 401 && !isAuthBootstrapPath(path)) {
+    await clearAccessToken();
+    notifyUnauthorized();
+  }
+  const text = await res.text();
+  let message = text;
+  try {
+    const parsed = JSON.parse(text) as { message?: string | string[] };
+    if (typeof parsed.message === 'string') message = parsed.message;
+    else if (Array.isArray(parsed.message)) message = parsed.message.join(', ');
+  } catch {
+    message = text;
+  }
+  throw new ApiStatusError(
+    message || `Request failed (${res.status})`,
+    res.status,
+  );
+}
+
 async function apiSend<T>(
   method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
@@ -34,37 +64,23 @@ async function apiSend<T>(
 ): Promise<T> {
   const base = getApiBase();
   const controlClientId = await getControlClientId();
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: {
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      'X-Control-Client-Id': controlClientId,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    // Live tags must not reuse a conditional/304 cache entry (prod jump).
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    if (res.status === 401 && !isAuthBootstrapPath(path)) {
-      await clearAccessToken();
-      notifyUnauthorized();
-    }
-    const text = await res.text();
-    let message = text;
-    try {
-      const parsed = JSON.parse(text) as { message?: string | string[] };
-      if (typeof parsed.message === 'string') message = parsed.message;
-      else if (Array.isArray(parsed.message))
-        message = parsed.message.join(', ');
-    } catch {
-      message = text;
-    }
-    throw new ApiStatusError(
-      message || `Request failed (${res.status})`,
-      res.status,
-    );
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      method,
+      headers: {
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        'X-Control-Client-Id': controlClientId,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      // Live tags must not reuse a conditional/304 cache entry (prod jump).
+      cache: 'no-store',
+    });
+  } catch (err) {
+    rethrowFetch(base, err);
   }
+  await throwIfNotOk(res, path);
   const json = (await res.json()) as { data: T };
   return json.data;
 }
@@ -99,4 +115,35 @@ export async function apiDelete<T>(path: string, token: string): Promise<T> {
 
 export async function apiGet<T>(path: string, token: string): Promise<T> {
   return apiSend<T>('GET', path, undefined, token);
+}
+
+export async function apiUploadFile<T>(
+  path: string,
+  file: { uri: string; name: string; type: string },
+  token: string,
+): Promise<T> {
+  const base = getApiBase();
+  const controlClientId = await getControlClientId();
+  const body = new FormData();
+  body.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
+  } as unknown as Blob);
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Control-Client-Id': controlClientId,
+      },
+      body,
+    });
+  } catch (err) {
+    rethrowFetch(base, err);
+  }
+  await throwIfNotOk(res, path);
+  const json = (await res.json()) as { data: T };
+  return json.data;
 }

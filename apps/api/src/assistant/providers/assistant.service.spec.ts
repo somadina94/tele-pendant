@@ -93,10 +93,70 @@ describe('AssistantService', () => {
     });
     const result = await service.ask('deadman');
     expect(result.mode).toBe('local-fts');
-    expect(result.note).toBe('Answers are from the local manuals.');
+    expect(result.note).toContain('active alarms');
+    expect(result.answer).toContain('Active alarms:');
+    expect(result.answer).toContain('Current tags:');
     expect((Agent.prompt as jest.Mock).mock.calls.length).toBe(0);
     if (prev === undefined) delete process.env.CURSOR_API_KEY;
     else process.env.CURSOR_API_KEY = prev;
+  });
+
+  it('names live alarms and tag values ahead of the manual paragraph', async () => {
+    const live = new AssistantService(
+      configService as never,
+      {
+        listActive: async () => [
+          { definition: { name: 'Fixture load clear' } },
+          { definition: { name: '   ' } },
+          { definition: null },
+        ],
+      } as never,
+      {
+        latest: () => ({
+          values: {
+            'holding.loadKg': 0,
+            'coil.eStop': false,
+          },
+        }),
+      } as never,
+    );
+    live.onModuleInit();
+    const result = await live.ask('deadman');
+    expect(result.answer).toContain('Active alarms: Fixture load clear.');
+    expect(result.answer).toContain('holding.loadKg=0');
+    expect(result.answer).toContain('coil.eStop=false');
+  });
+
+  it('says alarms and tags are unavailable when those reads throw', async () => {
+    const live = new AssistantService(
+      configService as never,
+      {
+        listActive: async () => {
+          throw new Error('alarms down');
+        },
+      } as never,
+      {
+        latest: () => {
+          throw new Error('tags down');
+        },
+      } as never,
+    );
+    live.onModuleInit();
+    const result = await live.ask('deadman');
+    expect(result.answer).toContain('Active alarms: unavailable.');
+    expect(result.answer).toContain('Current tags: unavailable.');
+  });
+
+  it('keeps the tag line empty when the snapshot has no values', async () => {
+    const live = new AssistantService(
+      configService as never,
+      { listActive: async () => [] } as never,
+      { latest: () => ({ at: null }) } as never,
+    );
+    live.onModuleInit();
+    const result = await live.ask('deadman');
+    expect(result.answer).toContain('Active alarms: none.');
+    expect(result.answer).toContain('Current tags: none.');
   });
 
   it('returns empty for blank / punctuation-only queries', () => {

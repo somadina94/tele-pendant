@@ -114,7 +114,7 @@ describe('HmiSeedService', () => {
     expect(cells.save).toHaveBeenCalledWith(shortened);
   });
 
-  it('migrates legacy crane layouts to P03A21 on boot', async () => {
+  it('leaves an existing layout on its screen', async () => {
     const { service } = makeService({
       cellCount: 12,
       selectorCount: 0,
@@ -124,6 +124,6 @@ describe('HmiSeedService', () => {
       .spyOn(service, 'resetP03a21Demo')
       .mockResolvedValue({ ok: true, cells: 20 });
     await service.onModuleInit();
-    expect(reset).toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
   });
 });

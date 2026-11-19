@@ -37,6 +37,21 @@ describe('DeviceCameraPanel', () => {
     expect(screen.getByText(/Camera blocked/)).toBeInTheDocument();
   });
 
+  it('shows the plain HTTP block without the permission copy', () => {
+    renderWithProviders(
+      <CameraAccessAlert
+        videoRef={{ current: null }}
+        camError="The browser blocks the camera and microphone on plain HTTP."
+        camRepromptAllowed
+        camShowSettingsHint={false}
+        camPermissionDenied={false}
+        retryCameraAccess={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/plain HTTP/)).toBeInTheDocument();
+    expect(screen.queryByText(/camera permission/i)).not.toBeInTheDocument();
+  });
+
   it('shows permission-denied copy without duplicating the error prefix', () => {
     renderWithProviders(
       <CameraAccessAlert

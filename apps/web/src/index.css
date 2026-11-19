@@ -299,51 +299,55 @@
   @apply pointer-events-none absolute inset-x-0 bottom-[5.75rem] top-11 z-[10] hidden overflow-hidden md:bottom-[6.25rem] md:top-12 md:block;
 }
 .plant-overlay {
-  @apply absolute z-10 flex min-w-[4.5rem] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 rounded-lg border border-white/18 bg-black/70 px-2.5 py-1.5 text-center shadow-[0_8px_20px_rgba(0,0,0,0.35)];
+  @apply absolute z-10 flex min-w-0 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0 rounded border border-white/18 bg-black/70 px-1 py-px text-center shadow-[0_4px_10px_rgba(0,0,0,0.35)];
 }
 .plant-overlay-label {
-  @apply text-[9px] font-medium uppercase tracking-[0.22em] text-white/55;
+  @apply text-[7px] font-medium uppercase leading-none tracking-[0.08em] text-white/55;
 }
 .plant-overlay-value {
-  @apply font-mono text-sm font-semibold tabular-nums tracking-wide text-white md:text-base;
+  @apply font-mono text-[10px] font-semibold leading-none tabular-nums tracking-tight text-white md:text-[11px];
 }
 .plant-readout {
-  @apply absolute inset-x-0 bottom-0 z-20 grid grid-cols-4 gap-px border-t border-white/10 bg-[#07090c]/95 px-1 pb-1 pt-1 md:px-2 md:pb-2 md:pt-1.5;
+  @apply absolute inset-x-0 bottom-0 z-20 grid grid-cols-4 gap-px border-t border-white/10 bg-[#07090c]/95 px-0.5 pb-px pt-px;
 }
 .plant-metric {
-  @apply flex flex-col items-center justify-center gap-0 px-0.5 py-0.5 md:gap-0.5 md:px-1 md:py-0.5;
+  @apply flex flex-col items-center justify-center gap-0 px-0.5 py-px;
 }
 .plant-metric + .plant-metric {
   border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 .plant-metric-label {
-  @apply text-[8px] font-medium uppercase tracking-[0.2em] text-white/45 md:text-[9px];
+  @apply text-[7px] font-medium uppercase leading-none tracking-[0.06em] text-white/45;
 }
 .plant-metric-value {
-  @apply font-mono text-sm font-semibold tabular-nums tracking-tight text-white md:text-lg;
+  @apply font-mono text-[10px] font-semibold leading-none tabular-nums tracking-tight text-white md:text-[11px];
 }
 .plant-metric-unit {
-  @apply text-[9px] uppercase tracking-[0.14em] text-white/40;
+  @apply text-[7px] uppercase leading-none tracking-[0.04em] text-white/40;
 }
 .matrix-grid {
-  @apply relative z-0 grid w-full gap-1 md:gap-1.5;
-  grid-auto-rows: minmax(2.75rem, auto);
+  @apply relative z-0 grid h-full min-h-0 w-full flex-1 gap-px md:gap-0.5;
+  grid-auto-rows: minmax(0, 1fr);
   align-items: stretch;
+  overflow: hidden;
+}
+.matrix-board {
+  @apply flex min-h-0 flex-1 flex-col overflow-hidden;
 }
 .matrix-grid > .matrix-cell,
-.matrix-grid > .matrix-grid-hole {
-  @apply relative z-0 min-w-0;
+.matrix-grid > .matrix-grid-hole,
+.matrix-grid > .pendant-slot {
+  @apply relative z-0 h-full min-h-0 min-w-0;
 }
 /* Phones keep the authored column count. A forced 1-col stack hid the
    rest of the pendant under STOP on short screens (iPhone SE). */
 .matrix-grid-hole {
-  @apply min-h-11;
+  @apply min-h-0;
 }
 .matrix-cell {
-  /* FEAT-A3: ≥44px targets; compact label + state chip for dense pendants.
-   * Layout utilities also live on the Button className so twMerge beats
-   * buttonVariants (inline-flex / whitespace-nowrap / gap-2 / h-9). */
-  @apply min-h-11 w-full touch-pan-y select-none overflow-hidden px-2 py-1.5 text-xs md:min-h-11 md:px-2.5 md:py-2 md:text-[13px];
+  /* Dense pendant: rows share the leftover height. Fixed 44px floors
+   * forced a scroll. Labels stay on the control via line-clamp. */
+  @apply h-full min-h-0 w-full touch-pan-y select-none overflow-hidden px-1 py-px text-[10px] leading-tight md:px-1.5 md:text-[11px];
 }
 .matrix-cell,
 .pendant-cap {
@@ -396,14 +400,11 @@
   @apply ring-1 ring-emerald-600/40;
 }
 .matrix-cell-label {
-  @apply min-w-0 flex-1 text-left font-semibold leading-snug;
+  @apply min-w-0 flex-1 text-left font-semibold leading-tight;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
-}
-.operator-shell[data-pendant='p03a21'] .matrix-cell-label {
-  -webkit-line-clamp: 3;
 }
 .matrix-cell-trailing {
   @apply flex shrink-0 items-center gap-1;
@@ -415,74 +416,111 @@
   @apply bg-emerald-400 shadow-[0_0_0_2px_rgba(52,211,153,0.35)];
 }
 .matrix-cell-meta {
-  @apply max-w-[9rem] truncate text-right text-[10px] font-normal leading-none opacity-80;
+  @apply max-w-[4.5rem] truncate text-right text-[8px] font-normal leading-none opacity-80 md:text-[9px];
 }
 .matrix-cell-state {
-  @apply inline-flex shrink-0 items-center gap-0.5 truncate rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide md:text-[10px];
+  @apply inline-flex shrink-0 items-center gap-px truncate rounded px-0.5 py-px text-[8px] font-bold uppercase leading-none tracking-wide md:text-[9px];
 }
 /* Welding pendant: full plant picture with live labels. Crane mimic and the metric strip stay off. */
-.operator-shell[data-pendant='p03a21'] .operator-plant-slot {
-  @apply flex-none;
+.operator-shell[data-pendant='screen'] .operator-plant-slot {
+  @apply min-h-0 flex-1;
+  min-height: 4rem;
 }
-.operator-shell[data-pendant='p03a21'] .operator-plant-slot .plant-graphic {
-  height: 16rem;
-  min-height: 16rem;
-  max-height: 16rem;
+.operator-shell[data-pendant='screen'] .operator-plant-slot .plant-graphic {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
 }
-.operator-shell[data-pendant='p03a21'] .plant-mimic-stage,
-.operator-shell[data-pendant='p03a21'] .plant-readout {
+.operator-shell[data-pendant='screen'] .plant-mimic-stage,
+.operator-shell[data-pendant='screen'] .plant-readout {
   display: none;
 }
-.operator-shell[data-pendant='p03a21'] .plant-overlay-stage {
+.operator-shell[data-pendant='screen'] .plant-overlay-stage {
   display: block;
   overflow: hidden;
-  top: 2.75rem;
-  right: 0.75rem;
-  bottom: 0.75rem;
-  left: 0.75rem;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
 }
 /* Top-left of the chip is the X/Y point, so a corner value stays inside the picture. */
-.operator-shell[data-pendant='p03a21'] .plant-overlay {
+.operator-shell[data-pendant='screen'] .plant-overlay {
   transform: none;
   max-width: 42%;
 }
-.operator-shell[data-pendant='p03a21'] .plant-cluster-chrome {
+.operator-shell[data-pendant='screen'] .plant-cluster-chrome {
   padding-block: 0.4rem;
 }
-.operator-shell[data-pendant='p03a21'] .operator-matrix-card {
-  @apply flex-1;
+.operator-shell[data-pendant='screen'] .operator-matrix-card {
+  @apply min-h-0 overflow-hidden;
+  flex: 0 1 22rem;
+  max-height: 22rem;
 }
-.operator-shell[data-pendant='p03a21'] .operator-matrix-toolbar-wrap {
-  @apply overflow-y-auto;
+.operator-shell[data-pendant='screen'] .operator-matrix-toolbar-wrap {
+  @apply min-h-0 flex-1 overflow-hidden;
 }
 /* P03A21 face: round control, name on the plate under it.
  * The drawing prints the name above the circle. The client asked for it below. */
-.operator-shell[data-pendant='p03a21'] .matrix-grid {
-  width: min(100%, 36rem);
+.operator-shell[data-face='round'] .matrix-grid {
+  width: 100%;
+  height: 100%;
   margin-inline: auto;
   background: #f4f1ea;
   border: 1px solid #d5d0c6;
-  border-radius: 12px;
-  padding: 12px 8px 8px;
-  gap: 14px 8px;
+  border-radius: 8px;
+  padding: 2px 4px;
+  gap: 1px 4px;
 }
 .pendant-slot {
-  @apply flex min-w-0 flex-col items-center gap-1;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
+  align-items: center;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 .pendant-legend {
-  @apply w-full text-center text-xs font-semibold leading-tight;
+  @apply w-full text-center font-semibold leading-none;
   color: #1c1917;
+  font-size: 8px;
+  line-height: 1.05;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  min-height: 2.8em;
+  max-height: 2.15em;
+  margin: 0;
 }
 .pendant-cap {
-  @apply h-[4.5rem] w-[4.5rem] min-h-[4.5rem] min-w-[4.5rem] shrink-0 rounded-full border-2 p-0;
+  width: min(100%, 2.25rem) !important;
+  height: min(100%, 2.25rem) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  aspect-ratio: 1;
+  flex: none;
+}
+/* Rocker uses the column width so each side keeps its own word. */
+.pendant-rocker {
+  width: min(100%, 7.5rem) !important;
+  height: min(100%, 1.5rem) !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 100% !important;
+  max-height: 1.5rem !important;
+  aspect-ratio: auto;
+  flex: none;
+  border-radius: 999px;
+}
+.pendant-cap {
+  @apply shrink rounded-full border-2 p-0;
 }
 .pendant-rocker {
-  @apply relative flex h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-full border-2;
+  @apply relative flex shrink overflow-hidden rounded-full border-2;
   background: #1c1c1c;
   border-color: #3a3a3a;
   color: #f4f4f5;
@@ -501,12 +539,15 @@
 }
 .pendant-rocker .matrix-selector-side,
 .pendant-rocker .matrix-selector-center {
-  @apply h-full min-h-0 rounded-none border-0 px-0 text-[8px] leading-tight shadow-none;
+  @apply h-full min-h-0 min-w-0 rounded-none border-0 px-1.5 leading-none shadow-none;
+  font-size: 8px;
   background: transparent !important;
   color: #f4f4f5 !important;
   text-transform: none;
   letter-spacing: 0;
-  white-space: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pendant-rocker .matrix-selector-side.is-active {
   background: #3d9cfd !important;
@@ -535,7 +576,7 @@
   color: var(--matrix-state-idle-fg) !important;
 }
 /* Drawing pushbuttons are white circles, including when the app chrome is dark. */
-.operator-shell[data-pendant='p03a21'] .pendant-cap.state-idle {
+.operator-shell[data-face='round'] .pendant-cap.state-idle {
   background-color: #fbfbf8 !important;
   border-color: #8d8d8d !important;
   color: #1c1917 !important;
@@ -589,128 +630,69 @@
 }
 /* FEAT-A3: STOP docked outside the scroll region — always visible. */
 .matrix-stop-dock {
-  @apply z-20 shrink-0 border-t bg-background/95 pt-1.5 supports-[padding:max(0px)]:pb-[max(0.35rem,env(safe-area-inset-bottom))];
+  @apply z-20 shrink-0 border-t bg-background/95 pt-1 supports-[padding:max(0px)]:pb-[max(0.2rem,env(safe-area-inset-bottom))];
 }
 .matrix-stop-dock .matrix-cell.estop {
-  @apply min-h-11 w-full text-sm;
+  @apply h-8 min-h-8 w-full py-0 text-xs;
 }
 .operator-shell {
   @apply flex min-h-0 w-full flex-1 flex-col;
 }
 .operator-body {
-  @apply flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden md:gap-2;
+  @apply flex min-h-0 flex-1 flex-col gap-1 overflow-hidden;
 }
 .operator-matrix-card {
   @apply relative z-0 flex min-h-0 w-full flex-1 flex-col overflow-hidden;
 }
 .operator-matrix-toolbar-wrap {
-  @apply flex flex-col gap-1 overflow-y-auto md:gap-1.5;
+  @apply flex min-h-0 flex-1 flex-col gap-1 overflow-hidden;
 }
 .operator-matrix-toolbar {
   @apply flex shrink-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-3 sm:gap-y-1;
 }
-/* TP-25 + FEAT-A3: short viewports shrink plant; never drop cells below 44px. */
-@media (min-width: 768px) and (max-height: 800px) {
-  .plant-graphic {
-    min-height: 12rem;
-  }
-  .plant-cluster-chrome {
-    padding-top: 0.4rem;
-    padding-bottom: 0.2rem;
-  }
-  .plant-overlay-stage {
-    top: 2rem;
-    bottom: 3.25rem;
-  }
-  .plant-metric-value {
-    font-size: 0.875rem;
-  }
-  .matrix-grid {
-    gap: 0.5rem;
-  }
-  .matrix-cell {
-    min-height: 2.75rem;
-    padding-block: 0.45rem;
-    padding-inline: 0.75rem;
-    font-size: 0.8125rem;
-  }
-  .matrix-grid-hole {
-    min-height: 2.75rem;
-  }
-  .operator-shell {
-    gap: 0.25rem;
-  }
-}
-@media (min-width: 768px) and (max-height: 700px) {
-  .plant-graphic {
-    min-height: 10rem;
-  }
-}
-/* Phones: plant stays a strip; the matrix scrolls above the STOP dock. */
+/* Phones: the button board stays a compact block. The picture keeps the leftover height. */
 @media (max-width: 767px) {
   .operator-plant-slot {
-    @apply flex-none;
+    @apply min-h-0 flex-1;
   }
   .plant-graphic {
-    @apply h-auto flex-none;
-    min-height: 6.5rem;
-    max-height: 7.5rem;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
   }
   .operator-matrix-card {
-    @apply min-h-0 flex-1 overflow-hidden;
+    @apply min-h-0 overflow-hidden;
+    flex: 0 1 20rem;
+    max-height: 20rem;
   }
   .operator-matrix-toolbar-wrap {
-    @apply min-h-0 flex-1;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
+    @apply min-h-0 flex-1 overflow-hidden;
   }
-  .matrix-cell {
-    padding-inline: 0.25rem;
-    padding-block: 3px;
-    font-size: 6px;
-  }
-  .matrix-selector {
-    padding-inline: 3px;
-    padding-block: 2px;
-  }
-  .matrix-selector-side {
-    font-size: 5.5px;
-  }
-  .matrix-cell-meta {
-    font-size: 5px;
-  }
-  .matrix-cell-state {
-    padding-inline: 2px;
-    padding-block: 1px;
-    font-size: 4.5px;
-  }
-  .matrix-stop-dock .matrix-cell.estop {
-    font-size: 7px;
+  .operator-shell[data-pendant='screen'] .operator-matrix-card {
+    flex-basis: 20rem;
+    max-height: 20rem;
   }
   .matrix-cell-label {
     -webkit-line-clamp: 2;
   }
-  .operator-shell[data-pendant='p03a21'] .plant-overlay-stage {
+  .operator-shell[data-pendant='screen'] .plant-overlay-stage {
     display: block;
-    top: 2rem;
-    bottom: 0.25rem;
-  }
-}
-@media (max-width: 767px) and (max-height: 700px) {
-  .plant-graphic {
-    min-height: 5.5rem;
-    max-height: 6.25rem;
-  }
-  .plant-cluster-chrome {
-    padding-top: 0.35rem;
-    padding-bottom: 0.15rem;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
   }
   .plant-mimic-stage {
-    top: 1.75rem;
-    bottom: 3.25rem;
+    top: 1.4rem;
+    bottom: 2.4rem;
   }
-  .plant-metric-value {
-    font-size: 0.8125rem;
+  .plant-metric-value,
+  .plant-overlay-value {
+    font-size: 10px;
+  }
+  .plant-cluster-title,
+  .plant-cluster-status {
+    font-size: 8px;
   }
 }
 .matrix-cell.estop,

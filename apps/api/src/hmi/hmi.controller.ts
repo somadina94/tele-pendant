@@ -197,7 +197,7 @@ export class HmiController {
   })
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 2_000_000 },
+      limits: { fileSize: 8_000_000 },
     }),
   )
   uploadBackgroundAsset(

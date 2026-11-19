@@ -24,11 +24,14 @@ import { SafeActionPinService } from '../../users/providers/safe-action-pin.serv
 import { UserRole } from '../../users/enums/user-role.enum';
 import {
   HMI_ASSET_MIME,
+  HMI_IMAGE_BYTE_LIMIT,
+  HMI_PDF_BYTE_LIMIT,
   hmiAssetPublicPath,
   hmiAssetsDirectory,
   sanitizeSvg,
   svgFailureMessage,
 } from '../hmi-assets';
+import { renderPdfFirstPage } from '../hmi-pdf';
 import { pendantDiName } from '@tele-pendant/modbus-core';
 import { cellRequiresControlLease } from '@tele-pendant/shared';
 
@@ -80,10 +83,15 @@ export class HmiService {
   }
 
   async getLayout() {
-    const cells = await this.cells.find({ order: { row: 'ASC', col: 'ASC' } });
     const background = await this.backgrounds.findOne({
       where: { active: true },
     });
+    const cells = background
+      ? await this.cells.find({
+          where: { background: { id: background.id } },
+          order: { row: 'ASC', col: 'ASC' },
+        })
+      : [];
     const overlays = background
       ? await this.overlays.find({
           where: { background: { id: background.id } },
@@ -185,28 +193,49 @@ export class HmiService {
     if (!file?.buffer?.length) {
       throw new BadRequestException('Plant graphic file is required');
     }
-    if ((file.size ?? file.buffer.length) > 2_000_000) {
-      throw new BadRequestException('Plant graphic must be 2 MB or smaller');
-    }
     const ext = HMI_ASSET_MIME[file.mimetype];
     if (!ext) {
       throw new BadRequestException(
-        'Unsupported file type — use SVG, PNG, JPEG, WebP, or GIF',
+        'Unsupported file type. Use SVG, PNG, JPEG, WebP, GIF, or PDF',
       );
     }
-    const filename = `${randomUUID()}.${ext}`;
-    let payload = file.buffer;
-    if (ext === 'svg') {
-      try {
-        payload = Buffer.from(
-          sanitizeSvg(file.buffer.toString('utf8')),
-          'utf8',
-        );
-      } catch (err) {
-        throw new BadRequestException(svgFailureMessage(err));
-      }
+    const byteLimit = ext === 'pdf' ? HMI_PDF_BYTE_LIMIT : HMI_IMAGE_BYTE_LIMIT;
+    if ((file.size ?? file.buffer.length) > byteLimit) {
+      throw new BadRequestException(
+        ext === 'pdf'
+          ? 'PDF must be 8 MB or smaller'
+          : 'Plant graphic must be 2 MB or smaller',
+      );
     }
-    writeFileSync(join(hmiAssetsDirectory(), filename), payload);
+    const dir = hmiAssetsDirectory();
+    let filename = `${randomUUID()}.${ext}`;
+    if (ext === 'pdf') {
+      let png: Buffer;
+      try {
+        png = await renderPdfFirstPage(file.buffer);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Could not read that PDF';
+        throw new BadRequestException(message);
+      }
+      const id = filename.replace(/\.pdf$/, '');
+      writeFileSync(join(dir, `${id}.pdf`), file.buffer);
+      writeFileSync(join(dir, `${id}.png`), png);
+      filename = `${id}.png`;
+    } else {
+      let payload = file.buffer;
+      if (ext === 'svg') {
+        try {
+          payload = Buffer.from(
+            sanitizeSvg(file.buffer.toString('utf8')),
+            'utf8',
+          );
+        } catch (err) {
+          throw new BadRequestException(svgFailureMessage(err));
+        }
+      }
+      writeFileSync(join(dir, filename), payload);
+    }
     const row = await this.activeBackground();
     row.imageUrl = hmiAssetPublicPath(filename);
     const saved = await this.backgrounds.save(row);

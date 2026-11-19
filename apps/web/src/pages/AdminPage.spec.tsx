@@ -1443,4 +1443,85 @@ describe('AdminPage', () => {
       screen.getByRole('heading', { name: /Alarm definitions/i }),
     ).toBeInTheDocument();
   });
+
+  it('places a live label by clicking the plant picture', async () => {
+    class ImmediateResizeObserver {
+      constructor(private readonly cb: ResizeObserverCallback) {}
+      observe() {
+        this.cb([], this as unknown as ResizeObserver);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    const previous = globalThis.ResizeObserver;
+    vi.stubGlobal('ResizeObserver', ImmediateResizeObserver);
+    try {
+      vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+        if (path === '/plc/health') return plcHealthMock;
+        if (path === '/plc/connections') return [];
+        return {
+          ...layout,
+          background: {
+            id: 'bg1',
+            name: 'demo-crane',
+            cssBackground: '',
+            imageUrl: '/hmi-assets/plant.svg',
+          },
+          overlays: [
+            {
+              id: 'o1',
+              label: 'Height',
+              xPct: 10,
+              yPct: 20,
+              format: '{value}',
+              register: layout.registers[0],
+            },
+          ],
+        };
+      });
+      await goConfigSection('Live labels');
+      const img = document.querySelector(
+        'img[src="/hmi-assets/plant.svg"]',
+      ) as HTMLImageElement;
+      const frame = img.parentElement as HTMLElement;
+      const marker = () => frame.querySelector('.pointer-events-none.absolute');
+      fireEvent.click(frame);
+      Object.defineProperty(img, 'naturalWidth', {
+        configurable: true,
+        value: 400,
+      });
+      Object.defineProperty(img, 'naturalHeight', {
+        configurable: true,
+        value: 0,
+      });
+      fireEvent.load(img);
+      fireEvent.click(frame);
+      Object.defineProperty(img, 'naturalHeight', {
+        configurable: true,
+        value: 200,
+      });
+      fireEvent.load(img);
+      expect(marker()?.textContent).toBe('Height');
+      fireEvent.click(frame, { clientX: 10, clientY: 12 });
+      expect(screen.getByLabelText('o1 x')).toHaveValue('0');
+      expect(screen.getByLabelText('o1 y')).toHaveValue('0');
+      fireEvent.change(screen.getByLabelText('o1 overlay-label'), {
+        target: { value: '' },
+      });
+      expect(marker()?.textContent).toBe('Label');
+      fireEvent.change(screen.getByLabelText('o1 x'), {
+        target: { value: 'nope' },
+      });
+      expect(marker()).toBeNull();
+      fireEvent.change(screen.getByLabelText('o1 x'), {
+        target: { value: '10' },
+      });
+      fireEvent.change(screen.getByLabelText('o1 y'), {
+        target: { value: 'nope' },
+      });
+      expect(marker()).toBeNull();
+    } finally {
+      vi.stubGlobal('ResizeObserver', previous);
+    }
+  });
 });

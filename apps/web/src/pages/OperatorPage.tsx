@@ -13,6 +13,7 @@ import {
   cellPulsesDeadman,
   cellRequiresControlLease,
   cellUsesHoldToRun,
+  containedImageRect,
   isOperatorStopCell,
   isOperatorScreenReady,
   MATRIX_CELL_STATE_CODE,
@@ -115,6 +116,20 @@ function cellIsHeld(
     if (key === cellId || key.startsWith(`${cellId}:`)) return true;
   }
   return false;
+}
+
+export function readPlantImageRect(
+  frame: HTMLElement | null,
+  img: HTMLImageElement | null,
+) {
+  if (!frame || !img?.naturalWidth || !img.naturalHeight) return null;
+  const box = frame.getBoundingClientRect();
+  return containedImageRect(
+    box.width,
+    box.height,
+    img.naturalWidth,
+    img.naturalHeight,
+  );
 }
 
 export function OperatorPage() {
@@ -564,6 +579,7 @@ export function OperatorPage() {
   const needsLive = useMemo(() => operatorNeedsLiveTags(layout), [layout]);
   const showJogSpeed = useMemo(
     () =>
+      !layout?.cells.some((cell) => cell.style === 'selector') &&
       Boolean(
         layout?.cells.some(
           (cell) => cell.isMotion && (cell.variableSpeed ?? true),
@@ -576,6 +592,14 @@ export function OperatorPage() {
   const mode = safety?.mode ?? layout?.safety.mode ?? 'unknown';
   const screens = layout?.backgrounds ?? [];
   const useCustomGraphic = Boolean(imageUrl && photoOk);
+  const graphicRef = useRef<HTMLDivElement>(null);
+  const plantImgRef = useRef<HTMLImageElement>(null);
+  const [imageRect, setImageRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   async function switchScreen(id: string) {
     if (layout?.background?.id === id) return;
@@ -610,6 +634,26 @@ export function OperatorPage() {
     liveFallback,
   });
 
+  useEffect(() => {
+    if (!useCustomGraphic || !operatorReady) {
+      setImageRect(null);
+      return;
+    }
+    const frame = graphicRef.current;
+    const img = plantImgRef.current;
+    const measure = () => {
+      setImageRect(readPlantImageRect(frame, img));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(frame as HTMLDivElement);
+    (img as HTMLImageElement).addEventListener('load', measure);
+    return () => {
+      observer.disconnect();
+      (img as HTMLImageElement).removeEventListener('load', measure);
+    };
+  }, [useCustomGraphic, imageUrl, operatorReady]);
+
   if (layoutQuery.isError) {
     return (
       <Alert variant="destructive">
@@ -626,8 +670,9 @@ export function OperatorPage() {
     return <PageSpinner label={t('operator')} />;
   }
 
-  // Plant chrome follows the active background tab — not the shared cell set.
-  const isPendantScreen = Boolean(layout.background?.name?.includes('p03a21'));
+  const hasPicture = Boolean(layout.background?.imageUrl);
+  const hasSelectors = layout.cells.some((cell) => cell.style === 'selector');
+  const isPendantScreen = hasPicture || hasSelectors;
   const showCraneMetrics = !isPendantScreen;
 
   const stopCell =
@@ -835,11 +880,7 @@ export function OperatorPage() {
         : Boolean(tagValueForRegister(tags, cell.secondaryRegister?.name));
       const rocker = (
         <div
-          className={
-            isPendantScreen
-              ? cn('pendant-rocker', `state-${cellState}`)
-              : 'matrix-selector-rocker'
-          }
+          className={cn('pendant-rocker', `state-${cellState}`)}
           data-cell-state={cellState}
         >
           {(['a', 'b'] as const).map((dir) => {
@@ -853,10 +894,7 @@ export function OperatorPage() {
                 variant={sideVariant}
                 size="sm"
                 className={cn(
-                  'matrix-selector-side flex-1',
-                  isPendantScreen
-                    ? 'h-full min-h-0 whitespace-normal rounded-none border-0 bg-transparent px-0 text-[8px] normal-case leading-tight tracking-normal shadow-none hover:bg-transparent'
-                    : 'h-9 min-h-9 px-1.5 text-[11px] max-md:px-[3px] max-md:text-[5.5px]',
+                  'matrix-selector-side flex-1 h-full min-h-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap rounded-none border-0 bg-transparent px-1.5 text-[8px] normal-case leading-none tracking-normal shadow-none hover:bg-transparent',
                   active && 'is-active',
                 )}
                 disabled={needsLease && !youHold}
@@ -869,7 +907,7 @@ export function OperatorPage() {
               </Button>
             );
           })}
-          {isPendantScreen && cell.feedbackRegister && feedbackIsBool ? (
+          {cell.feedbackRegister && feedbackIsBool ? (
             <span
               className={cn(
                 'matrix-lamp pointer-events-none self-center',
@@ -885,11 +923,7 @@ export function OperatorPage() {
               type="button"
               variant="outline"
               size="sm"
-              className={
-                isPendantScreen
-                  ? 'matrix-selector-center h-full min-h-0 w-3 flex-none rounded-none border-0 px-0 shadow-none'
-                  : 'matrix-selector-center h-9 min-h-9 px-1.5 max-md:px-[3px]'
-              }
+              className="matrix-selector-center h-full min-h-0 w-3 flex-none rounded-none border-0 px-0 shadow-none"
               aria-label={`${cell.label} center`}
               onClick={() => void clearSelector(cell)}
             >
@@ -898,39 +932,19 @@ export function OperatorPage() {
           ) : null}
         </div>
       );
-      if (isPendantScreen) {
-        return (
-          <div
-            key={cell.id}
-            className="pendant-slot"
-            title={`${cell.label} · ${stateCode}: ${stateLabel}`}
-          >
-            {rocker}
-            <p className="pendant-legend">{cell.label}</p>
-          </div>
-        );
-      }
       return (
         <div
           key={cell.id}
-          className={cn(
-            'matrix-cell matrix-selector flex h-full min-h-11 flex-col gap-0.5 max-md:gap-px max-md:px-[3px] max-md:py-0.5 max-md:text-[6px]',
-            `state-${cellState}`,
-          )}
-          data-cell-state={cellState}
-          data-touch-min="44"
+          className="pendant-slot"
           title={`${cell.label} · ${stateCode}: ${stateLabel}`}
         >
-          <div className="matrix-selector-head">
-            <span className="matrix-cell-label">{cell.label}</span>
-            {statusChip}
-          </div>
           {rocker}
+          <p className="pendant-legend">{cell.label}</p>
         </div>
       );
     }
 
-    if (isPendantScreen && !isEstop) {
+    if (hasSelectors && !isEstop) {
       if (isLamp) {
         return (
           <div
@@ -943,7 +957,7 @@ export function OperatorPage() {
               data-cell-state="idle"
               data-lamp={lampOn ? 'on' : 'off'}
               className={cn(
-                'pendant-cap flex h-[4.5rem] w-[4.5rem] min-h-[4.5rem] min-w-[4.5rem] items-center justify-center rounded-full border border-border bg-muted/40 p-0',
+                'pendant-cap flex h-auto w-auto min-h-0 min-w-0 max-h-full max-w-full items-center justify-center rounded-full border border-border bg-muted/40 p-0',
                 lampOn && 'ring-2 ring-emerald-500/70',
               )}
               aria-label={`${cell.label}: ${lampOn ? 'on' : 'off'}`}
@@ -970,7 +984,7 @@ export function OperatorPage() {
             data-cell-state={cellState}
             data-touch-min="44"
             className={cn(
-              'pendant-cap h-[4.5rem] w-[4.5rem] min-h-[4.5rem] min-w-[4.5rem] rounded-full p-0',
+              'pendant-cap h-auto w-auto min-h-0 min-w-0 max-h-full max-w-full rounded-full p-0',
               `state-${cellState}`,
               cell.style === 'enable' && 'matrix-enable',
             )}
@@ -994,7 +1008,7 @@ export function OperatorPage() {
           role="status"
           data-cell-state="idle"
           data-lamp={lampOn ? 'on' : 'off'}
-          className="matrix-cell flex h-full min-h-11 flex-row items-center justify-between gap-1.5 whitespace-normal border border-border bg-muted/30 px-2 max-md:gap-[3px] max-md:px-1 max-md:py-[3px] max-md:text-[6px]"
+          className="matrix-cell flex h-full min-h-0 flex-row items-center justify-between gap-1 whitespace-normal border border-border bg-muted/30 px-1 py-px text-[10px]"
           aria-label={`${cell.label}: ${lampOn ? 'on' : 'off'}`}
           title={`${cell.label} · ${lampOn ? 'ON' : 'OFF'}`}
         >
@@ -1016,7 +1030,7 @@ export function OperatorPage() {
         data-touch-min="44"
         data-stop-dock={isEstop ? 'true' : undefined}
         className={cn(
-          'matrix-cell flex h-full min-h-11 flex-row items-center justify-between gap-1.5 whitespace-normal max-md:gap-[3px] max-md:px-1 max-md:py-[3px] max-md:text-[6px]',
+          'matrix-cell flex h-full min-h-0 flex-row items-center justify-between gap-1 whitespace-normal px-1 py-px text-[10px]',
           `state-${cellState}`,
           isEstop && 'estop',
           cell.style === 'enable' && 'matrix-enable',
@@ -1036,15 +1050,16 @@ export function OperatorPage() {
 
   return (
     <div
-      className="operator-shell mx-auto max-w-6xl gap-2 md:gap-3"
+      className="operator-shell mx-auto max-w-6xl gap-1"
       data-feat="hmi-shell"
-      data-pendant={isPendantScreen ? 'p03a21' : undefined}
+      data-pendant={isPendantScreen ? 'screen' : undefined}
+      data-face={hasSelectors ? 'round' : undefined}
     >
       <div className="operator-body">
         <HelpTip id="tour.operator.banner">
-          <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-card px-2 py-1 md:gap-2 md:px-3 md:py-1.5">
-            <ShieldAlert className="size-4 text-muted-foreground" />
-            <span className="text-sm">
+          <div className="flex flex-wrap items-center gap-1 rounded-lg border bg-card px-2 py-0.5">
+            <ShieldAlert className="size-3.5 text-muted-foreground" />
+            <span className="text-xs">
               {t('safety')}: <strong>{mode}</strong>
             </span>
             {safety?.deadmanActive ||
@@ -1068,7 +1083,7 @@ export function OperatorPage() {
         <div className="operator-hmi-split">
           {screens.length > 1 ? (
             <div
-              className="flex flex-wrap gap-1.5"
+              className="flex shrink-0 flex-wrap gap-1"
               role="tablist"
               aria-label="Plant screens"
             >
@@ -1078,7 +1093,7 @@ export function OperatorPage() {
                   type="button"
                   size="sm"
                   variant={screen.active ? 'default' : 'outline'}
-                  className="h-8"
+                  className="h-6 px-2 text-[10px]"
                   aria-selected={screen.active}
                   onClick={() => void switchScreen(screen.id)}
                 >
@@ -1089,6 +1104,7 @@ export function OperatorPage() {
           ) : null}
           <HelpTip id="tour.operator.graphic" className="operator-plant-slot">
             <div
+              ref={graphicRef}
               className="plant-graphic"
               data-feat="hmi-graphic"
               data-graphic-mode={useCustomGraphic ? 'asset' : 'mimic'}
@@ -1096,6 +1112,7 @@ export function OperatorPage() {
             >
               {useCustomGraphic ? (
                 <img
+                  ref={plantImgRef}
                   alt="Plant background"
                   src={imageUrl}
                   onError={() => setPhotoOk(false)}
@@ -1130,7 +1147,21 @@ export function OperatorPage() {
                   <CraneMimic tags={tags} safety={safety ?? layout.safety} />
                 </div>
               ) : null}
-              <div className="plant-overlay-stage">
+              <div
+                className="plant-overlay-stage"
+                style={
+                  imageRect
+                    ? {
+                        left: imageRect.left,
+                        top: imageRect.top,
+                        width: imageRect.width,
+                        height: imageRect.height,
+                        right: 'auto',
+                        bottom: 'auto',
+                      }
+                    : undefined
+                }
+              >
                 {(layout.overlays ?? [])
                   .filter(
                     (o) =>
@@ -1194,19 +1225,19 @@ export function OperatorPage() {
           </HelpTip>
 
           <Card className="operator-matrix-card">
-            <CardContent className="operator-matrix-toolbar-wrap min-h-0 px-2 pb-1.5 pt-1.5 md:px-3">
+            <CardContent className="operator-matrix-toolbar-wrap min-h-0 px-1.5 py-1">
               <div className="operator-matrix-toolbar">
                 <HelpTip id="tour.operator.safePin">
                   <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
                     <Label
                       htmlFor="safe-pin"
-                      className="shrink-0 whitespace-nowrap text-[11px]"
+                      className="shrink-0 whitespace-nowrap text-[10px]"
                     >
                       {t('safePin')}
                     </Label>
                     <Input
                       id="safe-pin"
-                      className="h-8 min-h-8 w-[6.5rem] max-w-[8rem] shrink-0 px-2 text-xs"
+                      className="h-6 min-h-6 w-[5.5rem] max-w-[7rem] shrink-0 px-1.5 text-[10px]"
                       value={safePin}
                       onChange={(e) => setSafePin(e.target.value)}
                       type="password"
@@ -1217,7 +1248,7 @@ export function OperatorPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 min-h-8 shrink-0 px-2 text-[11px]"
+                      className="h-6 min-h-6 shrink-0 px-1.5 text-[10px]"
                       onClick={() => void resetEStop()}
                     >
                       {t('resetEstop')}
@@ -1230,14 +1261,14 @@ export function OperatorPage() {
                     role="group"
                     aria-label={t('jogSpeed')}
                   >
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-[10px] text-muted-foreground">
                       {t('jogSpeed')}
                     </span>
                     <Button
                       type="button"
                       size="sm"
                       variant={jogSpeed === 'slow' ? 'default' : 'outline'}
-                      className="h-8 min-h-8 px-2 text-[11px]"
+                      className="h-6 min-h-6 px-1.5 text-[10px]"
                       aria-pressed={jogSpeed === 'slow'}
                       onClick={() => setJogSpeed('slow')}
                     >
@@ -1247,7 +1278,7 @@ export function OperatorPage() {
                       type="button"
                       size="sm"
                       variant={jogSpeed === 'fast' ? 'default' : 'outline'}
-                      className="h-8 min-h-8 px-2 text-[11px]"
+                      className="h-6 min-h-6 px-1.5 text-[10px]"
                       aria-pressed={jogSpeed === 'fast'}
                       onClick={() => setJogSpeed('fast')}
                     >
@@ -1256,11 +1287,12 @@ export function OperatorPage() {
                   </div>
                 ) : null}
               </div>
-              <HelpTip id="tour.operator.matrix">
+              <HelpTip id="tour.operator.matrix" className="matrix-board">
                 <div
                   className="matrix-grid"
                   style={{
                     gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`,
                   }}
                 >
                   {grid.cells.map((cell, idx) => {
@@ -1291,7 +1323,7 @@ export function OperatorPage() {
                 </div>
               </HelpTip>
               <HelpTip id="tour.operator.holdHint">
-                <p className="px-0.5 text-[11px] leading-snug text-muted-foreground">
+                <p className="truncate px-0.5 text-[9px] leading-none text-muted-foreground">
                   {t('holdHint')}
                 </p>
               </HelpTip>

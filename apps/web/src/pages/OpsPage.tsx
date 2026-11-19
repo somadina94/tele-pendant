@@ -243,13 +243,24 @@ function TrendChart({ seriesKey }: { seriesKey: string }) {
   const values = points.map((point) => point.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const span = Math.max(max - min, 1);
-  const width = 280;
-  const height = 80;
+  const flat = min === max;
+  const span = flat ? 1 : max - min;
+  const width = 320;
+  const height = 220;
+  const plotLeft = 44;
+  const plotRight = 8;
+  const plotTop = 16;
+  const plotBottom = 16;
   const coords = values
     .map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * width;
-      const y = height - ((value - min) / span) * height;
+      const x =
+        plotLeft +
+        (index / Math.max(values.length - 1, 1)) *
+          (width - plotLeft - plotRight);
+      const y = flat
+        ? height / 2
+        : plotTop +
+          (1 - (value - min) / span) * (height - plotTop - plotBottom);
       return `${x},${y}`;
     })
     .join(' ');
@@ -268,9 +279,16 @@ function TrendChart({ seriesKey }: { seriesKey: string }) {
       <svg
         viewBox={`0 0 ${width} ${height}`}
         width="100%"
-        height="80"
+        height="220"
         role="img"
+        aria-label={`${seriesKey} from ${min} to ${max}`}
       >
+        <text x="4" y="20" fontSize="11" fill="currentColor">
+          {max}
+        </text>
+        <text x="4" y={height - 8} fontSize="11" fill="currentColor">
+          {min}
+        </text>
         <polyline
           fill="none"
           stroke="currentColor"

@@ -31,7 +31,7 @@ FACE_TEMPLATE_KEY=<your key, at least 32 characters>
 
 `DATABASE_SYNC` stays false. The API creates the schema from `apps/api/src/database/migrations/` when it starts. A later restart does not wipe cells you changed.
 
-Leave `FACE_LOGIN_ENABLED` false unless you want face enroll and face login. The web button stays hidden unless you also set `VITE_FACE_LOGIN=true` for the web build. The phone button stays hidden unless you set `EXPO_PUBLIC_FACE_LOGIN=true`.
+Leave `FACE_LOGIN_ENABLED` false unless you want face enroll and face login. The web button stays hidden unless you also set `VITE_FACE_LOGIN=true` for the web build. The phone button stays hidden unless you set `EXPO_PUBLIC_FACE_LOGIN=true`. Face login is not a security control. A different face can be accepted, and moving the head can pass the check.
 
 Install Node 26. Node 26 has no corepack. Install pnpm with npm:
 
@@ -66,6 +66,8 @@ EXPO_PUBLIC_FACE_LOGIN=false
 ```
 
 A phone on the same Wi-Fi as a local API can use `MOBILE_API_URL=http://YOUR_LAN_IP:3010/api/v1` in the root `.env` instead. `127.0.0.1` on the phone is the phone itself.
+
+Android blocks plain HTTP unless the build allows it. Leave `EXPO_PUBLIC_ALLOW_HTTP` unset when the API address starts with `http://`. The phone app then allows that traffic and shows a note on the sign-in screen. Set `EXPO_PUBLIC_ALLOW_HTTP=false` to refuse plain HTTP. Set it to `true` when you want HTTP allowed even if you change the address later. This is a native setting. Change it, then install the app again. An OTA update does not change it.
 
 ```bash
 pnpm --filter @tele-pendant/mobile dev

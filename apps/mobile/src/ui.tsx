@@ -10,7 +10,9 @@ import {
   TextInput,
   View,
   type PressableProps,
+  type StyleProp,
   type TextInputProps,
+  type ViewStyle,
 } from 'react-native';
 import { ChevronDown, Loader2 } from 'lucide-react-native';
 import { useTheme } from './theme';
@@ -261,14 +263,17 @@ export function Card({
   children,
   compact,
   className = '',
+  style,
 }: {
   children: ReactNode;
   /** Match web operator control card padding. */
   compact?: boolean;
   className?: string;
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
     <View
+      style={style}
       className={
         compact
           ? `gap-1 rounded-xl border border-border bg-card px-2 pb-2 pt-2 ${className}`

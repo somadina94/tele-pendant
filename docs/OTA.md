@@ -55,6 +55,22 @@ That runs `expo export` and writes a protocol-1 `manifest.json` plus the bundle 
 
 This product does **not** claim full native binary OTA. JS OTA is the supported self-hosted path without a paid Expo subscription.
 
+## Test an update on a phone
+
+Use a native install (`expo run:android` or the release APK). Expo Go does not apply this OTA.
+
+1. Confirm the installed app version is `0.0.1`. The update only applies to that version.
+2. On the API machine, set `OTA_PUBLIC_URL` to the origin the phone can open, for example `http://192.168.0.192:4050` on the factory Wi-Fi or `https://api.example.com` on a TLS host.
+3. Publish the current JavaScript:
+
+```bash
+OTA_PUBLIC_URL=http://192.168.0.192:4050 pnpm --filter @tele-pendant/mobile ota:export
+```
+
+4. Open `http://192.168.0.192:4050/ota/manifest` in a browser. It returns JSON with `runtimeVersion` `0.0.1`.
+5. Force-close the phone app and open it again. It checks the manifest on load. A JavaScript change from that export is the running app after the reload.
+6. A change to camera, speech, or the HTTP permission is not in that update. Install a new APK for those.
+
 ## Checklist
 
 - [ ] HTTPS on VPS (`APP_URL` / `FRONTEND_URL` are the live hosts)

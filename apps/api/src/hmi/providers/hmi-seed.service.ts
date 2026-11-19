@@ -1,5 +1,3 @@
-import { copyFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -14,7 +12,6 @@ import { Cell } from '../../cells/entities/cell.entity';
 import { OverlayLabel } from '../../overlays/entities/overlay-label.entity';
 import { RegisterMap } from '../../registers/entities/register-map.entity';
 import { SafetyRoles } from '../../safety/entities/safety-roles.entity';
-import { hmiAssetPublicPath, hmiAssetsDirectory } from '../hmi-assets';
 
 const DEMO_NODE_IDS: Record<string, string> = {
   'coil.deadman': 'ns=1;s=Deadman',
@@ -65,35 +62,12 @@ export class HmiSeedService implements OnModuleInit {
     if (count === 0) {
       this.logger.log('Seeding P03A21 welding pendant HMI layout');
       await this.seed();
-    } else {
-      await this.ensureP03a21Layout();
     }
     await this.syncP03a21DrawingLabels();
     await this.syncP03a21LakshmiFixes();
     await this.ensureRuntimeRegisters();
     await this.ensureSafetyRoles();
-    await this.ensureDemoPlantPicture();
     await this.ensureSampleTrends();
-  }
-
-  /**
-   * Existing DBs still hold the old crane demo after image deploy.
-   * Promote them to P03A21 when no selector cells / pendant background exist.
-   */
-  private async ensureP03a21Layout(): Promise<void> {
-    const selectorCount = await this.cells
-      .createQueryBuilder('cell')
-      .where('cell.style = :style', { style: 'selector' })
-      .getCount();
-    if (selectorCount > 0) return;
-
-    const active = await this.backgrounds.findOne({ where: { active: true } });
-    if ((active?.name ?? '').includes('p03a21')) return;
-
-    this.logger.log(
-      'Migrating legacy HMI layout to P03A21 welding pendant demo',
-    );
-    await this.resetP03a21Demo();
   }
 
   /** Rename shortened demo labels in place. Custom names are left alone. */
@@ -248,86 +222,6 @@ export class HmiSeedService implements OnModuleInit {
       ];
     for (const [name, address, kind, dataType, rw] of extras) {
       await this.upsertRegister(name, address, kind, dataType, rw);
-    }
-  }
-
-  /**
-   * Phase 1 example: one plant drawing and three numeric labels.
-   * Existing pictures and labels are left in place.
-   */
-  private async ensureDemoPlantPicture(): Promise<void> {
-    const background = await this.backgrounds.findOne({
-      where: { active: true },
-    });
-    if (!background) return;
-
-    if (!background.imageUrl) {
-      const source = join(
-        __dirname,
-        '../../../../../docs/samples/hmi/demo-crane.svg',
-      );
-      if (existsSync(source)) {
-        const filename = 'demo-crane.svg';
-        copyFileSync(source, join(hmiAssetsDirectory(), filename));
-        background.imageUrl = hmiAssetPublicPath(filename);
-        await this.backgrounds.save(background);
-      }
-    }
-
-    const existing = await this.overlays.find();
-    const names = new Set(existing.map((row) => row.label));
-    const examples: Array<{
-      label: string;
-      xPct: number;
-      yPct: number;
-      format: string;
-      register: string;
-      address: number;
-    }> = [
-      {
-        label: 'Height',
-        xPct: 22,
-        yPct: 58,
-        format: '{value} mm',
-        register: 'holding.hoistHeightMm',
-        address: DEMO_CRANE_MAP.holdings.hoistHeightMm,
-      },
-      {
-        label: 'Load',
-        xPct: 50,
-        yPct: 72,
-        format: '{value} kg',
-        register: 'holding.loadKg',
-        address: DEMO_CRANE_MAP.holdings.loadKg,
-      },
-      {
-        label: 'Trolley',
-        xPct: 74,
-        yPct: 28,
-        format: '{value} mm',
-        register: 'holding.trolleyPosition',
-        address: DEMO_CRANE_MAP.holdings.trolleyPosition,
-      },
-    ];
-    for (const example of examples) {
-      if (names.has(example.label)) continue;
-      const register = await this.upsertRegister(
-        example.register,
-        example.address,
-        'holding',
-        'uint16',
-        'rw',
-      );
-      await this.overlays.save(
-        this.overlays.create({
-          label: example.label,
-          xPct: example.xPct,
-          yPct: example.yPct,
-          format: example.format,
-          background,
-          register,
-        }),
-      );
     }
   }
 
@@ -525,12 +419,12 @@ export class HmiSeedService implements OnModuleInit {
     ]);
     const teachPipeLamp = await lamp('teachPipeMiddle');
 
-    const bg = await this.backgrounds.findOne({
+    let screen = await this.backgrounds.findOne({
       where: { name: 'demo-p03a21' },
     });
-    if (!bg) {
+    if (!screen) {
       await this.backgrounds.update({ active: true }, { active: false });
-      await this.backgrounds.save(
+      screen = await this.backgrounds.save(
         this.backgrounds.create({
           name: 'demo-p03a21',
           active: true,
@@ -539,10 +433,10 @@ export class HmiSeedService implements OnModuleInit {
           imageUrl: null,
         }),
       );
-    } else if (!bg.active) {
+    } else if (!screen.active) {
       await this.backgrounds.update({ active: true }, { active: false });
-      bg.active = true;
-      await this.backgrounds.save(bg);
+      screen.active = true;
+      screen = await this.backgrounds.save(screen);
     }
 
     type CellDef = {
@@ -746,6 +640,7 @@ export class HmiSeedService implements OnModuleInit {
           variableSpeed: def.variableSpeed ?? false,
           slowSpeedPct: 30,
           fastSpeedPct: 100,
+          background: screen,
         }),
       );
     }

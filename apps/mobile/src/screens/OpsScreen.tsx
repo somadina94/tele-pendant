@@ -1,5 +1,5 @@
 import { ScrollView, Text, View } from 'react-native';
-import Svg, { Polyline } from 'react-native-svg';
+import Svg, { Polyline, Text as SvgText } from 'react-native-svg';
 import { useQuery } from '@tanstack/react-query';
 import { Check, Pause, RefreshCw } from 'lucide-react-native';
 import { canShelveAlarms, type UserRole } from '@tele-pendant/shared';
@@ -181,20 +181,34 @@ function TrendChart({
   const values = points.map((point) => point.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const span = Math.max(max - min, 1);
+  const flat = min === max;
+  const span = flat ? 1 : max - min;
+  const width = 320;
+  const height = 220;
+  const plotLeft = 44;
   const coords = values
     .map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * 280;
-      const y = 80 - ((value - min) / span) * 80;
+      const x =
+        plotLeft +
+        (index / Math.max(values.length - 1, 1)) * (width - plotLeft - 8);
+      const y = flat
+        ? height / 2
+        : 16 + (1 - (value - min) / span) * (height - 32);
       return `${x},${y}`;
     })
     .join(' ');
   return (
     <>
       <Hint>
-        {seriesKey}: {values[values.length - 1]}
+        {seriesKey}: {values[values.length - 1]} ({min} to {max})
       </Hint>
-      <Svg width="100%" height={80} viewBox="0 0 280 80">
+      <Svg width="100%" height={220} viewBox={`0 0 ${width} ${height}`}>
+        <SvgText x="4" y="20" fontSize="11" fill="#9aa0a6">
+          {String(max)}
+        </SvgText>
+        <SvgText x="4" y={height - 8} fontSize="11" fill="#9aa0a6">
+          {String(min)}
+        </SvgText>
         <Polyline
           points={coords}
           fill="none"
