@@ -69,7 +69,12 @@ jobs:
       - name: Validate Docker Compose
         run: |
           docker compose -f docker-compose.dev.yml config
-          docker compose -f docker-compose.prod.yml config
+          # Prod compose requires the three image names. These refs are only
+          # for interpolation. They are not a default owner and nothing is pulled.
+          TELE_PENDANT_API_IMAGE=ghcr.io/ci/tele-pendant-api:config \
+          TELE_PENDANT_SIM_IMAGE=ghcr.io/ci/tele-pendant-sim:config \
+          TELE_PENDANT_WEB_IMAGE=ghcr.io/ci/tele-pendant-web:config \
+            docker compose -f docker-compose.prod.yml config
           docker compose config
 
       - name: Build production images
