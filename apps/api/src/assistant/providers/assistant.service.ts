@@ -278,15 +278,16 @@ export class AssistantService implements OnModuleInit {
     const hits = this.search(question, 5);
     const manual =
       hits.length === 0
-        ? 'No local documents matched. Try words like deadman, e-stop, Modbus, alarm, or PLC wiring.'
-        : hits.map((h) => `• ${h.title}: ${h.snippet}`).join('\n');
-    const ftsAnswer = `${await this.liveBrief()}\n\n${manual}`;
+        ? `No manual paragraph matches this question: ${question}`
+        : `${question}\n\n${hits[0].title}: ${hits[0].snippet}`;
+    const related = await this.relatedLive(question);
+    const ftsAnswer = related ? `${manual}\n\n${related}` : manual;
     const ftsPayload = {
       question,
       answer: ftsAnswer,
       hits,
       mode: 'local-fts' as const,
-      note: 'Names the active alarms and current tag values, then the matching manual paragraph. This is not a model and it does not write coils.',
+      note: 'Answers from the matching manual paragraph. Names an alarm or a tag only when its name shares a word with the question. This is not a model and it does not write coils.',
     };
 
     const apiKey = this.cursorApiKey();
@@ -374,32 +375,52 @@ export class AssistantService implements OnModuleInit {
     ].join('\n');
   }
 
-  private async liveBrief(): Promise<string> {
-    let alarms = 'Active alarms: none.';
+  private sharesQuestionWord(question: string, name: string): boolean {
+    const words = question
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((word) => word.length > 2);
+    const parts = name
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((part) => part.length > 2);
+    return parts.some((part) =>
+      words.some((word) => part.includes(word) || word.includes(part)),
+    );
+  }
+
+  /** Alarms and tags that share a word with the question. Failures stay visible. */
+  private async relatedLive(question: string): Promise<string> {
+    const lines: string[] = [];
     try {
       const rows = this.alarms ? await this.alarms.listActive() : [];
       const names = rows
         .map((row) => row.definition?.name?.trim())
-        .filter((name): name is string => Boolean(name));
-      if (names.length > 0) alarms = `Active alarms: ${names.join(', ')}.`;
+        .filter((name): name is string => Boolean(name))
+        .filter((name) => this.sharesQuestionWord(question, name));
+      if (names.length > 0) {
+        lines.push(`Active alarms: ${names.join(', ')}.`);
+      }
     } catch {
-      alarms = 'Active alarms: unavailable.';
+      lines.push('Active alarms: unavailable.');
     }
-    let tags = 'Current tags: none.';
     try {
       const snap = this.tags?.latest();
       const values =
         snap && 'values' in snap && snap.values ? snap.values : undefined;
       const bits = values
         ? Object.entries(values)
+            .filter(([name]) => this.sharesQuestionWord(question, name))
             .slice(0, 12)
             .map(([name, value]) => `${name}=${String(value)}`)
         : [];
-      if (bits.length > 0) tags = `Current tags: ${bits.join(', ')}.`;
+      if (bits.length > 0) {
+        lines.push(`Current tags: ${bits.join(', ')}.`);
+      }
     } catch {
-      tags = 'Current tags: unavailable.';
+      lines.push('Current tags: unavailable.');
     }
-    return `${alarms}\n${tags}`;
+    return lines.join('\n');
   }
 
   private loadHandbook(): string {

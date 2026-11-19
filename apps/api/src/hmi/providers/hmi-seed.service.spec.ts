@@ -104,8 +104,16 @@ describe('HmiSeedService', () => {
       selectorCount: 3,
       activeBg: { name: 'demo-p03a21', active: true },
     });
-    const shortened = { id: 'a', label: 'OWHA back/fwd' };
-    const custom = { id: 'b', label: 'My custom jog' };
+    const shortened = {
+      id: 'a',
+      label: 'OWHA back/fwd',
+      background: { id: 'bg' },
+    };
+    const custom = {
+      id: 'b',
+      label: 'My custom jog',
+      background: { id: 'bg' },
+    };
     cells.find.mockResolvedValue([shortened, custom]);
     await service.onModuleInit();
     expect(shortened.label).toBe('OWHA backw./forw.');

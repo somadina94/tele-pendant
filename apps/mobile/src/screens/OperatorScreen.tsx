@@ -567,7 +567,7 @@ export function OperatorScreen({ token }: { token: string }) {
   async function switchScreen(id: string) {
     if (layoutQuery.data?.background?.id === id) return;
     try {
-      await apiPost(`/hmi/backgrounds/${id}/activate`, {}, token);
+      await apiPost(`/hmi/backgrounds/${id}/select`, {}, token);
       await layoutQuery.refetch();
     } catch (err) {
       showErrorAlert(
@@ -644,7 +644,7 @@ export function OperatorScreen({ token }: { token: string }) {
 
   const operatorReady = isOperatorScreenReady({
     layoutLoaded: Boolean(layoutQuery.data),
-    gridReady: Boolean(grid?.rows.length),
+    gridReady: grid !== null,
     needsLive,
     hasTags: tags !== null,
     liveFallback,
@@ -743,10 +743,12 @@ export function OperatorScreen({ token }: { token: string }) {
   }
 
   const stopCell =
+    layoutQuery.data?.stop ??
     layoutQuery.data?.cells.find(
       (cell) =>
         cell.style === 'estop' || cell.label.trim().toUpperCase() === 'STOP',
-    ) ?? null;
+    ) ??
+    null;
 
   const compactButtons = windowWidth < 768;
 
@@ -1419,28 +1421,29 @@ export function OperatorScreen({ token }: { token: string }) {
       <View className="min-h-0 flex-1 gap-1 px-2 pb-1 pt-1">
         {screens.length > 1 ? (
           <View className="shrink-0 flex-row flex-wrap gap-1">
-            {screens.map((screen) => (
-              <Pressable
-                key={screen.id}
-                accessibilityRole="button"
-                className={`min-h-[22px] rounded-md border px-2 py-0.5 ${
-                  screen.active
-                    ? 'border-primary bg-primary'
-                    : 'border-border bg-card'
-                }`}
-                onPress={() => void switchScreen(screen.id)}
-              >
-                <Text
-                  className={`text-[10px] ${
-                    screen.active
-                      ? 'text-primary-foreground'
-                      : 'text-foreground'
+            {screens.map((screen) => {
+              const chosen = screen.id === layoutQuery.data?.background?.id;
+              return (
+                <Pressable
+                  key={screen.id}
+                  accessibilityRole="button"
+                  className={`min-h-[22px] rounded-md border px-2 py-0.5 ${
+                    chosen
+                      ? 'border-primary bg-primary'
+                      : 'border-border bg-card'
                   }`}
+                  onPress={() => void switchScreen(screen.id)}
                 >
-                  {screen.name}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text
+                    className={`text-[10px] ${
+                      chosen ? 'text-primary-foreground' : 'text-foreground'
+                    }`}
+                  >
+                    {screen.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         ) : null}
 
@@ -1798,7 +1801,29 @@ export function OperatorScreen({ token }: { token: string }) {
           style={{ paddingBottom: 8 }}
           accessibilityLabel="Stop dock"
         >
-          {renderMobileCell(stopCell)}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="STOP"
+            onPress={() => void pressCell(stopCell)}
+            style={{
+              minHeight: 56,
+              borderRadius: 8,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: ESTOP.background,
+            }}
+          >
+            <Text
+              style={{
+                color: ESTOP.foreground,
+                fontSize: 22,
+                fontWeight: '800',
+                letterSpacing: 1,
+              }}
+            >
+              STOP
+            </Text>
+          </Pressable>
         </View>
       ) : null}
     </View>

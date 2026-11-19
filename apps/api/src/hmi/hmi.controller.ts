@@ -50,8 +50,8 @@ export class HmiController {
   @Get('layout')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Operator matrix, overlays, and register maps' })
-  layout() {
-    return this.hmiService.getLayout();
+  layout(@Req() req: Request & { user: JwtPayload }) {
+    return this.hmiService.getLayout(readControlClientId(req));
   }
 
   @Get('registers')
@@ -160,9 +160,23 @@ export class HmiController {
     return this.hmiService.createBackground(dto, this.actor(req));
   }
 
+  @Post('backgrounds/:id/select')
+  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Choose this device’s plant screen without changing the default',
+  })
+  selectBackground(
+    @Param('id') id: string,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.selectBackground(id, readControlClientId(req));
+  }
+
   @Post('backgrounds/:id/activate')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Switch the active plant HMI screen' })
+  @ApiOperation({
+    summary: 'Set the default plant HMI screen for every device',
+  })
   activateBackground(
     @Param('id') id: string,
     @Req() req: Request & { user: JwtPayload },

@@ -27,12 +27,13 @@ function isAuthBootstrapPath(path: string): boolean {
 }
 
 function rethrowFetch(base: string, err: unknown): never {
+  const detail = err instanceof Error ? err.message : 'network error';
   if (base.startsWith('http://')) {
     throw new Error(
-      `Cannot reach ${base}. This API is plain HTTP. Rebuild the Android app with EXPO_PUBLIC_ALLOW_HTTP=true, or leave that setting empty when the API address starts with http://.`,
+      `Cannot reach ${base} (${detail}). The host or port may be closed. With the dev compose file the Android emulator uses http://10.0.2.2:4050/api/v1. Port 3010 is inside the API container. Plain HTTP also needs a rebuild: leave EXPO_PUBLIC_ALLOW_HTTP unset, delete apps/mobile/android, and run expo run:android. An update does not change that permission.`,
     );
   }
-  throw err;
+  throw err instanceof Error ? err : new Error(String(err));
 }
 
 async function throwIfNotOk(res: Response, path: string): Promise<void> {

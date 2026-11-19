@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { IsNull } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DEMO_CRANE_MAP,
@@ -68,6 +69,24 @@ export class HmiSeedService implements OnModuleInit {
     await this.ensureRuntimeRegisters();
     await this.ensureSafetyRoles();
     await this.ensureSampleTrends();
+    await this.attachOrphanCells();
+  }
+
+  /** Buttons saved with no screen belong on the admin default screen. */
+  private async attachOrphanCells(): Promise<void> {
+    const active = await this.backgrounds.findOne({ where: { active: true } });
+    if (!active) return;
+    const orphans = (
+      await this.cells.find({ where: { background: IsNull() } })
+    ).filter((cell) => !cell.background);
+    if (orphans.length === 0) return;
+    for (const cell of orphans) {
+      cell.background = active;
+    }
+    await this.cells.save(orphans);
+    this.logger.log(
+      `Attached ${orphans.length} button(s) with no screen to ${active.name}`,
+    );
   }
 
   /** Rename shortened demo labels in place. Custom names are left alone. */

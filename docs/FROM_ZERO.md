@@ -67,7 +67,7 @@ EXPO_PUBLIC_FACE_LOGIN=false
 
 A phone on the same Wi-Fi as a local API can use `MOBILE_API_URL=http://YOUR_LAN_IP:3010/api/v1` in the root `.env` instead. `127.0.0.1` on the phone is the phone itself.
 
-Android blocks plain HTTP unless the build allows it. Leave `EXPO_PUBLIC_ALLOW_HTTP` unset when the API address starts with `http://`. The phone app then allows that traffic and shows a note on the sign-in screen. Set `EXPO_PUBLIC_ALLOW_HTTP=false` to refuse plain HTTP. Set it to `true` when you want HTTP allowed even if you change the address later. This is a native setting. Change it, then install the app again. An OTA update does not change it.
+Android blocks plain HTTP unless the build allows it. Leave `EXPO_PUBLIC_ALLOW_HTTP` unset when the API address starts with `http://`. The phone app then allows that traffic and shows a note on the sign-in screen. Set `EXPO_PUBLIC_ALLOW_HTTP=false` to refuse plain HTTP. Set it to `true` when you want HTTP allowed even if you change the address later. This is a native setting. Delete `apps/mobile/android` and run `pnpm --filter @tele-pendant/mobile exec expo run:android` so `AndroidManifest.xml` receives `usesCleartextTraffic`. An OTA update does not change it. With the dev compose file the Android emulator reaches the host API at `http://10.0.2.2:4050/api/v1`. Port 3010 is the port inside the API container.
 
 ```bash
 pnpm --filter @tele-pendant/mobile dev

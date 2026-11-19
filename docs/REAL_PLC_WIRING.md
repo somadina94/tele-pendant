@@ -209,21 +209,37 @@ Fill **Node id** on each register row (Config shows that field when an OPC UA co
 
 ## What the PLC must do when this app stops talking
 
-These addresses are the **demo simulator** addresses. They are not your plant addresses. This pendant has not been run on your PLC.
+These addresses are the **demo simulator** addresses. They are not your plant addresses. This pendant has not been run as the PLC program below. Software supervision is not a certified safety function. Keep the hardwired e-stop.
 
-While exchanges succeed, the app writes `holding.heartbeat` (demo holding register **10**) on each safety tick, about four times a second. If the PLC stops seeing that value change, the PLC drops motion. The app’s own silent-peer loss is the software watchdog. In the Docker check that timeout was about six seconds, which is the Modbus request timeout, not a measured hardwired stop.
+While exchanges succeed and the mode is normal, the app writes `holding.heartbeat` (demo holding register **10**) on each safety tick, about four times a second, and writes `holding.safeState` (demo holding register **11**) to **0**. The app writes that safe-state register to **0** again when a reset returns the mode to normal and the link is up. The PLC does not set it back to 0.
 
 When the deadman times out (about 2.5 seconds) or the operator releases it, the app writes the deadman coil false and clears motion coils. Demo deadman coil is **10**.
 
-On comms loss, e-stop, or safe state, the app writes `holding.safeState` (demo holding register **11**) to **1**, writes the deadman coil false, and clears motion coils. The PLC must drop motion outputs when that register is 1.
+On the transition into comms loss, e-stop, or safe state, if the write still succeeds, the app writes `holding.safeState` to **1**, writes the deadman coil false, and clears motion coils. After the cable is cut the app cannot write. The PLC must drop motion when the heartbeat value stops changing.
 
-Example, in words, using the demo addresses:
+Replace 10 and 11 with the addresses your program actually uses.
 
-1. If holding register 10 has not changed for longer than your chosen timeout, reset every motion output.
-2. If coil 10 is false, reset every motion output.
-3. If holding register 11 is 1, reset every motion output.
+### Structured text
 
-Replace 10 and 11 with the addresses your program actually uses. Do not treat this as a certified safety function. Keep the hardwired e-stop.
+```
+// Replace the addresses. Timeout is yours. 2 seconds is a starting point.
+IF (heartbeat_age > T#2S) OR (deadman = FALSE) OR (safe_state = 1) THEN
+    motion_outputs := FALSE;
+END_IF;
+```
+
+### Ladder
+
+1. A timer starts when holding register 10 changes. If that timer finishes, a rung resets every motion output.
+2. A rung resets every motion output when coil 10 is false.
+3. A rung resets every motion output when holding register 11 is 1.
+
+### Bench test
+
+1. Hold Enable and the deadman, with motion outputs on.
+2. Cut the link. The app shows comms lost. The PLC outputs drop because the heartbeat stopped, even though the app can no longer write.
+3. Restore the link. Reset with the PIN.
+4. Confirm holding register 11 is 0 and motion can run again.
 
 ## Related docs
 

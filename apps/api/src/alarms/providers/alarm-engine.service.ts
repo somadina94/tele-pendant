@@ -174,23 +174,17 @@ export class AlarmEngineService implements OnModuleInit {
     for (const sample of samples) {
       const existing = await this.definitions.findOne({
         where: { name: sample.name },
+        relations: { register: true },
       });
-      if (existing) continue;
-      const register = await this.registers.findOne({
-        where: { name: sample.register },
-      });
-      if (!register) continue;
-      await this.definitions.save(
-        this.definitions.create({
-          name: sample.name,
-          severity: 'info',
-          compareOp: sample.compareOp,
-          threshold: sample.threshold,
-          enabled: true,
-          register,
-        }),
-      );
-      this.logger.log(`Added sample alarm ${sample.name}`);
+      if (!existing?.enabled) continue;
+      const sameComparison =
+        existing.compareOp === sample.compareOp &&
+        existing.threshold === sample.threshold &&
+        existing.register?.name === sample.register;
+      if (!sameComparison) continue;
+      existing.enabled = false;
+      await this.definitions.save(existing);
+      this.logger.log(`Disabled always-true sample alarm ${sample.name}`);
     }
   }
 

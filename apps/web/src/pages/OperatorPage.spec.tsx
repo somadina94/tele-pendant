@@ -1824,7 +1824,7 @@ describe('OperatorPage', () => {
     await waitFor(() =>
       expect(
         post.mock.calls.some(
-          (call) => call[0] === '/hmi/backgrounds/bg2/activate',
+          (call) => call[0] === '/hmi/backgrounds/bg2/select',
         ),
       ).toBe(true),
     );

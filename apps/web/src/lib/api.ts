@@ -215,6 +215,8 @@ export interface HmiBackgroundSummary {
 export interface HmiLayout {
   matrix: { rows: number; cols: number };
   cells: CellDto[];
+  /** Shared STOP. Present even when this screen did not define the button. */
+  stop?: CellDto | null;
   background: {
     id: string;
     name: string;

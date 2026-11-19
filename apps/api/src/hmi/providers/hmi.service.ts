@@ -57,6 +57,8 @@ export class HmiService {
   private readonly safeActionPin: SafeActionPinService;
   /** Last written holding.speedPct — skip redundant jog writes under hold spam. */
   private lastJogSpeedPct: number | null = null;
+  /** Operator screen choice per control client. The active flag stays the admin default. */
+  private readonly screenByClient = new Map<string, string>();
 
   constructor(
     @InjectRepository(Cell)
@@ -82,10 +84,8 @@ export class HmiService {
     this.auditService = auditService;
   }
 
-  async getLayout() {
-    const background = await this.backgrounds.findOne({
-      where: { active: true },
-    });
+  async getLayout(clientId?: string) {
+    const background = await this.backgroundFor(clientId);
     const cells = background
       ? await this.cells.find({
           where: { background: { id: background.id } },
@@ -99,18 +99,35 @@ export class HmiService {
       : [];
     const registers = await this.registers.find({ order: { name: 'ASC' } });
     const backgrounds = await this.listBackgrounds();
+    const stop = await this.sharedStopCell();
     return {
       matrix: {
         rows: cells.reduce((m, c) => Math.max(m, c.row + 1), 0),
         cols: cells.reduce((m, c) => Math.max(m, c.col + 1), 0),
       },
       cells,
+      stop,
       background,
       backgrounds,
       overlays,
       registers,
       safety: this.safetyState.snapshot(),
     };
+  }
+
+  /** This device's screen. Does not change the admin default. */
+  async selectBackground(
+    id: string,
+    clientId: string,
+  ): Promise<BackgroundDisplay> {
+    const row = await this.backgrounds.findOneBy({ id });
+    if (!row) throw new NotFoundException('Background not found');
+    const device = clientId.trim();
+    if (!device) {
+      throw new BadRequestException('This device has no id');
+    }
+    this.screenByClient.set(device, row.id);
+    return row;
   }
 
   async listBackgrounds(): Promise<
@@ -734,7 +751,10 @@ export class HmiService {
 
   async createCell(input: CellInput, actor?: Actor): Promise<Cell> {
     const fields = await this.cellFields(input);
-    const saved = await this.cells.save(this.cells.create(fields));
+    const background = await this.activeBackground();
+    const saved = await this.cells.save(
+      this.cells.create({ ...fields, background }),
+    );
     await this.auditService.write({
       ...this.actorFields(actor),
       action: 'cell.create',
@@ -754,7 +774,8 @@ export class HmiService {
     await this.assertStopCellNotDemoted(row, input);
     await this.assertMotionNotDemoted(row, input, actor);
     const fields = await this.cellFields(input);
-    Object.assign(row, fields);
+    const background = row.background ?? (await this.activeBackground());
+    Object.assign(row, fields, { background });
     const saved = await this.cells.save(row);
     await this.auditService.write({
       ...this.actorFields(actor),
@@ -919,6 +940,35 @@ export class HmiService {
     const row = await this.backgrounds.findOne({ where: { active: true } });
     if (!row) throw new NotFoundException('No active background');
     return row;
+  }
+
+  private async backgroundFor(
+    clientId?: string,
+  ): Promise<BackgroundDisplay | null> {
+    const fallback = await this.backgrounds.findOne({
+      where: { active: true },
+    });
+    const device = clientId?.trim();
+    if (!device) return fallback;
+    const chosenId = this.screenByClient.get(device);
+    if (!chosenId) return fallback;
+    const chosen = await this.backgrounds.findOneBy({ id: chosenId });
+    if (!chosen) {
+      this.screenByClient.delete(device);
+      return fallback;
+    }
+    return chosen;
+  }
+
+  /** STOP is shared. A screen that did not define one still receives this cell. */
+  private async sharedStopCell(): Promise<Cell | null> {
+    const rows = await this.cells.find();
+    return (
+      rows.find(
+        (cell) =>
+          cell.style === 'estop' || cell.label.trim().toUpperCase() === 'STOP',
+      ) ?? null
+    );
   }
 
   private async cellFields(input: CellInput): Promise<Partial<Cell>> {

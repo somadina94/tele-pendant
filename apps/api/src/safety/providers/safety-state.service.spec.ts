@@ -165,6 +165,17 @@ describe('SafetyStateService', () => {
     delete process.env.SAFE_ACTION_PIN;
   });
 
+  it('leaves safe-state unchanged when reset happens outside normal mode', async () => {
+    process.env.SAFE_ACTION_PIN = '1234';
+    driver.isConnected.mockReturnValue(true);
+    (service as unknown as { mode: string }).mode = 'safe_state';
+    driver.writeRegister.mockClear();
+    const reset = await service.resetEStop('1234');
+    expect(reset.mode).toBe('safe_state');
+    expect(driver.writeRegister).not.toHaveBeenCalled();
+    delete process.env.SAFE_ACTION_PIN;
+  });
+
   it('blocks motion until deadman pulse and releases', async () => {
     claimAs('u1', 'Alice');
     expect(service.holdsControl('u1', clientFor('u1'))).toBe(true);

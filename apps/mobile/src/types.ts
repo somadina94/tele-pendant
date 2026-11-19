@@ -60,6 +60,8 @@ export type ControlLease = {
 export type Layout = {
   matrix: { rows: number; cols: number };
   cells: Cell[];
+  /** Shared STOP. Present even when this screen did not define the button. */
+  stop?: Cell | null;
   background: Background | null;
   /** FEAT-HMI phase 2: plant screens for Operator switcher. */
   backgrounds?: BackgroundSummary[];

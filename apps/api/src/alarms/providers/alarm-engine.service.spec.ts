@@ -115,7 +115,7 @@ describe('AlarmEngineService', () => {
     expect(definitions.save).not.toHaveBeenCalled();
   });
 
-  it('adds a quiet-simulator sample without removing existing alarms', async () => {
+  it('does not add an always-true welding sample', async () => {
     definitions.count.mockResolvedValue(2);
     definitions.find.mockResolvedValue([
       {
@@ -127,23 +127,10 @@ describe('AlarmEngineService', () => {
         register: { name: 'coil.eStop' },
       },
     ]);
-    registers.findOne.mockImplementation(
-      async (query: { where?: { name?: string } }) =>
-        query?.where?.name === 'holding.hoistHeightMm'
-          ? { id: 'hoist', name: 'holding.hoistHeightMm' }
-          : null,
-    );
     await service.onModuleInit();
     expect(definitions.remove).not.toHaveBeenCalled();
-    expect(definitions.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'Wire height above home',
-        compareOp: 'gt',
-        threshold: 0,
-        enabled: true,
-        severity: 'info',
-      }),
-    );
+    expect(definitions.save).not.toHaveBeenCalled();
+    expect(definitions.create).not.toHaveBeenCalled();
   });
 
   it('does not recreate the sample when that name already exists', async () => {
@@ -181,7 +168,7 @@ describe('AlarmEngineService', () => {
     expect(definitions.save).not.toHaveBeenCalled();
   });
 
-  it('retires the crane sample and still adds a welding example', async () => {
+  it('retires the crane sample and disables an unchanged welding sample', async () => {
     definitions.count.mockResolvedValue(2);
     const crane = {
       name: 'Hoist height sample',
@@ -190,18 +177,33 @@ describe('AlarmEngineService', () => {
       enabled: true,
       register: { name: 'holding.hoistHeightMm' },
     };
+    const wire = {
+      name: 'Wire height above home',
+      compareOp: 'gt' as const,
+      threshold: 0,
+      enabled: true,
+      register: { name: 'holding.hoistHeightMm' },
+    };
+    const edited = {
+      name: 'Fixture load clear',
+      compareOp: 'gt' as const,
+      threshold: 10,
+      enabled: true,
+      register: { name: 'holding.loadKg' },
+    };
     definitions.find.mockResolvedValue([crane]);
-    registers.findOne.mockImplementation(
-      async (query: { where?: { name?: string } }) =>
-        query?.where?.name === 'holding.hoistHeightMm'
-          ? { id: 'hoist', name: 'holding.hoistHeightMm' }
-          : null,
+    definitions.findOne.mockImplementation(
+      async (query: { where?: { name?: string } }) => {
+        if (query?.where?.name === wire.name) return wire;
+        if (query?.where?.name === edited.name) return edited;
+        return null;
+      },
     );
     await service.onModuleInit();
     expect(crane.enabled).toBe(false);
-    expect(definitions.save).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Wire height above home' }),
-    );
+    expect(wire.enabled).toBe(false);
+    expect(edited.enabled).toBe(true);
+    expect(definitions.create).not.toHaveBeenCalled();
   });
 
   it('does not retire a crane sample that has no register', async () => {

@@ -201,6 +201,9 @@ export class SafetyStateService implements OnModuleInit {
     if (this.mode === 'e_stop' || this.mode === 'comms_lost') {
       this.mode = 'normal';
     }
+    if (this.mode === 'normal') {
+      await this.writeSafeState(0);
+    }
     await this.auditService.write({
       ...auditWriteFields(actor),
       action: 'safety.reset',
@@ -208,6 +211,18 @@ export class SafetyStateService implements OnModuleInit {
       result: 'success',
     });
     return this.snapshot();
+  }
+
+  /** 0 while normal and connected. 1 on e-stop, safe-state, or comms loss. */
+  private async writeSafeState(value: 0 | 1): Promise<void> {
+    const driver = this.plcService.getDriver();
+    if (!driver.isConnected()) return;
+    const safeState = await this.roleAddress(
+      'safeStateRegisterId',
+      'holding.safeState',
+      DEMO_CRANE_MAP.holdings.safeState,
+    );
+    await driver.writeRegister(safeState, value);
   }
 
   private async roleAddress(
@@ -556,6 +571,9 @@ export class SafetyStateService implements OnModuleInit {
       this.lastHeartbeatAt = new Date();
       this.plcService.markExchange(true);
       this.watchdogOk = true;
+      if (this.mode === 'normal') {
+        await this.writeSafeState(0);
+      }
 
       // Deadman expiry (lost pulses) or pending drop after explicit release.
       if (
@@ -681,17 +699,12 @@ export class SafetyStateService implements OnModuleInit {
         if (driver.isConnected()) {
           await this.clearMotionCoils();
           await this.clearCommandCoils();
-          const safeState = await this.roleAddress(
-            'safeStateRegisterId',
-            'holding.safeState',
-            DEMO_CRANE_MAP.holdings.safeState,
-          );
           const deadman = await this.roleAddress(
             'deadmanRegisterId',
             'coil.deadman',
             DEMO_CRANE_MAP.coils.deadman,
           );
-          await driver.writeRegister(safeState, 1);
+          await this.writeSafeState(1);
           await driver.writeCoil(deadman, false);
         }
       } catch {

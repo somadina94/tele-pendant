@@ -93,9 +93,9 @@ describe('AssistantService', () => {
     });
     const result = await service.ask('deadman');
     expect(result.mode).toBe('local-fts');
-    expect(result.note).toContain('active alarms');
-    expect(result.answer).toContain('Active alarms:');
-    expect(result.answer).toContain('Current tags:');
+    expect(result.note).toContain('matching manual');
+    expect(result.answer.toLowerCase()).toContain('deadman');
+    expect(result.answer).not.toContain('Active alarms:');
     expect((Agent.prompt as jest.Mock).mock.calls.length).toBe(0);
     if (prev === undefined) delete process.env.CURSOR_API_KEY;
     else process.env.CURSOR_API_KEY = prev;
@@ -121,7 +121,8 @@ describe('AssistantService', () => {
       } as never,
     );
     live.onModuleInit();
-    const result = await live.ask('deadman');
+    const result = await live.ask('fixture load estop');
+    expect(result.answer.toLowerCase()).toContain('fixture load estop');
     expect(result.answer).toContain('Active alarms: Fixture load clear.');
     expect(result.answer).toContain('holding.loadKg=0');
     expect(result.answer).toContain('coil.eStop=false');
@@ -155,8 +156,8 @@ describe('AssistantService', () => {
     );
     live.onModuleInit();
     const result = await live.ask('deadman');
-    expect(result.answer).toContain('Active alarms: none.');
-    expect(result.answer).toContain('Current tags: none.');
+    expect(result.answer).not.toContain('Active alarms:');
+    expect(result.answer).not.toContain('Current tags:');
   });
 
   it('returns empty for blank / punctuation-only queries', () => {
@@ -168,7 +169,7 @@ describe('AssistantService', () => {
   it('answers with fallback when nothing matches', async () => {
     const result = await service.ask('xyzzynonexistenttoken123');
     expect(result.hits).toEqual([]);
-    expect(result.answer).toMatch(/No local documents matched/);
+    expect(result.answer).toMatch(/No manual paragraph matches/);
   });
 
   it('reindexes without error and skips non-md files', () => {

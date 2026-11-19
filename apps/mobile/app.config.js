@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { withAndroidManifest } = require('expo/config-plugins');
 
 function loadEnvFile(filePath, { override = false } = {}) {
   if (!fs.existsSync(filePath)) return;
@@ -67,6 +68,18 @@ function allowPlainHttp(url) {
 
 const httpAllowed = allowPlainHttp(apiUrl);
 
+function withCleartextTraffic(config) {
+  return withAndroidManifest(config, (next) => {
+    const application = next.modResults.manifest.application?.[0];
+    if (application) {
+      application.$['android:usesCleartextTraffic'] = httpAllowed
+        ? 'true'
+        : 'false';
+    }
+    return next;
+  });
+}
+
 module.exports = {
   expo: {
     ...appJson.expo,
@@ -74,6 +87,7 @@ module.exports = {
       ...appJson.expo.android,
       usesCleartextTraffic: httpAllowed,
     },
+    plugins: [...(appJson.expo.plugins ?? []), withCleartextTraffic],
     ios: {
       ...appJson.expo.ios,
       infoPlist: {

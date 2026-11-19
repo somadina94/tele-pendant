@@ -604,7 +604,7 @@ export function OperatorPage() {
   async function switchScreen(id: string) {
     if (layout?.background?.id === id) return;
     try {
-      await apiPost(`/hmi/backgrounds/${id}/activate`);
+      await apiPost(`/hmi/backgrounds/${id}/select`);
       await queryClient.invalidateQueries({ queryKey: ['hmi-layout'] });
     } catch (err) {
       setMessage(
@@ -676,11 +676,13 @@ export function OperatorPage() {
   const showCraneMetrics = !isPendantScreen;
 
   const stopCell =
+    layout.stop ??
     grid.cells.find(
       (cell) =>
         cell &&
         (cell.style === 'estop' || cell.label.trim().toUpperCase() === 'STOP'),
-    ) ?? null;
+    ) ??
+    null;
 
   function renderMatrixCell(cell: CellDto) {
     const cellState = resolveMatrixCellUiState({
@@ -1087,19 +1089,22 @@ export function OperatorPage() {
               role="tablist"
               aria-label="Plant screens"
             >
-              {screens.map((screen) => (
-                <Button
-                  key={screen.id}
-                  type="button"
-                  size="sm"
-                  variant={screen.active ? 'default' : 'outline'}
-                  className="h-6 px-2 text-[10px]"
-                  aria-selected={screen.active}
-                  onClick={() => void switchScreen(screen.id)}
-                >
-                  {screen.name}
-                </Button>
-              ))}
+              {screens.map((screen) => {
+                const chosen = screen.id === layout.background?.id;
+                return (
+                  <Button
+                    key={screen.id}
+                    type="button"
+                    size="sm"
+                    variant={chosen ? 'default' : 'outline'}
+                    className="h-6 px-2 text-[10px]"
+                    aria-selected={chosen}
+                    onClick={() => void switchScreen(screen.id)}
+                  >
+                    {screen.name}
+                  </Button>
+                );
+              })}
             </div>
           ) : null}
           <HelpTip id="tour.operator.graphic" className="operator-plant-slot">

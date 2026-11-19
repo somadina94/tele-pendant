@@ -167,6 +167,64 @@ describe('HmiService', () => {
     expect(await service.listRegisters()).toHaveLength(1);
   });
 
+  it('returns the shared STOP cell for a screen that does not own it', async () => {
+    const stop = {
+      id: 'stop',
+      label: 'STOP',
+      style: 'estop',
+      row: 5,
+      col: 0,
+      background: { id: 'bg-other' },
+    };
+    cells.find.mockImplementation(async (query?: { where?: unknown }) => {
+      if (query?.where) return [motionCell];
+      return [motionCell, stop];
+    });
+    const layout = await service.getLayout('device-a');
+    expect(layout.stop).toEqual(stop);
+    expect(layout.cells).toEqual([motionCell]);
+  });
+
+  it('keeps a device screen choice off the admin default', async () => {
+    backgrounds.findOneBy.mockImplementation(async ({ id }: { id: string }) =>
+      id === 'bg2' ? { id: 'bg2', name: 'yard', active: false } : null,
+    );
+    const selected = await service.selectBackground('bg2', 'device-a');
+    expect(selected.id).toBe('bg2');
+    expect(backgrounds.save).not.toHaveBeenCalled();
+    cells.find.mockImplementation(
+      async (query?: { where?: { background?: { id: string } } }) => {
+        if (query?.where) return [];
+        return [];
+      },
+    );
+    const layout = await service.getLayout('device-a');
+    expect(layout.background).toEqual({
+      id: 'bg2',
+      name: 'yard',
+      active: false,
+    });
+    const other = await service.getLayout('device-b');
+    expect(other.background).toEqual({ id: 'bg1', active: true });
+    await expect(service.selectBackground('bg2', '  ')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    backgrounds.findOneBy.mockResolvedValue(null);
+    await expect(
+      service.selectBackground('missing', 'device-a'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('forgets a device screen when that screen no longer exists', async () => {
+    backgrounds.findOneBy.mockImplementation(async ({ id }: { id: string }) =>
+      id === 'bg2' ? { id: 'bg2', name: 'yard', active: false } : null,
+    );
+    await service.selectBackground('bg2', 'device-a');
+    backgrounds.findOneBy.mockResolvedValue(null);
+    const layout = await service.getLayout('device-a');
+    expect(layout.background).toEqual({ id: 'bg1', active: true });
+  });
+
   it('layout without background skips overlays and empty cells', async () => {
     cells.find.mockResolvedValue([]);
     backgrounds.findOne.mockResolvedValue(null);

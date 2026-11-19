@@ -69,7 +69,7 @@ OTA_PUBLIC_URL=http://192.168.0.192:4050 pnpm --filter @tele-pendant/mobile ota:
 
 4. Open `http://192.168.0.192:4050/ota/manifest` in a browser. It returns JSON with `runtimeVersion` `0.0.1`.
 5. Force-close the phone app and open it again. It checks the manifest on load. A JavaScript change from that export is the running app after the reload.
-6. A change to camera, speech, or the HTTP permission is not in that update. Install a new APK for those.
+6. A change to camera, speech, or the HTTP permission is not in that update. Delete `apps/mobile/android` and install a new APK for those. With the dev compose file the emulator address is `http://10.0.2.2:4050/api/v1`.
 
 ## Checklist
 
