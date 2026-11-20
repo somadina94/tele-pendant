@@ -8,8 +8,9 @@ This guide does not include a sample machine drawing. Upload the drawing you alr
 
 1. Open Config, then Background.
 2. Type a name that is not the first screen and choose Add.
-3. Activate the new screen.
-4. Open Operator. The button grid for the new screen is empty until you add cells on that screen.
+3. Choose Edit on that screen. Editing does not change the shared default.
+4. Add the picture, buttons, and labels on that screen. Copy duplicates a screen’s picture, buttons, and labels onto a new inactive screen.
+5. Open Operator. The button grid for the new screen is empty until you add cells on that screen. Choose the screen there. That choice is for this device. Activate, for an admin, sets the shared default.
 
 ## Upload a PDF
 
@@ -29,6 +30,17 @@ The phone Config screen accepts the same file types.
 3. You can still type X and Y. Save stores those percentages on this screen only.
 
 The phone does the same with a tap.
+
+## Place a button on the picture
+
+1. Config, Buttons, open the button.
+2. Click the picture, or type Picture X and Picture Y. Save stores those percentages on this screen.
+3. Open Operator. That button sits on the picture. Buttons with X and Y empty stay in the matrix.
+4. The app does not read the photo and invent positions. On a phone the button stays large enough to press, so a crowded drawing is larger than the photo.
+
+## No picture
+
+A screen with no image says “no picture”. It does not draw the crane.
 
 ## Buttons stay reachable
 

@@ -37,6 +37,8 @@ const layout = {
         address: 0,
         kind: 'coil',
       },
+      xPct: 12,
+      yPct: 40,
       feedbackRegister: {
         id: 'r2',
         name: 'coil.fb',
@@ -578,6 +580,12 @@ describe('AdminPage', () => {
     fireEvent.change(screen.getByLabelText('c1 fast-speed'), {
       target: { value: '' },
     });
+    fireEvent.change(screen.getByLabelText('c1 x'), {
+      target: { value: '15' },
+    });
+    fireEvent.change(screen.getByLabelText('c1 y'), {
+      target: { value: '45' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save Up' }));
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith(
@@ -589,6 +597,9 @@ describe('AdminPage', () => {
           variableSpeed: true,
           slowSpeedPct: 30,
           fastSpeedPct: 100,
+          xPct: 15,
+          yPct: 45,
+          backgroundId: 'bg',
         }),
       ),
     );
@@ -712,6 +723,7 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save background' }));
     await screen.findByText('Saved background.');
     expect(patch).toHaveBeenCalledWith('/hmi/background', {
+      id: 'bg',
       name: 'yard',
       cssBackground: 'blue',
       imageUrl: 'https://example.com/bay.png',
@@ -1252,23 +1264,34 @@ describe('AdminPage', () => {
   });
 
   it('manages plant screens and uploads a graphic asset', async () => {
-    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
-      if (path === '/plc/health') return plcHealthMock;
-      if (path === '/plc/connections') return [];
-      return {
-        ...layout,
-        background: {
-          id: 'bg1',
-          name: 'demo-crane',
-          cssBackground: '',
-          imageUrl: '',
-        },
-        backgrounds: [
-          { id: 'bg1', name: 'demo-crane', active: true },
-          { id: 'bg2', name: 'yard', active: false },
-        ],
-      };
-    });
+    localStorage.setItem(
+      'user',
+      JSON.stringify({
+        id: 'u-test',
+        email: 'test@example.com',
+        displayName: 'Test User',
+        role: 'admin',
+      }),
+    );
+    const get = vi
+      .spyOn(api, 'apiGet')
+      .mockImplementation(async (path: string) => {
+        if (path === '/plc/health') return plcHealthMock;
+        if (path === '/plc/connections') return [];
+        return {
+          ...layout,
+          background: {
+            id: 'bg1',
+            name: 'demo-crane',
+            cssBackground: '',
+            imageUrl: '',
+          },
+          backgrounds: [
+            { id: 'bg1', name: 'demo-crane', active: true },
+            { id: 'bg2', name: 'yard', active: false },
+          ],
+        };
+      });
     const post = vi.spyOn(api, 'apiPost').mockResolvedValue({});
     const upload = vi.spyOn(api, 'apiUpload').mockResolvedValue({
       imageUrl: '/hmi-assets/plant.svg',
@@ -1278,6 +1301,19 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
     await screen.findByText('Active screen updated.');
     expect(post).toHaveBeenCalledWith('/hmi/backgrounds/bg2/activate');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Copy' })[0]);
+    await screen.findByText('Screen copied.');
+    expect(post).toHaveBeenCalledWith('/hmi/backgrounds/bg1/copy');
+    post.mockRejectedValueOnce(new Error('copy failed'));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Copy' })[0]);
+    await screen.findByText('copy failed');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    await waitFor(() =>
+      expect(get).toHaveBeenCalledWith('/hmi/layout?screenId=bg2'),
+    );
+    await screen.findByLabelText('new screen name');
 
     fireEvent.change(screen.getByLabelText('new screen name'), {
       target: { value: 'dock' },
@@ -1291,7 +1327,10 @@ describe('AdminPage', () => {
       target: { files: [file] },
     });
     await screen.findByText('Uploaded plant graphic.');
-    expect(upload).toHaveBeenCalledWith('/hmi/background/asset', file);
+    expect(upload).toHaveBeenCalledWith(
+      '/hmi/background/asset?backgroundId=bg1',
+      file,
+    );
 
     upload.mockRejectedValueOnce(new Error('too big'));
     fireEvent.change(screen.getByLabelText('background upload'), {
@@ -1444,6 +1483,41 @@ describe('AdminPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('saves onto the shared default when the layout has no screen id', async () => {
+    vi.spyOn(api, 'apiGet').mockImplementation(async (path: string) => {
+      if (path === '/plc/health') return plcHealthMock;
+      if (path === '/plc/connections') return [];
+      return {
+        ...layout,
+        background: { name: 'bay', cssBackground: null, imageUrl: null },
+      };
+    });
+    const post = vi.spyOn(api, 'apiPost').mockResolvedValue({});
+    const patch = vi.spyOn(api, 'apiPatch').mockResolvedValue({});
+    const upload = vi.spyOn(api, 'apiUpload').mockResolvedValue({});
+    showAdminSection('cells');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add cell' }));
+    await screen.findByText('Saved cell.');
+    expect(post).toHaveBeenCalledWith(
+      '/hmi/cells',
+      expect.not.objectContaining({ backgroundId: expect.anything() }),
+    );
+    await goConfigSection('Background');
+    fireEvent.click(screen.getByRole('button', { name: 'Save background' }));
+    await screen.findByText('Saved background.');
+    expect(patch).toHaveBeenCalledWith('/hmi/background', {
+      name: 'bay',
+      cssBackground: '',
+      imageUrl: '',
+    });
+    const file = new File(['<svg/>'], 'plant.svg', { type: 'image/svg+xml' });
+    fireEvent.change(screen.getByLabelText('background upload'), {
+      target: { files: [file] },
+    });
+    await screen.findByText('Uploaded plant graphic.');
+    expect(upload).toHaveBeenCalledWith('/hmi/background/asset', file);
+  });
+
   it('places a live label by clicking the plant picture', async () => {
     class ImmediateResizeObserver {
       constructor(private readonly cb: ResizeObserverCallback) {}
@@ -1480,7 +1554,8 @@ describe('AdminPage', () => {
         };
       });
       await goConfigSection('Live labels');
-      const img = document.querySelector(
+      const form = screen.getByLabelText('o1 x').closest('form') as HTMLElement;
+      const img = form.querySelector(
         'img[src="/hmi-assets/plant.svg"]',
       ) as HTMLImageElement;
       const frame = img.parentElement as HTMLElement;
@@ -1520,6 +1595,24 @@ describe('AdminPage', () => {
         target: { value: 'nope' },
       });
       expect(marker()).toBeNull();
+      const cellForm = screen
+        .getByLabelText('c1 x')
+        .closest('form') as HTMLElement;
+      const cellImg = cellForm.querySelector('img') as HTMLImageElement;
+      Object.defineProperty(cellImg, 'naturalWidth', {
+        configurable: true,
+        value: 400,
+      });
+      Object.defineProperty(cellImg, 'naturalHeight', {
+        configurable: true,
+        value: 200,
+      });
+      fireEvent.load(cellImg);
+      fireEvent.click(cellImg.parentElement as HTMLElement, {
+        clientX: 8,
+        clientY: 8,
+      });
+      expect(screen.getByLabelText('c1 x')).not.toHaveValue('');
     } finally {
       vi.stubGlobal('ResizeObserver', previous);
     }

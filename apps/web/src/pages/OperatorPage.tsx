@@ -28,7 +28,6 @@ import { applyLiveTagsState, shouldApplyLiveTags } from '../lib/live-tags';
 import { motionDebug } from '../lib/motion-debug';
 import { getRealtimeSocket } from '../lib/realtime';
 import { HelpTip } from '../lib/tour';
-import { CraneMimic } from '@/components/crane-mimic';
 import { PageSpinner } from '@/components/page-spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -129,6 +128,16 @@ export function readPlantImageRect(
     box.height,
     img.naturalWidth,
     img.naturalHeight,
+  );
+}
+
+function isPlacedOnPicture(cell: CellDto): boolean {
+  return (
+    cell.xPct != null &&
+    cell.yPct != null &&
+    cell.style !== 'estop' &&
+    cell.style !== 'selector' &&
+    cell.label.trim().toUpperCase() !== 'STOP'
   );
 }
 
@@ -359,7 +368,11 @@ export function OperatorPage() {
     const layout = layoutQuery.data;
     if (!layout) return null;
     const { rows, cols } = layout.matrix;
-    const map = new Map(layout.cells.map((c) => [`${c.row}:${c.col}`, c]));
+    const map = new Map(
+      layout.cells
+        .filter((cell) => !isPlacedOnPicture(cell))
+        .map((c) => [`${c.row}:${c.col}`, c]),
+    );
     const cells: Array<CellDto | null> = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -673,7 +686,7 @@ export function OperatorPage() {
   const hasPicture = Boolean(layout.background?.imageUrl);
   const hasSelectors = layout.cells.some((cell) => cell.style === 'selector');
   const isPendantScreen = hasPicture || hasSelectors;
-  const showCraneMetrics = !isPendantScreen;
+  const placedCells = layout.cells.filter((cell) => isPlacedOnPicture(cell));
 
   const stopCell =
     layout.stop ??
@@ -1122,7 +1135,9 @@ export function OperatorPage() {
                   src={imageUrl}
                   onError={() => setPhotoOk(false)}
                 />
-              ) : null}
+              ) : (
+                <p className="plant-empty">no picture</p>
+              )}
               <div className="plant-cluster-chrome">
                 <h2 className="plant-cluster-title">
                   {layout.background?.name ?? t('plantGraphic')}
@@ -1147,11 +1162,6 @@ export function OperatorPage() {
                   {mode}
                 </div>
               </div>
-              {!useCustomGraphic && showCraneMetrics ? (
-                <div className="plant-mimic-stage" aria-hidden={false}>
-                  <CraneMimic tags={tags} safety={safety ?? layout.safety} />
-                </div>
-              ) : null}
               <div
                 className="plant-overlay-stage"
                 style={
@@ -1168,11 +1178,7 @@ export function OperatorPage() {
                 }
               >
                 {(layout.overlays ?? [])
-                  .filter(
-                    (o) =>
-                      isPendantScreen ||
-                      !isClusterMetricRegister(o.register?.name),
-                  )
+                  .filter((o) => !isClusterMetricRegister(o.register?.name))
                   .map((o) => (
                     <div
                       key={o.id}
@@ -1188,44 +1194,26 @@ export function OperatorPage() {
                       </strong>
                     </div>
                   ))}
+                {placedCells.map((cell) => (
+                  <Button
+                    key={cell.id}
+                    type="button"
+                    variant="secondary"
+                    className="plant-placed-button"
+                    style={{ left: `${cell.xPct}%`, top: `${cell.yPct}%` }}
+                    disabled={cellRequiresControlLease(cell) && !youHold}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      void pressCell(cell);
+                    }}
+                    onPointerUp={() => releaseCell(cell)}
+                    onPointerCancel={() => releaseCell(cell)}
+                    aria-label={cell.label}
+                  >
+                    {cell.label}
+                  </Button>
+                ))}
               </div>
-              {showCraneMetrics ? (
-                <div className="plant-readout">
-                  <div className="plant-metric">
-                    <span className="plant-metric-label">Height</span>
-                    <span className="plant-metric-value">
-                      {tags?.hoistHeightMm ?? '—'}
-                    </span>
-                    <span className="plant-metric-unit">mm</span>
-                  </div>
-                  <div className="plant-metric">
-                    <span className="plant-metric-label">Trolley</span>
-                    <span className="plant-metric-value">
-                      {tags?.trolleyPositionMm ??
-                        tagValueForRegister(tags, 'holding.trolleyPosition')}
-                    </span>
-                    <span className="plant-metric-unit">mm</span>
-                  </div>
-                  <div className="plant-metric">
-                    <span className="plant-metric-label">Load</span>
-                    <span className="plant-metric-value">
-                      {tags?.loadKg ?? '—'}
-                    </span>
-                    <span className="plant-metric-unit">kg</span>
-                  </div>
-                  <div className="plant-metric">
-                    <span className="plant-metric-label">Motor</span>
-                    <span className="plant-metric-value">
-                      {safety?.eStopActive
-                        ? 'IDLE'
-                        : tags?.motorRunning
-                          ? 'RUN'
-                          : 'IDLE'}
-                    </span>
-                    <span className="plant-metric-unit">status</span>
-                  </div>
-                </div>
-              ) : null}
             </div>
           </HelpTip>
 
@@ -1296,8 +1284,8 @@ export function OperatorPage() {
                 <div
                   className="matrix-grid"
                   style={{
-                    gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
-                    gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`,
+                    gridTemplateColumns: `repeat(${Math.max(grid.cols, 1)}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${Math.max(grid.rows, 1)}, minmax(2.75rem, auto))`,
                   }}
                 >
                   {grid.cells.map((cell, idx) => {

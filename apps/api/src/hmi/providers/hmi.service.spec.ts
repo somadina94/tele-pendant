@@ -1604,4 +1604,268 @@ describe('HmiService', () => {
     if (prevDir === undefined) delete process.env.SQLITE_DIR;
     else process.env.SQLITE_DIR = prevDir;
   });
+
+  it('saves a button on the screen being edited and places it on the picture', async () => {
+    registers.findOneBy.mockImplementation(async ({ id }: { id: string }) => ({
+      id,
+      name: id,
+    }));
+    const yard = { id: 'bg2', name: 'yard', active: false };
+    backgrounds.findOneBy.mockImplementation(async ({ id }: { id: string }) =>
+      id === 'bg2' ? yard : null,
+    );
+    const placed = await service.createCell({
+      ...cellInput,
+      backgroundId: 'bg2',
+      xPct: 12,
+      yPct: 40,
+    });
+    expect(placed.xPct).toBe(12);
+    expect(placed.yPct).toBe(40);
+    expect(placed.background).toEqual(yard);
+
+    cells.findOne.mockResolvedValue({
+      id: 'c9',
+      label: 'Old',
+      style: 'default',
+      requiresSafeAction: false,
+      background: { id: 'bg1' },
+      primaryRegister: { name: 'coil.other' },
+    });
+    const moved = await service.updateCell('c9', {
+      ...cellInput,
+      backgroundId: 'bg2',
+      xPct: 0,
+      yPct: 100,
+    });
+    expect(moved.background).toEqual(yard);
+
+    await expect(
+      service.createCell({ ...cellInput, backgroundId: 'missing' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.createCell({ ...cellInput, xPct: 10, yPct: null }),
+    ).rejects.toThrow('Button position must be between 0 and 100');
+    await expect(
+      service.createCell({ ...cellInput, xPct: null, yPct: 10 }),
+    ).rejects.toThrow('Button position must be between 0 and 100');
+    await expect(
+      service.createCell({ ...cellInput, xPct: -1, yPct: 0 }),
+    ).rejects.toThrow('Button position must be between 0 and 100');
+    await expect(
+      service.createCell({ ...cellInput, xPct: 0, yPct: -1 }),
+    ).rejects.toThrow('Button position must be between 0 and 100');
+    await expect(
+      service.createCell({ ...cellInput, xPct: 101, yPct: 0 }),
+    ).rejects.toThrow('Button position must be between 0 and 100');
+    await expect(
+      service.createCell({ ...cellInput, xPct: 0, yPct: 101 }),
+    ).rejects.toThrow('Button position must be between 0 and 100');
+
+    const cleared = await service.createCell({
+      ...cellInput,
+      xPct: null,
+      yPct: null,
+    });
+    expect(cleared.xPct).toBeNull();
+    expect(cleared.yPct).toBeNull();
+  });
+
+  it('copies a screen without activating it or duplicating STOP', async () => {
+    const source = {
+      id: 'bg1',
+      name: 'demo-p03a21',
+      cssBackground: 'red',
+      imageUrl: '/hmi-assets/a.png',
+      active: true,
+    };
+    backgrounds.findOneBy.mockImplementation(async ({ id }: { id: string }) =>
+      id === 'bg1'
+        ? source
+        : id === 'bg2'
+          ? { id: 'bg2', name: 'other' }
+          : null,
+    );
+    backgrounds.find.mockResolvedValue([source]);
+    backgrounds.create.mockImplementation((row: Record<string, unknown>) => ({
+      ...row,
+    }));
+    backgrounds.save.mockImplementation(async (row: { name?: string }) => ({
+      id: 'bg-copy',
+      active: false,
+      ...row,
+    }));
+    cells.find.mockResolvedValue([
+      {
+        id: 'stop',
+        label: 'STOP',
+        style: 'default',
+        row: 0,
+        col: 0,
+        isMotion: false,
+        requiresSafeAction: false,
+        primaryRegister: { name: 'coil.other' },
+      },
+      {
+        id: 'estop',
+        label: 'Halt',
+        style: 'estop',
+        row: 1,
+        col: 0,
+        isMotion: false,
+        requiresSafeAction: true,
+        primaryRegister: { name: 'coil.eStop' },
+      },
+      {
+        id: 'b1',
+        label: 'Enable',
+        style: 'enable',
+        row: 2,
+        col: 0,
+        isMotion: false,
+        requiresSafeAction: false,
+        variableSpeed: false,
+        slowSpeedPct: 30,
+        fastSpeedPct: 100,
+        xPct: 10,
+        yPct: 20,
+        primaryRegister: { name: 'coil.enable' },
+        secondaryRegister: null,
+        feedbackRegister: null,
+        statusRegister: null,
+      },
+    ]);
+    overlays.find.mockResolvedValue([
+      {
+        id: 'o1',
+        label: 'Height',
+        xPct: 1,
+        yPct: 2,
+        format: '{value}',
+        register: null,
+      },
+    ]);
+    const first = await service.copyBackground('bg1');
+    expect(first.name).toBe('demo-p03a21 copy');
+    backgrounds.find.mockResolvedValue([
+      source,
+      { id: 'taken', name: 'demo-p03a21 copy', active: false },
+    ]);
+    cells.create.mockClear();
+    const copy = await service.copyBackground('bg1');
+    expect(copy.active).toBe(false);
+    expect(copy.name).toBe('demo-p03a21 copy 2');
+    expect(copy.imageUrl).toBe('/hmi-assets/a.png');
+    expect(cells.create).toHaveBeenCalledTimes(1);
+    expect(cells.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: 'Enable',
+        xPct: 10,
+        yPct: 20,
+        background: expect.objectContaining({ id: 'bg-copy', active: false }),
+      }),
+    );
+    expect(overlays.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: 'Height',
+        background: expect.objectContaining({ id: 'bg-copy' }),
+      }),
+    );
+    expect(auditService.write).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'background.copy' }),
+    );
+    await expect(service.copyBackground('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    const bare = { id: 'bg1', name: 'plain', active: false };
+    backgrounds.findOneBy.mockImplementation(async ({ id }: { id: string }) =>
+      id === 'bg1' ? bare : null,
+    );
+    backgrounds.find.mockResolvedValue([bare]);
+    cells.find.mockResolvedValue([
+      {
+        id: 'plain',
+        label: 'Jog',
+        style: 'default',
+        row: 0,
+        col: 0,
+        isMotion: false,
+        requiresSafeAction: false,
+      },
+    ]);
+    const third = await service.copyBackground('bg1');
+    expect(third.cssBackground).toBeNull();
+    expect(third.imageUrl).toBeNull();
+    expect(cells.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: 'Jog',
+        xPct: null,
+        yPct: null,
+        primaryRegister: null,
+      }),
+    );
+  });
+
+  it('loads and updates the screen named in the request', async () => {
+    const yard = {
+      id: 'bg2',
+      name: 'yard',
+      active: false,
+      cssBackground: null,
+      imageUrl: null,
+    };
+    backgrounds.findOneBy.mockImplementation(async ({ id }: { id: string }) =>
+      id === 'bg2' ? yard : null,
+    );
+    cells.find.mockImplementation(async (query?: { where?: unknown }) => {
+      if (query?.where) return [];
+      return [];
+    });
+    const layout = await service.getLayout('device-a', 'bg2');
+    expect(layout.background).toEqual(yard);
+    await expect(
+      service.getLayout('device-a', 'missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    const saved = await service.updateBackground({
+      id: 'bg2',
+      name: 'yard east',
+      cssBackground: 'blue',
+      imageUrl: '/hmi-assets/yard.png',
+    });
+    expect(saved.name).toBe('yard east');
+    expect(saved.id).toBe('bg2');
+
+    overlays.findOneBy.mockResolvedValue({
+      id: 'o1',
+      label: 'Height',
+      format: '{value}',
+      xPct: 1,
+      yPct: 2,
+    });
+    const overlay = await service.updateOverlay('o1', {
+      label: 'Height',
+      format: '{value}',
+      xPct: 3,
+      yPct: 4,
+      backgroundId: 'bg2',
+    });
+    expect(overlay.background).toEqual(yard);
+
+    const prevDir = process.env.SQLITE_DIR;
+    process.env.SQLITE_DIR = tmpdir();
+    const uploaded = await service.uploadBackgroundAsset(
+      {
+        buffer: Buffer.from('png-bytes'),
+        mimetype: 'image/png',
+      },
+      undefined,
+      'bg2',
+    );
+    expect(uploaded.id).toBe('bg2');
+    expect(uploaded.imageUrl).toMatch(/\.png$/);
+    if (prevDir === undefined) delete process.env.SQLITE_DIR;
+    else process.env.SQLITE_DIR = prevDir;
+  });
 });

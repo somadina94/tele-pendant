@@ -259,9 +259,15 @@ export function AdminPage() {
   const { walkthroughActive, currentStepId } = useTour();
   const [notes, setNotes] = useState<Record<string, Note>>({});
   const [labelFormKey, setLabelFormKey] = useState(0);
+  const [editScreenId, setEditScreenId] = useState<string | null>(null);
   const layoutQuery = useQuery({
-    queryKey: ['hmi-layout'],
-    queryFn: () => apiGet<HmiLayout>('/hmi/layout'),
+    queryKey: ['hmi-layout', editScreenId],
+    queryFn: () =>
+      apiGet<HmiLayout>(
+        editScreenId
+          ? `/hmi/layout?screenId=${encodeURIComponent(editScreenId)}`
+          : '/hmi/layout',
+      ),
   });
   const connections = useQuery({
     queryKey: ['plc-connections'],
@@ -350,6 +356,10 @@ export function AdminPage() {
   }
 
   const layout = layoutQuery.data;
+  const screenId = layout?.background?.id;
+  function onThisScreen<T extends object>(value: T) {
+    return screenId ? { ...value, backgroundId: screenId } : value;
+  }
   const registers = layout?.registers ?? [];
   const plcRows = connections.data ?? [];
   const cells = layout?.cells ?? [];
@@ -502,39 +512,48 @@ export function AdminPage() {
                 </div>
               ) : null}
               {cells.map((cell) => (
-                <CellEditor
-                  key={cell.id}
-                  noteKey={cell.id}
-                  registers={registers}
-                  initial={{
-                    row: cell.row,
-                    col: cell.col,
-                    label: cell.label,
-                    style: cell.style,
-                    isMotion: cell.isMotion,
-                    requiresSafeAction: cell.requiresSafeAction,
-                    variableSpeed: cell.variableSpeed ?? cell.isMotion,
-                    slowSpeedPct: cell.slowSpeedPct ?? 30,
-                    fastSpeedPct: cell.fastSpeedPct ?? 100,
-                    primaryRegisterId: cell.primaryRegister?.id ?? '',
-                    secondaryRegisterId: cell.secondaryRegister?.id ?? '',
-                    feedbackRegisterId: cell.feedbackRegister?.id ?? '',
-                    statusRegisterId: cell.statusRegister?.id ?? '',
-                  }}
-                  submitLabel={`Save ${cell.label}`}
-                  note={notes[cell.id]}
-                  onNote={(note) => remember(cell.id, note)}
-                  onSubmit={(value) =>
-                    apiPatch(`/hmi/cells/${cell.id}`, value).then(() =>
-                      refreshLayout(),
-                    )
-                  }
-                  onDelete={() =>
-                    apiDelete(`/hmi/cells/${cell.id}`).then(() =>
-                      refreshLayout(),
-                    )
-                  }
-                />
+                <div key={cell.id} className="grid gap-2">
+                  <p className="text-sm font-medium">
+                    {layout?.background?.name ?? 'Screen'} ·{' '}
+                    {cell.primaryRegister?.name ?? 'no register'}
+                  </p>
+                  <CellEditor
+                    noteKey={cell.id}
+                    registers={registers}
+                    imageUrl={layout?.background?.imageUrl ?? ''}
+                    initial={{
+                      row: cell.row,
+                      col: cell.col,
+                      label: cell.label,
+                      style: cell.style,
+                      isMotion: cell.isMotion,
+                      requiresSafeAction: cell.requiresSafeAction,
+                      variableSpeed: cell.variableSpeed ?? cell.isMotion,
+                      slowSpeedPct: cell.slowSpeedPct ?? 30,
+                      fastSpeedPct: cell.fastSpeedPct ?? 100,
+                      primaryRegisterId: cell.primaryRegister?.id ?? '',
+                      secondaryRegisterId: cell.secondaryRegister?.id ?? '',
+                      feedbackRegisterId: cell.feedbackRegister?.id ?? '',
+                      statusRegisterId: cell.statusRegister?.id ?? '',
+                      xPct: cell.xPct ?? null,
+                      yPct: cell.yPct ?? null,
+                    }}
+                    submitLabel={`Save ${cell.label}`}
+                    note={notes[cell.id]}
+                    onNote={(note) => remember(cell.id, note)}
+                    onSubmit={(value) =>
+                      apiPatch(
+                        `/hmi/cells/${cell.id}`,
+                        onThisScreen(value),
+                      ).then(() => refreshLayout())
+                    }
+                    onDelete={() =>
+                      apiDelete(`/hmi/cells/${cell.id}`).then(() =>
+                        refreshLayout(),
+                      )
+                    }
+                  />
+                </div>
               ))}
               <Separator />
               <div className="space-y-2">
@@ -542,6 +561,7 @@ export function AdminPage() {
                 <CellEditor
                   noteKey="new-cell"
                   registers={registers}
+                  imageUrl={layout?.background?.imageUrl ?? ''}
                   initial={{
                     row: 0,
                     col: 0,
@@ -561,7 +581,9 @@ export function AdminPage() {
                   note={notes['new-cell']}
                   onNote={(note) => remember('new-cell', note)}
                   onSubmit={(value) =>
-                    apiPost('/hmi/cells', value).then(() => refreshLayout())
+                    apiPost('/hmi/cells', onThisScreen(value)).then(() =>
+                      refreshLayout(),
+                    )
                   }
                 />
               </div>
@@ -594,9 +616,10 @@ export function AdminPage() {
                   note={notes[overlay.id]}
                   onNote={(note) => remember(overlay.id, note)}
                   onSubmit={(value) =>
-                    apiPatch(`/hmi/overlays/${overlay.id}`, value).then(() =>
-                      refreshLayout(),
-                    )
+                    apiPatch(
+                      `/hmi/overlays/${overlay.id}`,
+                      onThisScreen(value),
+                    ).then(() => refreshLayout())
                   }
                   onDelete={() =>
                     apiDelete(`/hmi/overlays/${overlay.id}`).then(() =>
@@ -624,7 +647,7 @@ export function AdminPage() {
                   note={notes['new-label']}
                   onNote={(note) => remember('new-label', note)}
                   onSubmit={(value) =>
-                    apiPost('/hmi/overlays', value).then(() => {
+                    apiPost('/hmi/overlays', onThisScreen(value)).then(() => {
                       setLabelFormKey((current) => current + 1);
                       return refreshLayout();
                     })
@@ -642,17 +665,25 @@ export function AdminPage() {
             <CardHeader>
               <CardTitle>Background</CardTitle>
               <CardDescription>
-                Upload an SVG, a photo, or a PDF for this screen. Page 1 of a
-                PDF becomes the picture. Add extra screens to switch plant views
-                on Operator. A screen with no picture keeps the built-in crane
-                mimic.
+                Upload an SVG, a photo, or a PDF for the screen you are editing.
+                Page 1 of a PDF becomes the picture. Choose a screen to edit it.
+                Activate sets the shared default and is for an admin only. A
+                screen with no picture says no picture.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <BackgroundScreens
                 screens={layout?.backgrounds ?? []}
+                editingId={screenId ?? null}
+                canActivate={role === 'admin'}
+                onEdit={(id) => setEditScreenId(id)}
                 onActivate={(id) =>
                   apiPost(`/hmi/backgrounds/${id}/activate`).then(() =>
+                    refreshLayout(),
+                  )
+                }
+                onCopy={(id) =>
+                  apiPost(`/hmi/backgrounds/${id}/copy`).then(() =>
                     refreshLayout(),
                   )
                 }
@@ -676,14 +707,18 @@ export function AdminPage() {
                   note={notes.background}
                   onNote={(note) => remember('background', note)}
                   onSubmit={(value) =>
-                    apiPatch('/hmi/background', value).then(() =>
-                      refreshLayout(),
-                    )
+                    apiPatch('/hmi/background', {
+                      ...value,
+                      ...(screenId ? { id: screenId } : {}),
+                    }).then(() => refreshLayout())
                   }
                   onUpload={(file) =>
-                    apiUpload('/hmi/background/asset', file).then(() =>
-                      refreshLayout(),
-                    )
+                    apiUpload(
+                      screenId
+                        ? `/hmi/background/asset?backgroundId=${encodeURIComponent(screenId)}`
+                        : '/hmi/background/asset',
+                      file,
+                    ).then(() => refreshLayout())
                   }
                 />
               ) : (
@@ -1398,6 +1433,8 @@ interface CellForm {
   feedbackRegisterId: string;
   statusRegisterId: string;
   pin?: string;
+  xPct?: number | null;
+  yPct?: number | null;
 }
 
 function RegisterSelect({
@@ -1437,6 +1474,7 @@ function CellEditor({
   onNote,
   onSubmit,
   onDelete,
+  imageUrl = '',
 }: {
   noteKey: string;
   registers: RegisterOption[];
@@ -1446,6 +1484,7 @@ function CellEditor({
   onNote: (note: Note) => void;
   onSubmit: (value: CellForm) => Promise<void>;
   onDelete?: () => Promise<void>;
+  imageUrl?: string;
 }) {
   const { t } = useT();
   const [row, setRow] = useState(String(initial.row));
@@ -1474,6 +1513,12 @@ function CellEditor({
   );
   const [statusRegisterId, setStatusRegisterId] = useState(
     initial.statusRegisterId,
+  );
+  const [xPct, setXPct] = useState(
+    initial.xPct == null ? '' : String(initial.xPct),
+  );
+  const [yPct, setYPct] = useState(
+    initial.yPct == null ? '' : String(initial.yPct),
   );
   const motionId = useId();
   const [motionPin, setMotionPin] = useState('');
@@ -1508,6 +1553,8 @@ function CellEditor({
         secondaryRegisterId: secondaryRegisterId || '',
         feedbackRegisterId,
         statusRegisterId,
+        xPct: xPct.trim() === '' ? null : Number(xPct),
+        yPct: yPct.trim() === '' ? null : Number(yPct),
         ...(demotingMotion ? { pin: motionPin.trim() } : {}),
       });
       const success = {
@@ -1682,6 +1729,42 @@ function CellEditor({
           </div>
         </div>
       ) : null}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor={`${noteKey}-x`}>Picture X</Label>
+          <Input
+            id={`${noteKey}-x`}
+            aria-label={`${noteKey} x`}
+            value={xPct}
+            placeholder="matrix"
+            onChange={(event) => setXPct(event.target.value)}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor={`${noteKey}-y`}>Picture Y</Label>
+          <Input
+            id={`${noteKey}-y`}
+            aria-label={`${noteKey} y`}
+            value={yPct}
+            placeholder="matrix"
+            onChange={(event) => setYPct(event.target.value)}
+          />
+        </div>
+      </div>
+      <LabelPlacement
+        imageUrl={imageUrl}
+        xPct={xPct || '50'}
+        yPct={yPct || '50'}
+        label={label || 'Button'}
+        onPlace={(nextX, nextY) => {
+          setXPct(String(nextX));
+          setYPct(String(nextY));
+        }}
+      />
+      <p className="text-xs text-muted-foreground">
+        Click the picture to place this button. Leave X and Y empty to keep it
+        in the matrix.
+      </p>
       <div className="flex flex-wrap gap-2">
         <Button type="submit">
           {submitLabel === 'Add cell' ? <Plus /> : <Save />}
@@ -1974,13 +2057,21 @@ function OverlayEditor({
 
 function BackgroundScreens({
   screens,
+  editingId,
+  canActivate,
+  onEdit,
   onActivate,
+  onCopy,
   onCreate,
   note,
   onNote,
 }: {
   screens: Array<{ id: string; name: string; active: boolean }>;
+  editingId: string | null;
+  canActivate: boolean;
+  onEdit: (id: string) => void;
   onActivate: (id: string) => Promise<unknown>;
+  onCopy: (id: string) => Promise<unknown>;
   onCreate: (name: string) => Promise<unknown>;
   note?: Note;
   onNote: (note: Note) => void;
@@ -1991,6 +2082,19 @@ function BackgroundScreens({
     try {
       await onActivate(id);
       const success = { ok: true as const, text: 'Active screen updated.' };
+      onNote(success);
+      toastOk(success.text);
+    } catch (err) {
+      const failure = { ok: false as const, text: noteText(err) };
+      onNote(failure);
+      toastErr(failure.text);
+    }
+  }
+
+  async function copy(id: string) {
+    try {
+      await onCopy(id);
+      const success = { ok: true as const, text: 'Screen copied.' };
       onNote(success);
       toastOk(success.text);
     } catch (err) {
@@ -2020,8 +2124,8 @@ function BackgroundScreens({
       <div>
         <h3 className="text-sm font-medium">Plant screens</h3>
         <p className="text-xs text-muted-foreground">
-          Activate a screen to edit its graphic. Operators can switch screens on
-          the Operator page.
+          Choose a screen to edit its picture, buttons, and labels. Activate
+          sets the shared default for devices that have not chosen a screen.
         </p>
       </div>
       <ul className="grid gap-2">
@@ -2038,16 +2142,34 @@ function BackgroundScreens({
                 </Badge>
               ) : null}
             </span>
-            {!screen.active ? (
+            <span className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={editingId === screen.id ? 'default' : 'outline'}
+                onClick={() => onEdit(screen.id)}
+              >
+                {editingId === screen.id ? 'Editing' : 'Edit'}
+              </Button>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => void activate(screen.id)}
+                onClick={() => void copy(screen.id)}
               >
-                Activate
+                Copy
               </Button>
-            ) : null}
+              {canActivate && !screen.active ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void activate(screen.id)}
+                >
+                  Activate
+                </Button>
+              ) : null}
+            </span>
           </li>
         ))}
       </ul>
@@ -2178,8 +2300,8 @@ function BackgroundEditor({
           }}
         />
         <CardDescription>
-          Uploaded graphics replace the built-in crane mimic on Operator. Clear
-          the image URL and save to restore the mimic.
+          A picture you upload is what Operator draws. Clear the image URL and
+          save, and that screen says no picture.
         </CardDescription>
       </div>
       <div className="grid gap-2">

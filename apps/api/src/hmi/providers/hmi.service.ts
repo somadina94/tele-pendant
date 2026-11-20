@@ -84,8 +84,14 @@ export class HmiService {
     this.auditService = auditService;
   }
 
-  async getLayout(clientId?: string) {
-    const background = await this.backgroundFor(clientId);
+  async getLayout(clientId?: string, screenId?: string) {
+    const requested = screenId?.trim();
+    const background = requested
+      ? await this.backgrounds.findOneBy({ id: requested })
+      : await this.backgroundFor(clientId);
+    if (requested && !background) {
+      throw new NotFoundException('Background not found');
+    }
     const cells = background
       ? await this.cells.find({
           where: { background: { id: background.id } },
@@ -206,6 +212,7 @@ export class HmiService {
         }
       | undefined,
     actor?: Actor,
+    backgroundId?: string,
   ): Promise<BackgroundDisplay> {
     if (!file?.buffer?.length) {
       throw new BadRequestException('Plant graphic file is required');
@@ -253,7 +260,7 @@ export class HmiService {
       }
       writeFileSync(join(dir, filename), payload);
     }
-    const row = await this.activeBackground();
+    const row = await this.screenByIdOrActive(backgroundId);
     row.imageUrl = hmiAssetPublicPath(filename);
     const saved = await this.backgrounds.save(row);
     await this.auditService.write({
@@ -261,6 +268,82 @@ export class HmiService {
       action: 'background.asset_upload',
       resource: saved.id,
       details: `${saved.name} → ${saved.imageUrl}`,
+      result: 'success',
+    });
+    return saved;
+  }
+
+  /** Picture, buttons, and labels. The copy stays inactive. STOP is shared. */
+  async copyBackground(id: string, actor?: Actor): Promise<BackgroundDisplay> {
+    const source = await this.backgrounds.findOneBy({ id });
+    if (!source) throw new NotFoundException('Background not found');
+    const existing = await this.backgrounds.find();
+    const taken = new Set(existing.map((row) => row.name));
+    let name = `${source.name} copy`;
+    let suffix = 2;
+    while (taken.has(name)) {
+      name = `${source.name} copy ${suffix}`;
+      suffix += 1;
+    }
+    const saved = await this.backgrounds.save(
+      this.backgrounds.create({
+        name,
+        cssBackground: source.cssBackground ?? null,
+        imageUrl: source.imageUrl ?? null,
+        active: false,
+      }),
+    );
+    const sourceCells = await this.cells.find({
+      where: { background: { id: source.id } },
+    });
+    for (const cell of sourceCells) {
+      if (
+        this.isProtectedStopCell(cell) ||
+        cell.label.trim().toUpperCase() === 'STOP'
+      ) {
+        continue;
+      }
+      await this.cells.save(
+        this.cells.create({
+          row: cell.row,
+          col: cell.col,
+          label: cell.label,
+          style: cell.style,
+          isMotion: cell.isMotion,
+          requiresSafeAction: cell.requiresSafeAction,
+          variableSpeed: cell.variableSpeed,
+          slowSpeedPct: cell.slowSpeedPct,
+          fastSpeedPct: cell.fastSpeedPct,
+          xPct: cell.xPct ?? null,
+          yPct: cell.yPct ?? null,
+          primaryRegister: cell.primaryRegister ?? null,
+          secondaryRegister: cell.secondaryRegister ?? null,
+          feedbackRegister: cell.feedbackRegister ?? null,
+          statusRegister: cell.statusRegister ?? null,
+          background: saved,
+        }),
+      );
+    }
+    const sourceOverlays = await this.overlays.find({
+      where: { background: { id: source.id } },
+    });
+    for (const overlay of sourceOverlays) {
+      await this.overlays.save(
+        this.overlays.create({
+          label: overlay.label,
+          xPct: overlay.xPct,
+          yPct: overlay.yPct,
+          format: overlay.format,
+          register: overlay.register ?? null,
+          background: saved,
+        }),
+      );
+    }
+    await this.auditService.write({
+      ...this.actorFields(actor),
+      action: 'background.copy',
+      resource: saved.id,
+      details: `${source.name} → ${saved.name}`,
       result: 'success',
     });
     return saved;
@@ -751,7 +834,7 @@ export class HmiService {
 
   async createCell(input: CellInput, actor?: Actor): Promise<Cell> {
     const fields = await this.cellFields(input);
-    const background = await this.activeBackground();
+    const background = await this.screenByIdOrActive(input.backgroundId);
     const saved = await this.cells.save(
       this.cells.create({ ...fields, background }),
     );
@@ -774,7 +857,9 @@ export class HmiService {
     await this.assertStopCellNotDemoted(row, input);
     await this.assertMotionNotDemoted(row, input, actor);
     const fields = await this.cellFields(input);
-    const background = row.background ?? (await this.activeBackground());
+    const background = input.backgroundId?.trim()
+      ? await this.screenByIdOrActive(input.backgroundId)
+      : (row.background ?? (await this.activeBackground()));
     Object.assign(row, fields, { background });
     const saved = await this.cells.save(row);
     await this.auditService.write({
@@ -863,7 +948,7 @@ export class HmiService {
     input: OverlayInput,
     actor?: Actor,
   ): Promise<OverlayLabel> {
-    const background = await this.activeBackground();
+    const background = await this.screenByIdOrActive(input.backgroundId);
     const fields = await this.overlayFields(input);
     const saved = await this.overlays.save(
       this.overlays.create({ ...fields, background }),
@@ -886,6 +971,9 @@ export class HmiService {
     const row = await this.overlays.findOneBy({ id });
     if (!row) throw new NotFoundException('Overlay not found');
     Object.assign(row, await this.overlayFields(input));
+    if (input.backgroundId?.trim()) {
+      row.background = await this.screenByIdOrActive(input.backgroundId);
+    }
     const saved = await this.overlays.save(row);
     await this.auditService.write({
       ...this.actorFields(actor),
@@ -913,6 +1001,7 @@ export class HmiService {
 
   async updateBackground(
     input: {
+      id?: string;
       name: string;
       cssBackground?: string | null;
       imageUrl?: string | null;
@@ -921,7 +1010,7 @@ export class HmiService {
   ): Promise<BackgroundDisplay> {
     const name = input.name.trim();
     if (!name) throw new BadRequestException('Background name is required');
-    const row = await this.activeBackground();
+    const row = await this.screenByIdOrActive(input.id);
     row.name = name;
     row.cssBackground = input.cssBackground?.trim() || null;
     row.imageUrl = input.imageUrl?.trim() || null;
@@ -939,6 +1028,17 @@ export class HmiService {
   private async activeBackground(): Promise<BackgroundDisplay> {
     const row = await this.backgrounds.findOne({ where: { active: true } });
     if (!row) throw new NotFoundException('No active background');
+    return row;
+  }
+
+  /** The screen being edited, or the shared default when no id is sent. */
+  private async screenByIdOrActive(
+    id?: string | null,
+  ): Promise<BackgroundDisplay> {
+    const wanted = id?.trim();
+    if (!wanted) return this.activeBackground();
+    const row = await this.backgrounds.findOneBy({ id: wanted });
+    if (!row) throw new NotFoundException('Background not found');
     return row;
   }
 
@@ -1017,7 +1117,25 @@ export class HmiService {
       secondaryRegister,
       feedbackRegister: await this.optionalRegister(input.feedbackRegisterId),
       statusRegister: await this.optionalRegister(input.statusRegisterId),
+      ...this.buttonPosition(input),
     };
+  }
+
+  private buttonPosition(input: CellInput): {
+    xPct: number | null;
+    yPct: number | null;
+  } {
+    const x = input.xPct;
+    const y = input.yPct;
+    const hasX = x !== undefined && x !== null;
+    const hasY = y !== undefined && y !== null;
+    if (!hasX && !hasY) return { xPct: null, yPct: null };
+    if (!hasX || !hasY || x < 0 || y < 0 || x > 100 || y > 100) {
+      throw new BadRequestException(
+        'Button position must be between 0 and 100',
+      );
+    }
+    return { xPct: x, yPct: y };
   }
 
   private async overlayFields(
@@ -1074,6 +1192,9 @@ interface CellInput {
   secondaryRegisterId?: string | null;
   feedbackRegisterId?: string | null;
   statusRegisterId?: string | null;
+  backgroundId?: string;
+  xPct?: number | null;
+  yPct?: number | null;
 }
 
 function clampSpeedPct(value: number | undefined, fallback: number): number {
@@ -1087,4 +1208,5 @@ interface OverlayInput {
   yPct: number;
   format: string;
   registerId?: string | null;
+  backgroundId?: string;
 }

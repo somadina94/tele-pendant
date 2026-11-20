@@ -215,15 +215,30 @@ While exchanges succeed and the mode is normal, the app writes `holding.heartbea
 
 When the deadman times out (about 2.5 seconds) or the operator releases it, the app writes the deadman coil false and clears motion coils. Demo deadman coil is **10**.
 
-On the transition into comms loss, e-stop, or safe state, if the write still succeeds, the app writes `holding.safeState` to **1**, writes the deadman coil false, and clears motion coils. After the cable is cut the app cannot write. The PLC must drop motion when the heartbeat value stops changing.
+On the transition into comms loss, e-stop, or safe state, if the write still succeeds, the app writes `holding.safeState` to **1**, writes the deadman coil false, and clears motion coils. After the cable is cut the app cannot write. The PLC must drop motion when the heartbeat value stops changing. Outputs stay where they are until this program is loaded on the PLC.
 
 Replace 10 and 11 with the addresses your program actually uses.
 
 ### Structured text
 
 ```
-// Replace the addresses. Timeout is yours. 2 seconds is a starting point.
-IF (heartbeat_age > T#2S) OR (deadman = FALSE) OR (safe_state = 1) THEN
+PROGRAM PendantWatch
+VAR
+    heartbeat_word : WORD; (* holding register 10, written by the app *)
+    last_heartbeat : WORD := 16#FFFF;
+    deadman : BOOL;        (* coil 10 *)
+    safe_state : WORD;     (* holding register 11. 0 normal, 1 stop *)
+    heartbeat_timer : TON;
+    motion_outputs : BOOL;
+END_VAR
+
+(* Timer runs while register 10 is unchanged. A new value resets it. *)
+heartbeat_timer(IN := heartbeat_word = last_heartbeat, PT := T#2S);
+IF heartbeat_word <> last_heartbeat THEN
+    last_heartbeat := heartbeat_word;
+END_IF;
+
+IF heartbeat_timer.Q OR (deadman = FALSE) OR (safe_state = 1) THEN
     motion_outputs := FALSE;
 END_IF;
 ```

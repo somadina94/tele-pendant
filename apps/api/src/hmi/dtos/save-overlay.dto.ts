@@ -38,4 +38,10 @@ export class SaveOverlayDto {
   @IsOptional()
   @IsString()
   registerId?: string | null;
+
+  /** Screen being edited. Omitted means the shared default screen. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  backgroundId?: string;
 }

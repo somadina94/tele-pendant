@@ -452,12 +452,34 @@
   padding-block: 0.4rem;
 }
 .operator-shell[data-pendant='screen'] .operator-matrix-card {
-  @apply min-h-0 overflow-hidden;
-  flex: 0 1 22rem;
-  max-height: 22rem;
+  @apply overflow-visible;
+  flex: 0 0 auto;
+  max-height: none;
 }
 .operator-shell[data-pendant='screen'] .operator-matrix-toolbar-wrap {
-  @apply min-h-0 flex-1 overflow-hidden;
+  @apply overflow-visible;
+  flex: 0 0 auto;
+}
+.operator-shell[data-pendant='screen'] .pendant-legend {
+  font-size: 11px;
+  max-height: none;
+}
+.operator-shell[data-pendant='screen'] .pendant-slot {
+  min-height: 3.25rem;
+  overflow: visible;
+}
+.plant-empty {
+  @apply px-3 py-6 text-sm text-muted-foreground;
+}
+.plant-placed-button {
+  position: absolute;
+  z-index: 12;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  max-width: 42%;
+  padding: 0.25rem 0.5rem;
+  font-size: 12px;
+  line-height: 1.1;
 }
 /* P03A21 face: round control, name on the plate under it.
  * The drawing prints the name above the circle. The client asked for it below. */
@@ -669,8 +691,8 @@
     @apply min-h-0 flex-1 overflow-hidden;
   }
   .operator-shell[data-pendant='screen'] .operator-matrix-card {
-    flex-basis: 20rem;
-    max-height: 20rem;
+    flex: 0 0 auto;
+    max-height: none;
   }
   .matrix-cell-label {
     -webkit-line-clamp: 2;

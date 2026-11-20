@@ -178,11 +178,19 @@ describe('AlarmEngineService', () => {
       register: { name: 'holding.hoistHeightMm' },
     };
     const wire = {
+      id: 'wire-id',
       name: 'Wire height above home',
       compareOp: 'gt' as const,
       threshold: 0,
       enabled: true,
       register: { name: 'holding.hoistHeightMm' },
+    };
+    const weld = {
+      name: 'Weld travel idle',
+      compareOp: 'eq' as const,
+      threshold: 0,
+      enabled: true,
+      register: { name: 'discrete.motorRunning' },
     };
     const edited = {
       name: 'Fixture load clear',
@@ -196,14 +204,67 @@ describe('AlarmEngineService', () => {
       async (query: { where?: { name?: string } }) => {
         if (query?.where?.name === wire.name) return wire;
         if (query?.where?.name === edited.name) return edited;
+        if (query?.where?.name === weld.name) return weld;
         return null;
       },
     );
+    events.find.mockImplementation(async (query?: { where?: unknown }) => {
+      const where = Array.isArray(query?.where) ? query.where : [];
+      const forWire = where.some(
+        (row: { definition?: { id?: string } }) =>
+          row?.definition?.id === 'wire-id',
+      );
+      if (!forWire) return [];
+      return [
+        { id: 'ev-wire', state: 'active', definition: { id: 'wire-id' } },
+      ];
+    });
     await service.onModuleInit();
     expect(crane.enabled).toBe(false);
     expect(wire.enabled).toBe(false);
+    expect(weld.enabled).toBe(false);
     expect(edited.enabled).toBe(true);
     expect(definitions.create).not.toHaveBeenCalled();
+    expect(events.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'ev-wire', state: 'cleared' }),
+    );
+    events.find.mockReset();
+    events.find.mockResolvedValue([]);
+  });
+
+  it('closes open events when an unchanged welding sample is already disabled', async () => {
+    const wire = {
+      id: 'wire-id',
+      name: 'Wire height above home',
+      compareOp: 'gt' as const,
+      threshold: 0,
+      enabled: false,
+      register: { name: 'holding.hoistHeightMm' },
+    };
+    definitions.findOne.mockImplementation(
+      async (query: { where?: { name?: string } }) =>
+        query?.where?.name === wire.name ? wire : null,
+    );
+    events.find.mockImplementation(async (query?: { where?: unknown }) => {
+      const where = Array.isArray(query?.where) ? query.where : [];
+      const forWire = where.some(
+        (row: { definition?: { id?: string } }) =>
+          row?.definition?.id === 'wire-id',
+      );
+      if (!forWire) return [];
+      return [
+        { id: 'ev-wire', state: 'active', definition: { id: 'wire-id' } },
+      ];
+    });
+    await service.onModuleInit();
+    expect(definitions.save).not.toHaveBeenCalled();
+    expect(events.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'ev-wire', state: 'cleared' }),
+    );
+    definitions.findOne.mockReset();
+    definitions.findOne.mockResolvedValue(null);
+    events.find.mockReset();
+    events.find.mockResolvedValue([]);
   });
 
   it('does not retire a crane sample that has no register', async () => {

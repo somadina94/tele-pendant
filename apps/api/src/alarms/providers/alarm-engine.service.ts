@@ -176,16 +176,38 @@ export class AlarmEngineService implements OnModuleInit {
         where: { name: sample.name },
         relations: { register: true },
       });
-      if (!existing?.enabled) continue;
+      if (!existing) continue;
       const sameComparison =
         existing.compareOp === sample.compareOp &&
         existing.threshold === sample.threshold &&
         existing.register?.name === sample.register;
       if (!sameComparison) continue;
-      existing.enabled = false;
-      await this.definitions.save(existing);
-      this.logger.log(`Disabled always-true sample alarm ${sample.name}`);
+      if (existing.enabled) {
+        existing.enabled = false;
+        await this.definitions.save(existing);
+        this.logger.log(`Disabled always-true sample alarm ${sample.name}`);
+      }
+      await this.closeSampleEvents(existing.id);
     }
+  }
+
+  /** Open Ops rows for a sample that was just turned off. */
+  private async closeSampleEvents(
+    definitionId: string | undefined,
+  ): Promise<void> {
+    if (!definitionId) return;
+    const rows = await this.events.find({
+      where: [
+        { definition: { id: definitionId }, state: 'active' },
+        { definition: { id: definitionId }, state: 'acked' },
+        { definition: { id: definitionId }, state: 'shelved' },
+      ],
+    });
+    for (const event of rows) {
+      event.state = 'cleared';
+      await this.events.save(event);
+    }
+    this.activeByDef.delete(definitionId);
   }
 
   /** Values the Modbus simulator holds while the plant is idle. */

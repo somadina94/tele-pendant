@@ -195,6 +195,9 @@ export interface CellDto {
   secondaryRegister?: RegisterRef | null;
   feedbackRegister?: RegisterRef | null;
   statusRegister?: RegisterRef | null;
+  /** 0–100 on the picture. Null keeps the button in the matrix. */
+  xPct?: number | null;
+  yPct?: number | null;
 }
 
 export interface OverlayDto {

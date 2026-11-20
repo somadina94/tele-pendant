@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -96,4 +97,25 @@ export class SaveCellDto {
   @IsString()
   @MaxLength(32)
   pin?: string;
+
+  /** Screen being edited. Omitted means the shared default screen. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  backgroundId?: string;
+
+  /** Picture position, 0–100. Omit both to keep the button in the matrix. */
+  @ApiPropertyOptional({ example: 40 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  xPct?: number | null;
+
+  @ApiPropertyOptional({ example: 60 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  yPct?: number | null;
 }

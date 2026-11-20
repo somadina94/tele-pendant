@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -50,8 +51,11 @@ export class HmiController {
   @Get('layout')
   @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Operator matrix, overlays, and register maps' })
-  layout(@Req() req: Request & { user: JwtPayload }) {
-    return this.hmiService.getLayout(readControlClientId(req));
+  layout(
+    @Req() req: Request & { user: JwtPayload },
+    @Query('screenId') screenId?: string,
+  ) {
+    return this.hmiService.getLayout(readControlClientId(req), screenId);
   }
 
   @Get('registers')
@@ -172,8 +176,21 @@ export class HmiController {
     return this.hmiService.selectBackground(id, readControlClientId(req));
   }
 
+  @Post('backgrounds/:id/copy')
+  @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
+  @ApiOperation({
+    summary:
+      'Copy one screen’s picture, buttons, and labels onto a new inactive screen',
+  })
+  copyBackground(
+    @Param('id') id: string,
+    @Req() req: Request & { user: JwtPayload },
+  ) {
+    return this.hmiService.copyBackground(id, this.actor(req));
+  }
+
   @Post('backgrounds/:id/activate')
-  @Roles(UserRole.OPERATOR, UserRole.SUPERVISOR, UserRole.ADMIN)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: 'Set the default plant HMI screen for every device',
   })
@@ -186,7 +203,9 @@ export class HmiController {
 
   @Patch('background')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
-  @ApiOperation({ summary: 'Update the active plant graphic' })
+  @ApiOperation({
+    summary: 'Update the plant graphic for the screen being edited',
+  })
   updateBackground(
     @Body() dto: SaveBackgroundDto,
     @Req() req: Request & { user: JwtPayload },
@@ -197,7 +216,7 @@ export class HmiController {
   @Post('background/asset')
   @Roles(UserRole.ADMIN, UserRole.SUPERVISOR)
   @ApiOperation({
-    summary: 'Upload SVG/PNG plant graphic for the active screen',
+    summary: 'Upload SVG/PNG plant graphic for the screen being edited',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -205,6 +224,7 @@ export class HmiController {
       type: 'object',
       properties: {
         file: { type: 'string', format: 'binary' },
+        backgroundId: { type: 'string' },
       },
       required: ['file'],
     },
@@ -224,9 +244,14 @@ export class HmiController {
           size?: number;
         }
       | undefined,
+    @Query('backgroundId') backgroundId: string | undefined,
     @Req() req: Request & { user: JwtPayload },
   ) {
-    return this.hmiService.uploadBackgroundAsset(file, this.actor(req));
+    return this.hmiService.uploadBackgroundAsset(
+      file,
+      this.actor(req),
+      backgroundId,
+    );
   }
 
   @Post('cells/:id/activate')

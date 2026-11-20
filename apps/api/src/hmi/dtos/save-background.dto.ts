@@ -2,6 +2,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class SaveBackgroundDto {
+  /** Screen being edited. Omitted means the shared default screen. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  id?: string;
+
   @ApiProperty({ example: 'demo-crane' })
   @IsString()
   @MinLength(1)

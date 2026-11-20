@@ -279,7 +279,7 @@ export class AssistantService implements OnModuleInit {
     const manual =
       hits.length === 0
         ? `No manual paragraph matches this question: ${question}`
-        : `${question}\n\n${hits[0].title}: ${hits[0].snippet}`;
+        : `${question}\n\n${manualSentence(hits[0].snippet)}`;
     const related = await this.relatedLive(question);
     const ftsAnswer = related ? `${manual}\n\n${related}` : manual;
     const ftsPayload = {
@@ -514,4 +514,16 @@ export class AssistantService implements OnModuleInit {
       )
       .run(key, value);
   }
+}
+
+/** One manual sentence, without the brackets full-text search wraps around a hit. */
+export function manualSentence(snippet: string): string {
+  const clean = snippet
+    .replace(/[[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([.!?])/g, '$1')
+    .trim();
+  const end = clean.search(/[.!?](?:\s|$)/);
+  if (end < 0) return clean;
+  return clean.slice(0, end + 1).trim();
 }

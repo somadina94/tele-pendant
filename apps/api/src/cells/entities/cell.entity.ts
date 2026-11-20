@@ -48,6 +48,13 @@ export class Cell {
   @Column({ name: 'fast_speed_pct', type: 'int', default: 100 })
   fastSpeedPct!: number;
 
+  /** 0–100 on this screen’s picture. Null keeps the button in the matrix. */
+  @Column({ name: 'x_pct', type: 'float', nullable: true })
+  xPct!: number | null;
+
+  @Column({ name: 'y_pct', type: 'float', nullable: true })
+  yPct!: number | null;
+
   @ManyToOne(() => RegisterMap, { nullable: true, eager: true })
   @JoinColumn({ name: 'primary_register_id' })
   primaryRegister?: RegisterMap | null;

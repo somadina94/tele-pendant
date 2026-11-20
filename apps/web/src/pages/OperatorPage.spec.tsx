@@ -691,10 +691,10 @@ describe('OperatorPage', () => {
     const { container } = renderOperator(<OperatorPage />);
     expect(await screen.findByText('Hoist Up')).toBeInTheDocument();
     expect(screen.getByText('Bay')).toBeInTheDocument();
-    expect(container.querySelector('[data-feat="hmi-mimic"]')).toBeTruthy();
+    expect(screen.getByText('no picture')).toBeInTheDocument();
     expect(
-      screen.getByRole('img', { name: 'Crane mimic' }),
-    ).toBeInTheDocument();
+      screen.queryByRole('img', { name: 'Crane mimic' }),
+    ).not.toBeInTheDocument();
     expect(
       (container.querySelector('.plant-graphic') as HTMLElement).style
         .background,
@@ -1712,9 +1712,11 @@ describe('OperatorPage', () => {
     });
     mockPostWithControl(async () => ({ ok: true }));
     renderOperator(<OperatorPage />);
-    expect(await screen.findByText('Height')).toBeInTheDocument();
-    expect(screen.getByText('Load')).toBeInTheDocument();
-    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+    expect(await screen.findByText('no picture')).toBeInTheDocument();
+    expect(screen.queryByText('Height')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('img', { name: 'Crane mimic' }),
+    ).not.toBeInTheDocument();
   });
 
   it('hides crane mimic on p03a21 and shows it again on demo-crane', async () => {
@@ -1769,7 +1771,10 @@ describe('OperatorPage', () => {
     });
     renderOperator(<OperatorPage />);
     expect(await screen.findByText('demo-crane')).toBeInTheDocument();
-    expect(await screen.findByText('Height')).toBeInTheDocument();
+    expect(screen.getByText('no picture')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('img', { name: 'Crane mimic' }),
+    ).not.toBeInTheDocument();
     expect(document.querySelector('[data-pendant="screen"]')).toBeNull();
   });
 
@@ -2950,5 +2955,65 @@ describe('OperatorPage', () => {
     expect(await screen.findByRole('button', { name: 'Enable' })).toHaveClass(
       'matrix-enable',
     );
+  });
+
+  it('draws a placed button on the picture and keeps the others in the matrix', async () => {
+    const base = layout.cells[0];
+    mockGetWithControl({
+      ...layout,
+      background: {
+        ...layout.background,
+        imageUrl: '/hmi-assets/plant.svg',
+      },
+      cells: [
+        {
+          ...base,
+          id: 'placed',
+          label: 'On drawing',
+          style: 'enable',
+          isMotion: false,
+          xPct: 10,
+          yPct: 20,
+        },
+        { ...base, id: 'half', label: 'Half', xPct: 10, yPct: null },
+        {
+          ...base,
+          id: 'stopxy',
+          label: 'Halt',
+          style: 'estop',
+          xPct: 1,
+          yPct: 2,
+        },
+        {
+          ...base,
+          id: 'sel',
+          label: 'Sel',
+          style: 'selector',
+          xPct: 3,
+          yPct: 4,
+        },
+        {
+          ...base,
+          id: 'stoplabel',
+          label: 'STOP',
+          style: 'default',
+          xPct: 5,
+          yPct: 6,
+        },
+      ],
+    });
+    mockPostWithControl(async () => ({ ok: true }));
+    renderOperator(<OperatorPage />);
+    const placed = await screen.findByRole('button', { name: 'On drawing' });
+    expect(placed.className).toContain('plant-placed-button');
+    fireEvent.pointerDown(placed, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      clientX: 1,
+      clientY: 1,
+    });
+    fireEvent.pointerUp(placed);
+    fireEvent.pointerCancel(placed);
+    expect(placed).toHaveStyle({ left: '10%', top: '20%' });
   });
 });

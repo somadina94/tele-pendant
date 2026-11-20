@@ -1,4 +1,8 @@
-import { AssistantService, loadCursorSdk } from './assistant.service';
+import {
+  AssistantService,
+  loadCursorSdk,
+  manualSentence,
+} from './assistant.service';
 import {
   mkdtempSync,
   rmSync,
@@ -95,6 +99,8 @@ describe('AssistantService', () => {
     expect(result.mode).toBe('local-fts');
     expect(result.note).toContain('matching manual');
     expect(result.answer.toLowerCase()).toContain('deadman');
+    expect(result.answer).not.toContain('[');
+    expect(result.answer).not.toContain(']');
     expect(result.answer).not.toContain('Active alarms:');
     expect((Agent.prompt as jest.Mock).mock.calls.length).toBe(0);
     if (prev === undefined) delete process.env.CURSOR_API_KEY;
@@ -158,6 +164,16 @@ describe('AssistantService', () => {
     const result = await live.ask('deadman');
     expect(result.answer).not.toContain('Active alarms:');
     expect(result.answer).not.toContain('Current tags:');
+  });
+
+  it('keeps one manual sentence and drops search brackets', () => {
+    expect(manualSentence('Hold the [deadman] while jogging. More text.')).toBe(
+      'Hold the deadman while jogging.',
+    );
+    expect(manualSentence('no period here')).toBe('no period here');
+    expect(manualSentence('Motion cells require an active [deadman] .')).toBe(
+      'Motion cells require an active deadman.',
+    );
   });
 
   it('returns empty for blank / punctuation-only queries', () => {
