@@ -75,14 +75,26 @@ export function ControlLeaseProvider({
   const clientIdRef = useRef<string | null>(null);
 
   const applyControl = useCallback((next: ControlLease | null | undefined) => {
-    setControl((prev) =>
-      mergeControl(
+    setControl((prev) => {
+      const merged = mergeControl(
         next,
         prev,
         localUserIdRef.current,
         clientIdRef.current ?? peekControlClientId(),
-      ),
-    );
+      );
+      if (
+        prev &&
+        merged &&
+        prev.youHold === merged.youHold &&
+        prev.holderUserId === merged.holderUserId &&
+        prev.holderClientId === merged.holderClientId &&
+        prev.holderDisplayName === merged.holderDisplayName
+      ) {
+        return prev;
+      }
+      if (prev == null && merged == null) return prev;
+      return merged;
+    });
   }, []);
 
   useEffect(() => {

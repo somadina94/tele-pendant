@@ -47,7 +47,6 @@ import {
   hapticMotionBlocked,
   isMotionBlockedError,
 } from '../haptics';
-import { CraneMimic } from '../crane-mimic';
 import { ESTOP, matrixCellStatePalette } from '../hmi-styles';
 import { PlantImage } from '../plant-graphic';
 import { useTheme } from '../theme';
@@ -177,6 +176,16 @@ function resolvePlantImageUrl(url: string): string {
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   const origin = getApiBase().replace(/\/api\/v1\/?$/, '');
   return `${origin}${trimmed.startsWith('/') ? trimmed : `/${trimmed}`}`;
+}
+
+function isPlacedOnPicture(cell: Cell): boolean {
+  return (
+    cell.xPct != null &&
+    cell.yPct != null &&
+    cell.style !== 'estop' &&
+    cell.style !== 'selector' &&
+    cell.label.trim().toUpperCase() !== 'STOP'
+  );
 }
 
 export function OperatorScreen({ token }: { token: string }) {
@@ -586,7 +595,11 @@ export function OperatorScreen({ token }: { token: string }) {
   const grid = useMemo(() => {
     const layout = layoutQuery.data;
     if (!layout) return null;
-    const map = new Map(layout.cells.map((c) => [`${c.row}:${c.col}`, c]));
+    const map = new Map(
+      layout.cells
+        .filter((cell) => !isPlacedOnPicture(cell))
+        .map((c) => [`${c.row}:${c.col}`, c]),
+    );
     const rows: Array<Array<Cell | null>> = [];
     for (let r = 0; r < layout.matrix.rows; r++) {
       const row: Array<Cell | null> = [];
@@ -1385,11 +1398,10 @@ export function OperatorScreen({ token }: { token: string }) {
   };
 
   // Crane mimic/readouts follow the active plant tab, not the shared cells.
-  const showCraneMetrics =
-    !isPendantScreen &&
-    (tags?.hoistHeightMm != null ||
-      tags?.values?.['holding.hoistHeightMm'] != null);
-  const panelMax = windowWidth < 768 ? 320 : 352;
+  const showCraneMetrics = false;
+  const placedCells = (layoutQuery.data?.cells ?? []).filter((cell) =>
+    isPlacedOnPicture(cell),
+  );
   const showOverlays = isPendantScreen || showCraneMetrics || useCustomGraphic;
 
   return (
@@ -1511,10 +1523,10 @@ export function OperatorScreen({ token }: { token: string }) {
                 </Text>
               </View>
             </View>
-            {!useCustomGraphic && showCraneMetrics ? (
-              <View className="absolute inset-x-0 bottom-10 top-7 z-[8] px-1">
-                <CraneMimic tags={tags} safety={safety} />
-              </View>
+            {!hasPicture ? (
+              <Text className="px-3 py-4 text-sm text-muted-foreground">
+                no picture
+              </Text>
             ) : null}
             {showOverlays ? (
               <View
@@ -1523,7 +1535,7 @@ export function OperatorScreen({ token }: { token: string }) {
                     ? ''
                     : `inset-x-0 top-7 ${showCraneMetrics ? 'bottom-10' : 'bottom-2'}`
                 }`}
-                pointerEvents="none"
+                pointerEvents="box-none"
                 style={
                   useCustomGraphic && drawnImage.width > 0
                     ? {
@@ -1570,6 +1582,29 @@ export function OperatorScreen({ token }: { token: string }) {
                       </Text>
                     </View>
                   ))}
+                {placedCells.map((cell) => (
+                  <Pressable
+                    key={cell.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={cell.label}
+                    className="absolute min-h-11 min-w-11 items-center justify-center rounded-md border border-white/30 bg-black/80 px-2"
+                    style={{
+                      left: `${cell.xPct}%`,
+                      top: `${cell.yPct}%`,
+                      maxWidth: '42%',
+                    }}
+                    onPressIn={() => {
+                      void pressCell(cell);
+                    }}
+                    onPressOut={() => {
+                      releaseCell(cell);
+                    }}
+                  >
+                    <Text className="text-xs font-semibold text-white">
+                      {cell.label}
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
             ) : null}
             {showCraneMetrics ? (
@@ -1636,13 +1671,11 @@ export function OperatorScreen({ token }: { token: string }) {
         <View
           style={{
             flexGrow: 0,
-            flexShrink: 1,
-            flexBasis: panelMax,
-            maxHeight: panelMax,
+            flexShrink: 0,
             minHeight: 0,
           }}
         >
-          <Card compact style={{ flex: 1, minHeight: 0 }}>
+          <Card compact>
             <HelpTip id="tour.operator.safePin">
               <View className="gap-0.5">
                 <View className="flex-row items-center gap-1">
@@ -1715,9 +1748,9 @@ export function OperatorScreen({ token }: { token: string }) {
                 ) : null}
               </View>
             </HelpTip>
-            <HelpTip id="tour.operator.holdHint" className="min-h-0 flex-1">
-              <HelpTip id="tour.operator.matrix" className="min-h-0 flex-1">
-                <View className="min-h-0 flex-1">
+            <HelpTip id="tour.operator.holdHint">
+              <HelpTip id="tour.operator.matrix">
+                <View>
                   <GestureDetector gesture={matrixGesture}>
                     <View
                       ref={boardRef as never}
@@ -1734,8 +1767,6 @@ export function OperatorScreen({ token }: { token: string }) {
                       style={
                         isP03a21
                           ? {
-                              flex: 1,
-                              minHeight: 0,
                               width: '100%',
                               backgroundColor: '#f4f1ea',
                               borderRadius: 8,
@@ -1744,7 +1775,7 @@ export function OperatorScreen({ token }: { token: string }) {
                               paddingVertical: 2,
                               paddingHorizontal: 4,
                             }
-                          : { flex: 1, minHeight: 0, width: '100%' }
+                          : { width: '100%' }
                       }
                     >
                       {grid
@@ -1753,8 +1784,9 @@ export function OperatorScreen({ token }: { token: string }) {
                               key={`row-${rowIdx}`}
                               className="flex-row"
                               style={{
-                                flex: 1,
-                                minHeight: 0,
+                                flexGrow: 0,
+                                flexShrink: 0,
+                                minHeight: 44,
                                 gap: matrixGap,
                                 alignItems: 'stretch',
                               }}

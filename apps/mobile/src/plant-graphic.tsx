@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { SvgUri } from 'react-native-svg';
 import { isSvgAsset, svgViewSize } from './plant-image';
@@ -16,6 +16,11 @@ export function PlantImage({
   onError?: () => void;
 }) {
   const svg = isSvgAsset(uri);
+  const [box, setBox] = useState({ width: 0, height: 0 });
+  const onSizeRef = useRef(onSize);
+  const onErrorRef = useRef(onError);
+  onSizeRef.current = onSize;
+  onErrorRef.current = onError;
 
   useEffect(() => {
     if (!svg) return;
@@ -28,25 +33,39 @@ export function PlantImage({
       .then((xml) => {
         if (cancelled) return;
         const size = svgViewSize(xml);
-        if (size) onSize?.(size);
+        if (size) onSizeRef.current?.(size);
       })
       .catch(() => {
-        if (!cancelled) onError?.();
+        if (!cancelled) onErrorRef.current?.();
       });
     return () => {
       cancelled = true;
     };
-  }, [onError, onSize, svg, uri]);
+  }, [svg, uri]);
 
   if (svg) {
     return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <SvgUri
-          uri={uri}
-          width="100%"
-          height="100%"
-          onError={() => onError?.()}
-        />
+      <View
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          setBox((prev) =>
+            Math.abs(prev.width - width) < 1 &&
+            Math.abs(prev.height - height) < 1
+              ? prev
+              : { width, height },
+          );
+        }}
+      >
+        {box.width > 0 && box.height > 0 ? (
+          <SvgUri
+            uri={uri}
+            width={box.width}
+            height={box.height}
+            onError={() => onErrorRef.current?.()}
+          />
+        ) : null}
       </View>
     );
   }
@@ -56,10 +75,10 @@ export function PlantImage({
       source={{ uri }}
       style={StyleSheet.absoluteFill}
       resizeMode="contain"
-      onError={() => onError?.()}
+      onError={() => onErrorRef.current?.()}
       onLoad={(event) => {
         const source = event.nativeEvent.source;
-        onSize?.({ width: source.width, height: source.height });
+        onSizeRef.current?.({ width: source.width, height: source.height });
       }}
     />
   );

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -28,10 +29,14 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { setColorScheme } = useColorScheme();
+  // nativewind recreates setColorScheme often; keep a stable call site.
+  const setColorSchemeRef = useRef(setColorScheme);
+  setColorSchemeRef.current = setColorScheme;
   const [theme, setThemeState] = useState<AppTheme>('dark');
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       const saved = await AsyncStorage.getItem(STORAGE_KEY);
       const next: AppTheme =
@@ -40,20 +45,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           : Appearance.getColorScheme() === 'light'
             ? 'light'
             : 'dark';
+      if (cancelled) return;
       setThemeState(next);
-      setColorScheme(next);
+      setColorSchemeRef.current(next);
       setReady(true);
     })();
-  }, [setColorScheme]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const setTheme = useCallback(
-    (next: AppTheme) => {
-      setThemeState(next);
-      setColorScheme(next);
-      void AsyncStorage.setItem(STORAGE_KEY, next);
-    },
-    [setColorScheme],
-  );
+  const setTheme = useCallback((next: AppTheme) => {
+    setThemeState(next);
+    setColorSchemeRef.current(next);
+    void AsyncStorage.setItem(STORAGE_KEY, next);
+  }, []);
 
   const toggleTheme = useCallback(() => {
     setTheme(theme === 'dark' ? 'light' : 'dark');

@@ -175,9 +175,16 @@ export function ConfigScreen({ token }: { token: string }) {
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [editScreenId, setEditScreenId] = useState<string | null>(null);
   const layoutQuery = useQuery({
-    queryKey: ['layout', token],
-    queryFn: () => apiGet<Layout>('/hmi/layout', token),
+    queryKey: ['layout', token, editScreenId],
+    queryFn: () =>
+      apiGet<Layout>(
+        editScreenId
+          ? `/hmi/layout?screenId=${encodeURIComponent(editScreenId)}`
+          : '/hmi/layout',
+        token,
+      ),
   });
   const connections = useQuery({
     queryKey: ['plc', token],
@@ -189,6 +196,10 @@ export function ConfigScreen({ token }: { token: string }) {
     refetchInterval: 4000,
   });
   const layout = layoutQuery.data;
+  const screenId = layout?.background?.id;
+  function onThisScreen<T extends object>(value: T) {
+    return screenId ? { ...value, backgroundId: screenId } : value;
+  }
   const registers = layout?.registers ?? [];
   const sectionOptions = useMemo(
     () => mobileConfigSectionsForRole(userRole),
@@ -325,11 +336,17 @@ export function ConfigScreen({ token }: { token: string }) {
               key={cell.id}
               cell={cell}
               registers={registers}
+              imageUrl={layout?.background?.imageUrl ?? ''}
+              screenName={layout?.background?.name ?? 'Screen'}
               note={notes[cell.id]}
               saveLabel={`Save ${cell.label}`}
               onSave={async (value) => {
                 try {
-                  await apiPatch(`/hmi/cells/${cell.id}`, value, token);
+                  await apiPatch(
+                    `/hmi/cells/${cell.id}`,
+                    onThisScreen(value),
+                    token,
+                  );
                   await refreshLayout();
                   remember(cell.id, `Saved ${value.label || 'cell'}.`);
                 } catch (err) {
@@ -359,12 +376,13 @@ export function ConfigScreen({ token }: { token: string }) {
           <Text className="mb-1 mt-2 text-muted-foreground">Add a cell</Text>
           <CellForm
             registers={registers}
+            imageUrl={layout?.background?.imageUrl ?? ''}
             note={notes['new-cell']}
             saveLabel="Add cell"
             primaryDefault={registers[0]?.id ?? ''}
             onSave={async (value) => {
               try {
-                await apiPost('/hmi/cells', value, token);
+                await apiPost('/hmi/cells', onThisScreen(value), token);
                 await refreshLayout();
                 remember('new-cell', `Saved ${value.label || 'cell'}.`);
               } catch (err) {
@@ -393,7 +411,11 @@ export function ConfigScreen({ token }: { token: string }) {
               saveLabel={`Save ${overlay.label}`}
               onSave={async (value) => {
                 try {
-                  await apiPatch(`/hmi/overlays/${overlay.id}`, value, token);
+                  await apiPatch(
+                    `/hmi/overlays/${overlay.id}`,
+                    onThisScreen(value),
+                    token,
+                  );
                   await refreshLayout();
                   remember(overlay.id, `Saved ${value.label || 'label'}.`);
                 } catch (err) {
@@ -425,7 +447,7 @@ export function ConfigScreen({ token }: { token: string }) {
             resetAfterSave
             onSave={async (value) => {
               try {
-                await apiPost('/hmi/overlays', value, token);
+                await apiPost('/hmi/overlays', onThisScreen(value), token);
                 await refreshLayout();
                 remember('new-label', `Saved ${value.label || 'label'}.`);
               } catch (err) {
@@ -443,12 +465,26 @@ export function ConfigScreen({ token }: { token: string }) {
             </Text>
           </HelpTip>
           <Text className="mt-1 text-xs text-muted-foreground">
-            Upload an SVG, a photo, or a PDF for this screen. Page 1 of a PDF
-            becomes the picture. An empty image keeps the crane mimic.
+            Upload an SVG, a photo, or a PDF for the screen you are editing.
+            Page 1 of a PDF becomes the picture. Choose a screen to edit it.
+            Activate sets the shared default and is for an admin only. A screen
+            with no picture says no picture.
           </Text>
           <BackgroundScreens
             screens={layout?.backgrounds ?? []}
+            editingId={screenId ?? null}
+            canActivate={userRole === 'admin'}
             note={notes['background-screens']}
+            onEdit={(id) => setEditScreenId(id)}
+            onCopy={async (id) => {
+              try {
+                await apiPost(`/hmi/backgrounds/${id}/copy`, {}, token);
+                await refreshLayout();
+                remember('background-screens', 'Screen copied.');
+              } catch (err) {
+                showErrorFrom(err, 'Copy failed');
+              }
+            }}
             onActivate={async (id) => {
               try {
                 await apiPost(`/hmi/backgrounds/${id}/activate`, {}, token);
@@ -472,6 +508,7 @@ export function ConfigScreen({ token }: { token: string }) {
             <BackgroundForm
               key={layout.background.id}
               token={token}
+              backgroundId={layout.background.id}
               name={layout.background.name}
               cssBackground={layout.background.cssBackground ?? ''}
               imageUrl={layout.background.imageUrl ?? ''}
@@ -482,7 +519,11 @@ export function ConfigScreen({ token }: { token: string }) {
               }}
               onSave={async (value) => {
                 try {
-                  await apiPatch('/hmi/background', value, token);
+                  await apiPatch(
+                    '/hmi/background',
+                    { ...value, id: layout.background?.id },
+                    token,
+                  );
                   await refreshLayout();
                   remember('background', 'Saved background.');
                 } catch (err) {
@@ -992,6 +1033,8 @@ function CellForm({
   note,
   saveLabel,
   primaryDefault = '',
+  imageUrl = '',
+  screenName,
   onSave,
   onDelete,
 }: {
@@ -1000,6 +1043,8 @@ function CellForm({
   note?: string;
   saveLabel: string;
   primaryDefault?: string;
+  imageUrl?: string;
+  screenName?: string;
   onSave: (value: {
     row: number;
     col: number;
@@ -1014,6 +1059,8 @@ function CellForm({
     secondaryRegisterId: string;
     feedbackRegisterId: string;
     statusRegisterId: string;
+    xPct: number | null;
+    yPct: number | null;
   }) => Promise<void>;
   onDelete?: () => Promise<void>;
 }) {
@@ -1047,6 +1094,8 @@ function CellForm({
   const [statusRegisterId, setStatus] = useState(
     cell?.statusRegister?.id ?? '',
   );
+  const [xPct, setXPct] = useState(cell?.xPct == null ? '' : String(cell.xPct));
+  const [yPct, setYPct] = useState(cell?.yPct == null ? '' : String(cell.yPct));
   const regOpts = registerOptions(registers);
   const optionalRegOpts = [
     { value: NONE_REGISTER, label: '(none)' },
@@ -1056,6 +1105,11 @@ function CellForm({
   const statusValue = statusRegisterId || NONE_REGISTER;
   return (
     <>
+      {screenName ? (
+        <Text className="text-sm font-medium text-foreground">
+          {screenName} · {cell?.primaryRegister?.name ?? 'no register'}
+        </Text>
+      ) : null}
       <Field label="Row" value={row} onChangeText={setRow} />
       <Field label="Col" value={col} onChangeText={setCol} />
       <Field label="Cell label" value={label} onChangeText={setLabel} />
@@ -1146,6 +1200,32 @@ function CellForm({
           />
         </>
       ) : null}
+      <Field
+        label="Picture X"
+        value={xPct}
+        onChangeText={setXPct}
+        keyboardType="numeric"
+      />
+      <Field
+        label="Picture Y"
+        value={yPct}
+        onChangeText={setYPct}
+        keyboardType="numeric"
+      />
+      <LabelTap
+        imageUrl={resolvePlantImageUrl(imageUrl)}
+        xPct={xPct || '50'}
+        yPct={yPct || '50'}
+        label={label || 'Button'}
+        onPlace={(nextX, nextY) => {
+          setXPct(String(nextX));
+          setYPct(String(nextY));
+        }}
+      />
+      <Text className="text-xs text-muted-foreground">
+        Tap the picture to place this button. Leave X and Y empty to keep it in
+        the matrix.
+      </Text>
       <Btn
         onPress={() =>
           onSave({
@@ -1166,6 +1246,8 @@ function CellForm({
             secondaryRegisterId,
             feedbackRegisterId,
             statusRegisterId,
+            xPct: xPct.trim() === '' ? null : Number(xPct),
+            yPct: yPct.trim() === '' ? null : Number(yPct),
           })
         }
       >
@@ -1240,7 +1322,12 @@ function LabelTap({
         style={{ height: 180 }}
         onLayout={(event) => {
           const { width, height } = event.nativeEvent.layout;
-          setFrame({ width, height });
+          setFrame((prev) =>
+            Math.abs(prev.width - width) < 1 &&
+            Math.abs(prev.height - height) < 1
+              ? prev
+              : { width, height },
+          );
         }}
         onPress={(event) => {
           const next = percentInRect(
@@ -1251,7 +1338,17 @@ function LabelTap({
           onPlace(next.xPct, next.yPct);
         }}
       >
-        <PlantImage uri={imageUrl} onSize={(size) => setNatural(size)} />
+        <PlantImage
+          uri={imageUrl}
+          onSize={(size) =>
+            setNatural((prev) =>
+              Math.abs(prev.width - size.width) < 1 &&
+              Math.abs(prev.height - size.height) < 1
+                ? prev
+                : size,
+            )
+          }
+        />
         {drawn.width > 0 && Number.isFinite(x) && Number.isFinite(y) ? (
           <View
             pointerEvents="none"
@@ -1361,12 +1458,20 @@ function OverlayForm({
 
 function BackgroundScreens({
   screens,
+  editingId,
+  canActivate,
   note,
+  onEdit,
+  onCopy,
   onActivate,
   onCreate,
 }: {
   screens: Array<{ id: string; name: string; active: boolean }>;
+  editingId: string | null;
+  canActivate: boolean;
   note?: string;
+  onEdit: (id: string) => void;
+  onCopy: (id: string) => Promise<void>;
   onActivate: (id: string) => Promise<void>;
   onCreate: (name: string) => Promise<void>;
 }) {
@@ -1385,7 +1490,21 @@ function BackgroundScreens({
             {screen.name}
             {screen.active ? ' · Active' : ''}
           </Text>
-          {!screen.active ? (
+          <Pressable
+            className="min-h-[44px] justify-center rounded-md border border-border px-3"
+            onPress={() => onEdit(screen.id)}
+          >
+            <Text className="text-sm text-foreground">
+              {editingId === screen.id ? 'Editing' : 'Edit'}
+            </Text>
+          </Pressable>
+          <Pressable
+            className="min-h-[44px] justify-center rounded-md border border-border px-3"
+            onPress={() => void onCopy(screen.id)}
+          >
+            <Text className="text-sm text-foreground">Copy</Text>
+          </Pressable>
+          {canActivate && !screen.active ? (
             <Pressable
               className="min-h-[44px] justify-center rounded-md border border-border px-3"
               onPress={() => void onActivate(screen.id)}
@@ -1423,6 +1542,7 @@ function BackgroundScreens({
 
 function BackgroundForm({
   token,
+  backgroundId,
   name: initialName,
   cssBackground: initialCss,
   imageUrl: initialImage,
@@ -1431,6 +1551,7 @@ function BackgroundForm({
   onUploaded,
 }: {
   token: string;
+  backgroundId?: string;
   name: string;
   cssBackground: string;
   imageUrl: string;
@@ -1473,7 +1594,9 @@ function BackgroundForm({
               if (picked.canceled || !picked.assets[0]) return;
               const asset = picked.assets[0];
               await apiUploadFile(
-                '/hmi/background/asset',
+                backgroundId
+                  ? `/hmi/background/asset?backgroundId=${encodeURIComponent(backgroundId)}`
+                  : '/hmi/background/asset',
                 {
                   uri: asset.uri,
                   name: asset.name,
